@@ -361,6 +361,7 @@ dependencies = [
  "cvx-core",
  "cvx-storage",
  "proptest",
+ "rand",
  "serde",
  "thiserror",
 ]
@@ -408,6 +409,8 @@ dependencies = [
  "pulp",
  "rand",
  "roaring",
+ "serde",
+ "serde_json",
  "smallvec",
 ]
 

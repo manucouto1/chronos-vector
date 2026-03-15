@@ -20,9 +20,13 @@ smallvec = { workspace = true }
 rand = { workspace = true }
 roaring = { workspace = true }
 
+[dependencies.serde]
+workspace = true
+
 [dev-dependencies]
 proptest = { workspace = true }
 criterion = { workspace = true }
+serde_json = "1"
 
 [[bench]]
 name = "distance_kernels"
