@@ -1,0 +1,47 @@
+---
+title: ChronosVector
+description: High-Performance Temporal Vector Database in Rust
+template: splash
+hero:
+  tagline: Where time becomes a geometric dimension of the embedding space.
+  image:
+    file: ../../assets/logo-dark.svg
+  actions:
+    - text: Read the Docs
+      link: /getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: Architecture
+      link: /architecture/overview/
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## What is ChronosVector?
+
+ChronosVector (CVX) is a **temporal vector database** built in Rust that treats **time as a fourth geometric dimension** in the embedding space. It doesn't just retrieve vectors — it models the **curvature of semantics over time**.
+
+<CardGrid stagger>
+  <Card title="Temporal-Native Search" icon="magnifier">
+    Spatiotemporal kNN with configurable alpha blending between semantic and temporal distance.
+  </Card>
+  <Card title="Semantic Drift Detection" icon="warning">
+    PELT (offline) and BOCPD (online) change point detection operating directly on vector trajectories.
+  </Card>
+  <Card title="Trajectory Prediction" icon="rocket">
+    Neural ODE-based extrapolation predicts where embeddings will be in the future.
+  </Card>
+  <Card title="Built in Rust" icon="seti:rust">
+    Zero-copy serialization, SIMD distance kernels, fearless concurrency. No GC pauses.
+  </Card>
+</CardGrid>
+
+## Key Capabilities
+
+<CardGrid>
+  <LinkCard title="10 Query Types" href="/research/query-types/" description="Snapshot kNN, Range kNN, Trajectory, Velocity, Acceleration, Extrapolation, Change Points, Drift, Temporal Analogy, Cohort Divergence." />
+  <LinkCard title="Tiered Storage" href="/architecture/tiered-storage/" description="Hot (RocksDB) / Warm (Parquet) / Cold (Object Store + PQ) with automatic migration." />
+  <LinkCard title="Delta Encoding" href="/specs/storage-layout/" description="5-10x storage reduction via sparse delta vectors with periodic keyframes." />
+  <LinkCard title="12-Layer Roadmap" href="/roadmap/iterative-plan/" description="Incremental onion-layer development plan from core types to distributed mode." />
+</CardGrid>

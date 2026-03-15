@@ -1,0 +1,26 @@
+[package]
+name = "cvx-analytics"
+description = "Temporal analytics: Neural ODE, change point detection, and vector calculus"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+neural-ode = []
+pelt = []
+bocpd = []
+gpu-compute = []
+
+[dependencies]
+cvx-core = { workspace = true }
+cvx-storage = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+criterion = { workspace = true }

@@ -1,0 +1,33 @@
+# ChronosVector Configuration
+# Copy to config.toml and adjust for your environment.
+
+[server]
+host = "0.0.0.0"
+port = 8080
+# grpc_port = 50051
+
+[storage]
+data_dir = "./data"
+
+[storage.hot]
+# max_size_mb = 1024
+
+[storage.warm]
+# enabled = false
+
+[storage.cold]
+# enabled = false
+# endpoint = "s3://bucket/prefix"
+
+[index]
+# m = 16                  # HNSW max connections per layer
+# ef_construction = 200   # HNSW construction search width
+# ef_search = 50          # HNSW query search width
+
+[analytics]
+# neural_ode = false
+# change_detection = "pelt"  # "pelt" or "bocpd"
+
+[logging]
+level = "info"
+# format = "json"

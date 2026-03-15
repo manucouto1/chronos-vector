@@ -1,0 +1,26 @@
+[package]
+name = "cvx-api"
+description = "Dual-protocol API gateway (REST + gRPC) for ChronosVector"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[features]
+default = ["rest-api"]
+rest-api = []
+grpc-api = []
+
+[dependencies]
+cvx-core = { workspace = true }
+cvx-query = { workspace = true }
+cvx-ingest = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -1,0 +1,36 @@
+---
+title: Vision & Motivation
+description: The problems ChronosVector solves and why they matter
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Beyond Filtering
+
+The traditional approach of "filter by time then search" ignores **semantic continuity**. Recent literature confirms the magnitude of this problem.
+
+### Semantic Drift
+
+Semantic change — how words and concepts mutate in meaning over time — has been extensively studied in computational NLP. Periti & Montanelli (2024) present WiDiD, an incremental approach based on evolutionary clustering of contextualized embeddings that detects gradual semantic changes across multiple temporal periods.
+
+The taxonomy of semantic changes includes: *broadening*, *narrowing*, *amelioration*, *pejoration*, technological *substitution*, and abrupt cultural *drift* (Kutuzov et al., 2018). Diachronic embeddings allow operationalizing these phenomena as **geometric displacements** in high-dimensional spaces.
+
+<Aside type="tip" title="Insight for CVX">
+A vector for "AI" in 2020 is geometrically distinct from one in 2024. We need to measure the *geodesic* between them, not just the static cosine distance.
+</Aside>
+
+### The "Flashback" Problem
+
+Querying how the latent space looked at an instant $t_n$ without reconstructing the entire index. Wang et al. (ICDE 2025) formalize this as **Timestamp Approximate Nearest Neighbor Search (TANNS)**, where both vectors and queries incorporate temporal attributes. Their *timestamp graph* exploits temporal locality to maintain a unified index with fast updates.
+
+### Trajectory Prediction
+
+Predicting where a user's or concept's vector will be based on its historical inertia. Temporal embedding models based on Neural ODEs (Chen et al., 2018) allow modeling evolution as a continuous flow, making prediction an integration of the learned vector field.
+
+### Concept Drift in Production
+
+In deployed ML systems, *concept drift* — changes in the underlying data distribution — degrades models over time. Hinder, Vaquet & Hammer (2024) provide the first comprehensive taxonomy of unsupervised drift detection, identifying three analysis levels: detection (did it happen?), localization (where in feature space?), and explanation (why?).
+
+<Aside type="note">
+CVX can serve as the infrastructure feeding all three levels of drift analysis.
+</Aside>

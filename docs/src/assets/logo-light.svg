@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <defs>
+    <linearGradient id="grad-light" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0369a1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Outer ring (time) -->
+  <circle cx="20" cy="20" r="17" fill="none" stroke="url(#grad-light)" stroke-width="2" stroke-dasharray="4 3" opacity="0.6"/>
+  <!-- Inner ring -->
+  <circle cx="20" cy="20" r="12" fill="none" stroke="#0369a1" stroke-width="1.5" opacity="0.8"/>
+  <!-- Vector arrow -->
+  <line x1="20" y1="20" x2="30" y2="12" stroke="#0369a1" stroke-width="2.5" stroke-linecap="round"/>
+  <polygon points="30,12 27,14 28.5,10" fill="#0369a1"/>
+  <!-- Clock hand (temporal) -->
+  <line x1="20" y1="20" x2="20" y2="10" stroke="#7c3aed" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
+  <!-- Center dot -->
+  <circle cx="20" cy="20" r="2.5" fill="#0369a1"/>
+</svg>

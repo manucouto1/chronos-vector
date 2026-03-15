@@ -1,0 +1,19 @@
+[package]
+name = "cvx-ingest"
+description = "Data ingestion pipeline with delta encoding and schema validation"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+cvx-core = { workspace = true }
+cvx-index = { workspace = true }
+cvx-storage = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/cvx-core",
+  "crates/cvx-index",
+  "crates/cvx-storage",
+  "crates/cvx-ingest",
+  "crates/cvx-analytics",
+  "crates/cvx-query",
+  "crates/cvx-api",
+  "crates/cvx-server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Manuel Couto Pintos"]
+license = "MIT OR Apache-2.0"
+rust-version = "1.88.0"
+repository = "https://github.com/manuelcoutopintos/chronos-vector"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Testing
+proptest = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Workspace crates
+cvx-core = { path = "crates/cvx-core" }
+cvx-index = { path = "crates/cvx-index" }
+cvx-storage = { path = "crates/cvx-storage" }
+cvx-ingest = { path = "crates/cvx-ingest" }
+cvx-analytics = { path = "crates/cvx-analytics" }
+cvx-query = { path = "crates/cvx-query" }
+cvx-api = { path = "crates/cvx-api" }
+cvx-server = { path = "crates/cvx-server" }
