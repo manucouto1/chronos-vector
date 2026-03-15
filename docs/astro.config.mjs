@@ -2,9 +2,15 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightClientMermaid from '@pasqal-io/starlight-client-mermaid';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 // https://astro.build/config
 export default defineConfig({
+	markdown: {
+		remarkPlugins: [remarkMath],
+		rehypePlugins: [rehypeKatex],
+	},
 	integrations: [
 		starlight({
 			title: 'ChronosVector',
@@ -16,10 +22,21 @@ export default defineConfig({
 				replacesTitle: false,
 			},
 			social: [
-				{ icon: 'github', label: 'GitHub', href: 'https://github.com/manuelcoutopintos/chronos-vector' },
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/manucouto1/chronos-vector' },
 			],
 			customCss: [
 				'./src/styles/custom.css',
+			],
+			head: [
+				{
+					tag: 'link',
+					attrs: {
+						rel: 'stylesheet',
+						href: 'https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css',
+						integrity: 'sha384-MkdEMsUo8Aj7/d0FPe2tUH4JXJrjHjyeO7OjSbgAVVqASjeFolb6ElTKjq73tL',
+						crossorigin: 'anonymous',
+					},
+				},
 			],
 			sidebar: [
 				{

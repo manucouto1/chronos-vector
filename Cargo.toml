@@ -27,6 +27,20 @@ serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 anyhow = "1"
 
+# Concurrency
+rayon = "1"
+parking_lot = "0.12"
+
+# Serialization (internal)
+rkyv = { version = "0.8", features = ["validation"] }
+postcard = { version = "1", features = ["alloc"] }
+
+# SIMD
+pulp = { version = "0.22", features = ["macro"] }
+
+# Collections
+smallvec = { version = "1", features = ["union"] }
+
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 

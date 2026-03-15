@@ -176,6 +176,8 @@ fn encode_key(entity_id: u64, timestamp: i64) -> [u8; 16] {
 
 El XOR con `1 << 63` en el timestamp convierte la representación signed a un formato donde el orden lexicográfico de bytes coincide con el orden numérico signed (i.e., -1 < 0 < 1 en bytes).
 
+> **Implementation Note:** Timestamps (i64) use big-endian encoding with sign-bit flip (XOR 0x80 on first byte) to preserve lexicographic ordering for negative timestamps. Column families are configured per data type with optimized compression and bloom filter settings. See `CVX_Implementation_Decisions.md` IDR-006 for full RocksDB configuration.
+
 ### 4.3 Delta Value Format
 
 ```

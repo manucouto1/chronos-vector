@@ -41,6 +41,7 @@ Cada layer tiene:
   - `CvxConfig` struct (deserializable desde TOML via serde)
 - Un `config.example.toml` con todos los campos documentados.
 - CI pipeline: `cargo build --workspace`, `cargo test --workspace`, `cargo clippy`.
+- Implementation decisions documented: concurrency model (Tokio + Rayon), serialization (postcard + rkyv), allocator (jemalloc), SIMD (pulp), error handling (thiserror/anyhow), testing strategy (proptest + criterion), unsafe policy. See `CVX_Implementation_Decisions.md`.
 
 ### NOT in scope
 - Ninguna implementación de distancia, storage, o index.
@@ -321,6 +322,7 @@ Cada layer tiene:
   - `acceleration(entity_id, t)` → second-order finite difference.
   - `drift_magnitude(entity_id, t1, t2)` → L2/cosine distance between two snapshots.
   - `drift_report(entity_id, t1, t2)` → full report with top affected dimensions.
+- Stochastic process characterization: `drift_test`, `realized_volatility`, `mean_reversion` (ADF/KPSS), `hurst_exponent`. See `CVX_Stochastic_Analytics_Spec.md`.
 
 **cvx-api:**
 - New endpoints: `GET /v1/entities/{id}/velocity`, `GET /v1/entities/{id}/drift`.
@@ -335,6 +337,9 @@ Cada layer tiene:
 ✅ Drift magnitude of stationary entity = 0
 ✅ Drift report correctly identifies top-N changing dimensions
 ✅ API endpoints return correct JSON responses
+✅ Drift significance test correctly identifies non-drifting (stationary) entities (p > 0.05)
+✅ Mean reversion test classifies synthetic OU process as mean-reverting
+✅ Hurst exponent ≈ 0.5 for synthetic Brownian motion
 ```
 
 ### Rust Skills
@@ -344,12 +349,73 @@ Cada layer tiene:
 
 ---
 
+## Layer 7.5: Interpretability & Multi-Scale Foundation
+
+**Goal:** Hacer interpretables los outputs analíticos. Sentar las bases para multi-space alignment.
+
+### Entry Criteria
+- Layer 7 complete.
+
+### Scope
+
+**cvx-core (extensiones):**
+- `EmbeddingSpace` type: space_id, name, dimensionality, metric, normalization, frequency.
+- `AlignmentFunction` trait con signature completa.
+- Extended key encoding: `entity_id ++ space_id ++ timestamp`.
+
+**cvx-explain (nuevo crate):**
+- `DriftAttributor`: per-dimension drift analysis, Pareto ranking, top-K dimensions.
+- `TrajectoryProjector`: PCA projection to 2D/3D (UMAP deferred).
+- `DimensionHeatmapBuilder`: time × dimension change intensity matrices.
+- `SummaryBuilder`: aggregate interpretability summary.
+
+**cvx-analytics (extensiones):**
+- `multiscale/resample.rs`: temporal resampling (LastValue, Linear, Slerp).
+- `multiscale/scale_drift.rs`: per-scale drift analysis.
+- `alignment/behavioral.rs`: drift correlation across spaces.
+
+**cvx-api (extensiones):**
+- `POST /v1/spaces`: register embedding spaces.
+- `GET /v1/explain/entities/{id}/drift-attribution`.
+- `GET /v1/explain/entities/{id}/trajectory-projection`.
+- `GET /v1/explain/entities/{id}/dimension-heatmap`.
+
+### NOT in scope
+- UMAP projection (requires additional dependency, deferred).
+- Procrustes/CCA alignment (require linear algebra, deferred).
+- Change point narrative (requires Layer 8 CPD).
+- Prediction explanation (requires Layer 10 Neural ODE).
+
+### Exit Criteria
+```
+✅ DriftAttribution correctly identifies top-5 changed dimensions on synthetic drift
+✅ PCA projection produces valid 2D coordinates for 100-point trajectory
+✅ Dimension heatmap matrix dimensions match (time_bins × D)
+✅ EmbeddingSpace registration + retrieval via API works
+✅ Ingest with space_id routes to correct index and storage
+✅ Multi-scale resampling: resample hourly data to daily produces correct count
+✅ Behavioral alignment of two identical (but differently scaled) drift series ≈ 1.0
+✅ All explain endpoints return valid JSON matching schema
+```
+
+### Rust Skills
+- Eigendecomposition (PCA), matrix operations, cross-crate API design, JSON serialization of complex types
+
+### Effort: ~2 weeks
+
+### Companion Documents
+- `CVX_Explain_Interpretability_Spec.md` — full interpretability layer spec
+- `CVX_MultiScale_Alignment_Spec.md` — multi-space & multi-scale spec
+- `CVX_Benchmark_Plan.md` — benchmark strategy
+
+---
+
 ## Layer 8: Change Point Detection (PELT + BOCPD)
 
 **Goal:** Detectar cuándo un concepto sufre un cambio brusco.
 
 ### Entry Criteria
-- Layer 7 complete.
+- Layer 7.5 complete.
 
 ### Scope
 
@@ -382,12 +448,19 @@ Cada layer tiene:
 ✅ BOCPD false positive rate < 5% on stationary stream
 ✅ WatchDrift gRPC: client receives drift events within 1s of detection
 ✅ Change points stored in RocksDB changepoints CF, retrievable via API
+✅ ChangePointNarrator produces annotated timeline with before/after neighbors
+✅ CohortDivergenceMapper detects planted divergence between two entity pairs
+✅ Multi-scale CPD: change points detected at daily and weekly scales match
 ```
 
 ### Rust Skills
 - Bayesian inference in Rust, streaming algorithms, event-driven architecture, gRPC server-streaming
 
 ### Effort: ~3 weeks
+
+### Notes
+- Layer 8 unlocks `cvx-explain` features that depend on CPD: `ChangePointNarrative`, `CohortDivergenceMap`.
+- Multi-scale change point analysis (`CrossScaleCoherence`) built on top of PELT at multiple resampled scales.
 
 ---
 
@@ -471,6 +544,52 @@ Cada layer tiene:
 
 ---
 
+## Layer 10.5: Differentiable Temporal ML
+
+**Goal:** Features temporales diferenciables para training end-to-end. Dual backend burn + tch-rs.
+
+### Entry Criteria
+- Layer 10 complete (Neural ODE, burn ya integrado).
+
+### Scope
+
+**cvx-analytics (temporal_ml/):**
+- `TemporalOps` trait con tres implementaciones: `AnalyticBackend`, `BurnBackend`, `TorchBackend`.
+- `TemporalFeatureExtractor` como `burn::Module`: velocity, drift, volatility, soft change points, multi-scale aggregation.
+- Componentes learnable: `DimensionAttention`, `MultiScaleAggregator`, `SoftChangePointDetector`.
+- `TorchBackend` via `tch-rs` para interop con PyTorch (gradientes cruzan frontera Rust↔Python).
+- Example classifier: `SocialMediaClassifier` para el caso de uso de detección temporal.
+
+**cvx-python (nuevo crate, PyO3):**
+- Wrapper Python que expone `temporal_features()` como función compatible con PyTorch autograd.
+- Usa `TorchBackend` internamente — zero-copy tensor sharing con Python.
+
+### NOT in scope
+- Training loop / optimizador (responsabilidad del usuario).
+- Modelos pre-trained (BERT, etc.) — el usuario los carga con candle/tch-rs/HuggingFace.
+- Deployment / model serving.
+
+### Exit Criteria
+```
+✅ TemporalOps: los tres backends producen resultados numéricamente equivalentes (rtol=1e-5)
+✅ BurnBackend: loss.backward() produce gradientes no-zero en todos los parámetros
+✅ TorchBackend: desde Python, loss.backward() propaga gradientes hasta embeddings de entrada
+✅ DimensionAttention: tras training en datos sintéticos, pesos convergen a dimensiones con drift plantado
+✅ SoftChangePointDetector: soft_cp_count correlaciona (Spearman > 0.8) con PELT count en datos de test
+✅ Feature vector es de tamaño fijo independiente de la longitud de secuencia
+✅ Benchmark SM-4: fine-tuning end-to-end mejora accuracy sobre embeddings congelados
+```
+
+### Rust Skills
+- `burn` Module/Autodiff, `tch-rs` bindings, PyO3, trait-based polymorphism con generics
+
+### Effort: ~3 weeks
+
+### Companion Document
+- `CVX_Temporal_ML_Spec.md` — Full spec del módulo diferenciable y caso de uso social media
+
+---
+
 ## Layer 11: Advanced Index Optimizations
 
 **Goal:** Timestamp Graph, time-decay edges, HNT compression.
@@ -513,7 +632,10 @@ Cada layer tiene:
 
 - Comprehensive README with architecture overview, quick start, benchmarks.
 - API documentation (OpenAPI spec + protobuf docs).
-- Benchmark suite: automated comparison against Qdrant on temporal queries.
+- **Benchmark suite** per `CVX_Benchmark_Plan.md`: full Category A (unique capabilities), B (competitive parity), C (storage efficiency).
+- **Competitive comparison**: automated Qdrant comparison charts (temporal kNN, trajectory, storage).
+- **Explain demo**: Jupyter notebooks demonstrating interpretability endpoints (drift attribution, trajectory projection, heatmaps).
+- **Multi-space demo**: example with text + image embeddings showing alignment analysis.
 - Docker image: single `docker run` starts CVX with sample data.
 - Example notebooks (Python client via requests/grpcio) demonstrating all query types.
 - License selection and NOTICE file.
@@ -553,18 +675,26 @@ gantt
     section Service
     L6 REST & gRPC API         :l6, after l5, 3w
     L7 Vector Calculus         :l7, after l6, 1w
-    L8 PELT & BOCPD            :l8, after l7, 3w
+    L7.5 Explain & Multi-Scale :l75, after l7, 2w
+    L8 PELT & BOCPD            :l8, after l75, 3w
 
     section Scale
     L9 Warm & Cold Tiers       :l9, after l8, 4w
     L10 Neural ODE             :l10, after l9, 4w
+    L10.5 Temporal ML          :l105, after l10, 3w
+
+    section Virtualization
+    Provenance & Sources       :lv1, after l6, 2w
+    Materialized Views         :lv2, after l8, 2w
+    Model Version Alignment    :lv3, after l75, 2w
+    Monitors                   :lv4, after l8, 1w
 
     section Optimization
-    L11 Index Optimizations    :l11, after l10, 3w
+    L11 Index Optimizations    :l11, after l105, 3w
     L12 Polish & Release       :l12, after l11, 2w
 ```
 
-**Total estimado: ~34 semanas (~8.5 meses a 20h/semana)**
+**Total estimado: ~39 semanas (~10 meses a 20h/semana)**
 
 ---
 
@@ -594,11 +724,13 @@ graph TB
     L4 --> L5["L5: Concurrency + WAL"]
     L5 --> L6["L6: API"]
     L6 --> L7["L7: Vector Calculus"]
-    L7 --> L8["L8: CPD (PELT + BOCPD)"]
+    L7 --> L75["L7.5: Explain + Multi-Scale"]
+    L75 --> L8["L8: CPD (PELT + BOCPD)"]
     L8 --> L9["L9: Warm + Cold Tiers"]
     L9 --> L10["L10: Neural ODE"]
-    L10 --> L11["L11: Index Optimizations"]
-    L11 --> L12["L12: Polish & Release"]
+    L10 --> L105["L10.5: Temporal ML"]
+    L105 --> L11["L11: Index Optimizations"]
+    L11 --> L12["L12: Polish, Benchmarks & Release"]
 
     style L0 fill:#e1f5fe
     style L1 fill:#e1f5fe
@@ -608,9 +740,11 @@ graph TB
     style L5 fill:#b3e5fc
     style L6 fill:#81d4fa
     style L7 fill:#81d4fa
+    style L75 fill:#81d4fa
     style L8 fill:#81d4fa
     style L9 fill:#4fc3f7
     style L10 fill:#4fc3f7
+    style L105 fill:#4fc3f7
     style L11 fill:#29b6f6
     style L12 fill:#29b6f6
 ```

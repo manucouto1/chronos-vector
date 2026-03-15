@@ -22,12 +22,15 @@ ChronosVector es una base de datos vectorial temporal en Rust que trata el tiemp
 | **Recommender System Developer** | Predecir hacia dónde evolucionan los intereses de usuarios | Extrapolación de vectores de usuario via Neural ODE |
 | **Knowledge Graph Engineer** | Temporal knowledge graph completion | Cuadrupletos (entity, relation, entity, time) indexados nativamente |
 | **Data Scientist** | Análisis exploratorio de series de embeddings | Detección de change points, drift quantification, cohort divergence |
+| **Clinical NLP Researcher** | Detección temprana de trastornos desde redes sociales | Features temporales diferenciables sobre trayectorias de posts, early detection, interpretabilidad clínica |
+| **MLOps Engineer** | Monitorizar drift de embeddings con model retraining | Model version alignment, provenance tracking, declarative monitors, source connectors |
+| **Quant Researcher** | Análisis de régimen de mercado y factor decay | Regime detection, mean reversion tests, path signatures, GARCH volatility, Granger causality |
 
 ### 1.3 Non-Goals (Explicit Exclusions)
 
 - **Not a general-purpose vector database.** CVX no compite con Qdrant/Milvus/Pinecone en kNN puro sin componente temporal. Si el usuario no necesita tiempo, debería usar Qdrant.
 - **Not a streaming platform.** CVX recibe vectores, no los produce. No incluye modelos de embedding.
-- **Not a model training framework.** El Neural ODE se entrena externamente o con un módulo auxiliar; CVX es primariamente infraestructura de servicio (inference + storage).
+- **Not a general model training framework.** CVX no reemplaza a PyTorch/burn/JAX. Sin embargo, `cvx-analytics/temporal_ml` proporciona features temporales diferenciables (velocity, drift, soft change points) que participan en training loops externos vía autograd. El training loop, optimizador y scheduler son responsabilidad del usuario. Ver `CVX_Temporal_ML_Spec.md`.
 - **Not a distributed database (initially).** Phase 1-4 son single-node. La distribución es Phase 5.
 
 ---
@@ -128,6 +131,69 @@ ChronosVector es una base de datos vectorial temporal en Rust que trata el tiemp
 |---|---|
 | **Input** | `(entity_a, entity_b, time_range)` |
 | **Output** | Pairwise distance time series + detected divergence points (via PELT on the distance series) |
+
+#### FR-10b: Drift Attribution (Interpretability)
+
+| Attribute | Specification |
+|---|---|
+| **Input** | `(entity_id, t1, t2, top_k)` |
+| **Output** | `DriftAttribution { dimension_contributions (ranked), pareto_80_count, cluster_contributions }` |
+| **Method** | Per-dimension absolute delta, ranked by contribution to total drift magnitude |
+| **Spec** | See `CVX_Explain_Interpretability_Spec.md` §3.1 |
+
+#### FR-10c: Trajectory Projection (Interpretability)
+
+| Attribute | Specification |
+|---|---|
+| **Input** | `(entity_id, time_range, method: PCA|UMAP, target_dims: 2|3)` |
+| **Output** | `ProjectedTrajectory { points with 2D/3D coords + timestamps, variance_explained }` |
+| **Methods** | PCA (deterministic, fast), UMAP (non-linear, preserves local structure) |
+| **Spec** | See `CVX_Explain_Interpretability_Spec.md` §3.2 |
+
+#### FR-10d: Multi-Space Alignment
+
+| Attribute | Specification |
+|---|---|
+| **Input** | `(entity_id, space_a, space_b, time_range, method)` |
+| **Output** | `AlignmentResult { score, alignment_over_time, divergence_points }` |
+| **Methods** | Structural (Jaccard kNN), Behavioral (drift correlation), Procrustes, CCA |
+| **Spec** | See `CVX_MultiScale_Alignment_Spec.md` §3 |
+
+#### FR-10e: Multi-Scale Drift Analysis
+
+| Attribute | Specification |
+|---|---|
+| **Input** | `(entity_id, time_range, scales: [hourly, daily, weekly])` |
+| **Output** | `MultiScaleDriftAnalysis { per-scale drift reports, robust change points across scales }` |
+| **Method** | Resample to each scale, compute drift + CPD at each, identify scale-persistent change points |
+| **Spec** | See `CVX_MultiScale_Alignment_Spec.md` §4 |
+
+#### FR-10f: Stochastic Process Characterization
+
+| Attribute | Specification |
+|---|---|
+| **Input** | `(entity_id, time_range)` |
+| **Output** | `StationarityReport { drift_significance, mean_reversion, hurst, volatility, garch, classification }` |
+| **Methods** | ADF test, KPSS test, GARCH(1,1), DFA for Hurst, drift t-test |
+| **Spec** | See `CVX_Stochastic_Analytics_Spec.md` §2 |
+
+#### FR-10g: Path Signature Computation
+
+| Attribute | Specification |
+|---|---|
+| **Input** | `(entity_id, time_range, depth, reduced_dims)` |
+| **Output** | `PathSignature { signature_vector, log_signature, pca_variance_explained }` |
+| **Method** | PCA projection + truncated iterated integrals |
+| **Spec** | See `CVX_Stochastic_Analytics_Spec.md` §3 |
+
+#### FR-10h: Trajectory Similarity Search
+
+| Attribute | Specification |
+|---|---|
+| **Input** | `(reference_entity_id, time_range, k)` |
+| **Output** | Top-k entities with most similar path signatures |
+| **Method** | kNN over pre-computed signature vectors |
+| **Spec** | See `CVX_Stochastic_Analytics_Spec.md` §3.3 |
 
 ### 2.2 Administrative Operations
 
@@ -256,6 +322,17 @@ Metadata is stored but **not indexed** in Phase 1-4. Metadata-based filtering (e
 | GET | `/v1/ready` | Readiness probe | — | 200 or 503 |
 | POST | `/v1/admin/compact` | Trigger compaction | `{ tier: "hot_to_warm" }` | `{ status: "started" }` |
 | GET | `/v1/admin/stats` | System statistics | — | `SystemStats` |
+| GET | `/v1/explain/entities/{id}/drift-attribution` | Per-dimension drift attribution | `?from=&to=&top_k=` | `DriftAttribution` |
+| GET | `/v1/explain/entities/{id}/trajectory-projection` | 2D/3D trajectory projection | `?method=pca&dims=2` | `ProjectedTrajectory` |
+| GET | `/v1/explain/entities/{id}/changepoint-narrative` | Annotated change point timeline | `?method=pelt` | `AnnotatedTimeline` |
+| GET | `/v1/explain/entities/{id}/dimension-heatmap` | Time × dimension change heatmap | `?granularity=1d` | `DimensionHeatmap` |
+| POST | `/v1/explain/cohort-divergence` | Cohort divergence analysis | `{ entity_ids, from, to }` | `CohortDivergenceMap` |
+| GET | `/v1/explain/entities/{id}/prediction` | Neural ODE prediction explanation | `?target_timestamp=` | `PredictionExplanation` |
+| POST | `/v1/spaces` | Register embedding space | `{ name, dimensionality, metric }` | `EmbeddingSpace` |
+| GET | `/v1/spaces` | List embedding spaces | — | `[EmbeddingSpace]` |
+| GET | `/v1/alignment/entities/{id}` | Cross-space alignment score | `?space_a=&space_b=&method=` | `AlignmentResult` |
+| GET | `/v1/multiscale/entities/{id}/drift` | Multi-scale drift analysis | `?scales=hourly,daily,weekly` | `MultiScaleDriftAnalysis` |
+| GET | `/v1/multiscale/entities/{id}/robust-changepoints` | Scale-robust change points | `?min_scales=2` | `CrossScaleCoherence` |
 
 ### 5.2 gRPC Services
 
@@ -321,6 +398,9 @@ service ChronosVector {
 | M4: PELT detects known change points | On synthetic data with planted change points, F1 ≥ 0.85 |
 | M5: Neural ODE predicts | On held-out trajectory data, prediction error < linear extrapolation baseline |
 | M6: API is production-ready | REST + gRPC serving, health checks, graceful shutdown, structured logging |
+| M7: Interpretability layer works | Drift attribution identifies correct dimensions, trajectory projection renders valid 2D paths, change point narrative includes before/after neighbors |
+| M8: Multi-space alignment | Two embedding spaces for same entities, behavioral alignment score ≥ 0.7 on known-aligned data, divergence detection finds planted misalignment |
+| M9: Benchmark suite passes | All Category A (unique capabilities) and Category B (competitive parity) benchmarks pass success criteria per `CVX_Benchmark_Plan.md` §7 |
 
 ---
 

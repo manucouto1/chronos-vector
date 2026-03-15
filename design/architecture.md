@@ -832,6 +832,22 @@ graph TB
             CURVATURE["Path Curvature<br/>κ(t) of trajectory"]
             GEODESIC["Geodesic Distance<br/>d(v(t1), v(t2)) along path"]
         end
+
+        subgraph TemporalML["Temporal ML (Differentiable)"]
+            FEAT_EXT["TemporalFeatureExtractor<br/>burn Module, autograd"]
+            DIM_ATT["DimensionAttention<br/>Learnable dim weights"]
+            SOFT_CPD["SoftChangePointDetector<br/>Differentiable relaxation"]
+            SCALE_AGG["MultiScaleAggregator<br/>Learnable scale weights"]
+        end
+
+        subgraph Stochastic["Stochastic Analytics"]
+            DRIFT_TEST["Drift Significance<br/>t-test on drift"]
+            VOL["Realized Volatility<br/>+ GARCH"]
+            MEAN_REV["Mean Reversion<br/>ADF/KPSS/OU"]
+            PATH_SIG["Path Signatures<br/>Iterated integrals"]
+            REGIME["Regime Detection<br/>HMM/Markov Switching"]
+            NSDE["Neural SDE<br/>Stochastic prediction"]
+        end
     end
 
     ENCODER --> LATENT
@@ -1050,6 +1066,20 @@ graph TB
 
 **Estrategia:** Las inserciones adquieren write lock solo en las listas de vecinos de los nodos afectados (no del grafo completo), permitiendo que las búsquedas continúen en paralelo sobre el resto del grafo. El entry point se actualiza atómicamente vía CAS (Compare-and-Swap).
 
+### 12.3 Implementation: Tokio + Rayon Dual Pool
+
+See `CVX_Implementation_Decisions.md` IDR-001 and IDR-002 for full rationale.
+
+**Architecture:**
+- **Tokio runtime**: I/O-bound work (HTTP/gRPC, RocksDB, S3, channels)
+- **Rayon pool**: CPU-bound work (SIMD distances, graph traversal, PELT, delta encoding)
+- **Bridge**: `tokio::task::spawn_blocking()` → Rayon `install()`
+- **Index concurrency**: `parking_lot::RwLock` (reader-biased, no poisoning)
+- **Ingestion pipeline**: `tokio::sync::mpsc` channels between stages
+- **Event bus**: `tokio::sync::broadcast` for drift events
+
+**SIMD Strategy:** `pulp` crate for safe, portable SIMD with automatic runtime dispatch (AVX2/AVX-512/NEON). See IDR-005.
+
 ---
 
 ## 13. Data Flow: End-to-End Scenarios
@@ -1162,6 +1192,7 @@ graph TB
             PELT_MOD2["pelt/<br/>PELT implementation"]
             BOCPD_MOD2["bocpd/<br/>BOCPD implementation"]
             DIFFCALC["diffcalc/<br/>Vector velocity, acceleration"]
+            TEMPORAL_ML["temporal_ml/<br/>Differentiable features<br/>(burn + tch-rs backends)"]
         end
 
         subgraph Query_Crate["cvx-query"]
@@ -1197,6 +1228,44 @@ graph TB
     API_Crate --> Core
 ```
 
+### Additional Crate: `cvx-explain` (Interpretability Layer)
+
+See `CVX_Explain_Interpretability_Spec.md` for full specification.
+
+```
+cvx-explain: Transforms raw analytics outputs into interpretable artifacts
+├── attribution.rs      — Per-dimension drift attribution (Pareto analysis)
+├── projection.rs       — Trajectory projection (PCA, UMAP) to 2D/3D
+├── narrative.rs        — Annotated change point timelines with context
+├── cohort.rs           — Pairwise cohort divergence maps
+├── heatmap.rs          — Time × dimension change intensity matrices
+├── prediction.rs       — Neural ODE prediction explanation (fan charts, uncertainty)
+└── summary.rs          — Aggregate interpretability summaries
+```
+
+### Additional Modules: Multi-Space Alignment & Multi-Scale Analysis
+
+See `CVX_MultiScale_Alignment_Spec.md` for full specification.
+
+Modules added to existing crates:
+
+```
+cvx-core/src/
+├── spaces.rs           — EmbeddingSpace, TemporalFrequency, Normalization types
+└── alignment.rs        — AlignmentFunction trait, AlignmentResult
+
+cvx-analytics/src/
+├── alignment/          — Cross-space alignment methods
+│   ├── structural.rs   — Jaccard kNN neighborhood comparison
+│   ├── behavioral.rs   — Drift correlation across spaces
+│   ├── procrustes.rs   — Geometric alignment via orthogonal Procrustes
+│   └── cca.rs          — Canonical Correlation Analysis
+└── multiscale/         — Multi-scale temporal analysis
+    ├── resample.rs     — Temporal resampling (LastValue, Linear, Slerp)
+    ├── scale_drift.rs  — Per-scale drift analysis
+    └── coherence.rs    — Cross-scale coherence (robust change points)
+```
+
 ### Dependency Flow Rule
 
 Las dependencias son **estrictamente acíclicas y unidireccionales**:
@@ -1204,12 +1273,16 @@ Las dependencias son **estrictamente acíclicas y unidireccionales**:
 ```
 cvx-server → cvx-api → cvx-query → cvx-index
                       ↘ cvx-ingest → cvx-index
+                      ↘ cvx-explain → cvx-analytics
                         cvx-query → cvx-analytics → cvx-storage
                         cvx-query → cvx-storage
+                        cvx-explain → cvx-query
+                        cvx-explain → cvx-storage
                                      cvx-index → cvx-core
                                      cvx-storage → cvx-core
                                      cvx-ingest → cvx-core
                                      cvx-analytics → cvx-core
+                                     cvx-explain → cvx-core
 ```
 
 `cvx-core` no depende de ningún otro crate del workspace. Todos los demás dependen de `cvx-core`.
@@ -1244,6 +1317,13 @@ graph TB
 - Cada crate define su propio tipo de error (e.g., `StorageError`) que implementa `Into<CvxError>`.
 - En la API, los errores se mapean a códigos HTTP/gRPC apropiados.
 - Los errores internos incluyen context (via `thiserror`) pero nunca se exponen al cliente (se logean y se devuelve un error genérico).
+
+### Implementation Details
+
+- Library crates: `thiserror` with typed error enums (`StorageError`, `IndexError`, etc.)
+- Binary (`cvx-server`): `anyhow` for startup/shutdown error chains
+- API layer: pattern matches `CvxError` → HTTP status codes. Internal errors logged, generic message returned to client.
+- See `CVX_Implementation_Decisions.md` IDR-007 for full error hierarchy and mapping.
 
 ---
 
@@ -1297,8 +1377,40 @@ neural-ode = ["burn"]
 pelt = []
 bocpd = []
 
+# Differentiable temporal ML (see CVX_Temporal_ML_Spec.md)
+temporal-ml-burn = ["burn"]        # Pure Rust, autograd + CUDA
+temporal-ml-torch = ["tch"]        # PyTorch interop via libtorch
+
+# Stochastic analytics (see CVX_Stochastic_Analytics_Spec.md)
+stochastic-basic = []
+stochastic-garch = []
+stochastic-regime = []
+signatures = []
+neural-sde = ["burn"]
+neural-jump-sde = ["neural-sde"]
+cross-entity = []
+
 # Metrics
 poincare = []  # Hyperbolic distance support
+
+# Multi-space support (see CVX_MultiScale_Alignment_Spec.md)
+multi-space = []
+alignment-structural = ["multi-space"]
+alignment-behavioral = ["multi-space"]
+alignment-procrustes = ["multi-space"]
+alignment-cca = ["multi-space"]
+multiscale = []
+
+# Interpretability (see CVX_Explain_Interpretability_Spec.md)
+explain = []
+
+# Data Virtualization (see CVX_Data_Virtualization_Spec.md)
+source-s3 = []
+source-kafka = []
+source-pgvector = []
+materialized-views = []
+monitors = []
+model-versioning = ["multi-space"]
 
 # Distributed
 distributed = ["openraft"]

@@ -261,6 +261,227 @@ cvx-server → cvx-api
 
 ---
 
+### ADR-008: Interpretability as a Separate Crate (`cvx-explain`)
+
+**Context:** CVX produce datos analíticos ricos (drift reports, change points, velocidades, predicciones) pero son vectores crudos de alta dimensionalidad. Los usuarios necesitan artefactos interpretables: qué dimensiones cambiaron, proyecciones 2D de trayectorias, timelines anotadas.
+
+**Decision:** Crear `cvx-explain` como crate separado que consume outputs de `cvx-analytics` y `cvx-query` y los transforma en artefactos interpretables (drift attribution, trajectory projection, heatmaps, narratives). El principio es "datos para interpretar, no gráficos" — CVX produce JSON estructurado, la renderización es del consumidor.
+
+**Alternatives Considered:**
+- **Integrar en `cvx-analytics`:** Menor overhead de crates, pero mezcla cómputo y presentación. Viola separation of concerns.
+- **Dashboard integrado (web UI):** Más completo para el usuario, pero añade dependencias frontend, aumenta superficie de mantenimiento, y limita flexibilidad (Grafana, Jupyter, custom UI son mejores opciones para renderización).
+- **Solo exportar a formatos estándar (CSV/Parquet):** Simple, pero pierde la semántica de los artefactos. El consumidor tendría que re-interpretar campos.
+
+**Consequences:**
+- (+) Separation of concerns: analytics computa, explain interpreta.
+- (+) Cualquier frontend puede consumir los endpoints (Grafana, Jupyter, React).
+- (+) Testable independientemente: los artefactos tienen schemas bien definidos.
+- (-) Un crate adicional en el workspace.
+- (-) Latencia añadida para transformaciones (mitigable: <5ms para la mayoría de operaciones).
+
+**Full Spec:** `CVX_Explain_Interpretability_Spec.md`
+
+---
+
+### ADR-009: Multi-Space Embedding Support
+
+**Context:** En producción, las entidades tienen múltiples representaciones (texto D=768, imagen D=512, usuario D=128) que evolucionan a diferentes escalas temporales. CVX actualmente asume un solo espacio vectorial por entidad.
+
+**Decision:** Extender el data model con `EmbeddingSpace` como concepto first-class. La tupla fundamental pasa de `(entity_id, timestamp, vector)` a `(entity_id, space_id, timestamp, vector)`. Cada espacio tiene su propio ST-HNSW index. Se proporcionan métodos de alignment (Structural, Behavioral, Procrustes, CCA) para medir coherencia cross-space.
+
+**Alternatives Considered:**
+- **Namespaces por colección (como Qdrant named vectors):** Más simple pero no modela la relación entre espacios. No permite cross-space queries.
+- **Concatenar todos los embeddings en un super-vector:** Pierde la semántica de cada espacio. Dimensionalidades diferentes impiden concatenación directa.
+- **Espacios separados sin relación:** Funcional, pero desaprovecha la oportunidad única de CVX de analizar evolución cross-modal.
+
+**Consequences:**
+- (+) Habilita cross-modal drift analysis — capacidad única de CVX.
+- (+) Backward compatible: sin space_id se usa default space (space_id=0).
+- (+) Cada espacio se indexa independientemente — no degrada rendimiento de single-space.
+- (-) Storage key encoding se extiende en 4 bytes por entry.
+- (-) O(S) índices ST-HNSW donde S = número de espacios (típicamente 2-10).
+- (-) Alignment methods requieren álgebra lineal (CCA, Procrustes) — nuevas dependencias.
+
+**Full Spec:** `CVX_MultiScale_Alignment_Spec.md`
+
+---
+
+### ADR-010: Multi-Scale Temporal Analysis
+
+**Context:** Diferentes fuentes de datos actualizan embeddings a frecuencias distintas (real-time, horario, diario, semanal). El análisis de drift y change points puede variar significativamente según la escala temporal elegida. Señales ruidosas a escala fina pueden enmascarar tendencias reales, y viceversa.
+
+**Decision:** Implementar resampling temporal (LastValue, Linear, Slerp, NeuralODE) y análisis multi-escala que ejecuta drift analysis y CPD a múltiples escalas simultáneamente. Los change points que persisten a través de escalas se clasifican como "robustos" (high-confidence).
+
+**Alternatives Considered:**
+- **Dejar al usuario elegir la escala manualmente:** Simple, pero el usuario no sabe cuál es la escala óptima a priori. Probablemente ejecutaría múltiples queries y haría el cruce manualmente.
+- **Escala adaptativa automática:** Elegiría la "mejor" escala automáticamente, pero pierde la riqueza del análisis multi-escala. No hay una única "mejor" escala.
+
+**Consequences:**
+- (+) Reducción de falsos positivos: change points deben persistir a múltiples escalas.
+- (+) Optimal analysis scale detection: el sistema puede recomendar la escala con mejor SNR.
+- (+) Habilita comparación cross-space con diferentes frecuencias de actualización.
+- (-) Cómputo multiplicativo: O(S) × coste de análisis single-scale, donde S = número de escalas.
+- (-) Slerp interpolation asume esfera unitaria — no universal para todos los espacios.
+
+**Full Spec:** `CVX_MultiScale_Alignment_Spec.md` §4
+
+---
+
+### ADR-011: Dual Backend for Temporal Features (Analytic + Differentiable)
+
+**Context:** CVX extrae features temporales (velocity, drift, change points) de trayectorias de embeddings. Para análisis e interpretación, estas features no necesitan ser diferenciables. Pero para training end-to-end (e.g., fine-tuning BERT para detección de trastornos desde redes sociales), los gradientes deben fluir desde el loss del clasificador a través de las features temporales hasta el modelo de embeddings.
+
+**Decision:** Implementar un trait `TemporalOps` con tres backends:
+1. `AnalyticBackend`: Rust puro + SIMD, sin autograd. Para serving, API, explain.
+2. `BurnBackend`: burn tensors con autograd + CUDA. Para training 100% Rust.
+3. `TorchBackend`: tch-rs (libtorch bindings). Para interop con PyTorch — los tensores comparten memoria y autograd graph con Python, permitiendo backpropagation cross-language.
+
+La misma lógica matemática se escribe una vez en el trait; cada backend la ejecuta en su contexto de tensores.
+
+**Alternatives Considered:**
+- **Solo burn (sin tch-rs):** Obliga a los usuarios Python a convertir tensores burn ↔ PyTorch, rompiendo el autograd graph. No viable para fine-tuning desde Python.
+- **Solo Python (PyTorch puro):** Duplica la lógica de features temporales fuera de CVX. Pierde las optimizaciones SIMD de Rust. Mezcla lenguajes en el codebase.
+- **CVX no diferenciable + cvx-torch separado en Python:** Funcional, pero el usuario tiene dos implementaciones divergentes de las mismas features. Mantenimiento doble.
+
+**Consequences:**
+- (+) Una sola lógica matemática, tres contextos de ejecución.
+- (+) Usuarios Rust puros: burn con CUDA, sin dependencias Python.
+- (+) Usuarios Python: tch-rs preserva gradientes transparentemente.
+- (+) El camino analítico (serving) no paga el overhead de autograd.
+- (-) tch-rs añade dependencia en libtorch (~2GB) para quienes activen el feature flag.
+- (-) Tres backends que testear y mantener sincronizados.
+
+**Full Spec:** `CVX_Temporal_ML_Spec.md`
+
+---
+
+### ADR-012: Soft Relaxations for Non-Differentiable Features
+
+**Context:** PELT, BOCPD, top-K dimension selection y conteos son operaciones discretas no diferenciables. Para que las features que dependen de ellas participen en backpropagation, se necesitan aproximaciones continuas.
+
+**Decision:** Usar relaxaciones sigmoid/softmax con temperatura configurable (τ):
+- Soft change point count: `Σ σ((deviation - μ) / τ)` ≈ número de change points.
+- Soft top-K: `gumbel_softmax(|delta|, τ)` ≈ indicador de dimensiones top.
+- Soft counting: `Σ σ((gap - θ) / τ)` ≈ conteo de silencios.
+
+La temperatura τ puede ser un parámetro learnable que el modelo optimiza durante training.
+
+**Consequences:**
+- (+) Features que capturan la misma información que PELT/BOCPD pero son diferenciables.
+- (+) τ → 0 converge a la versión discreta (validable contra PELT analítico).
+- (+) τ learnable permite que el modelo encuentre la "sensibilidad" óptima.
+- (-) Las relaxaciones son aproximaciones — no idénticas a PELT/BOCPD.
+- (-) Gradientes pueden ser ruidosos con τ muy pequeño (sigmoid saturado).
+
+**Validation:** Tras training, comparar soft_cp_count con PELT count analítico. Spearman > 0.8 indica que la relaxación captura la misma señal.
+
+---
+
+### ADR-013: Selective Data Virtualization (Ingestion, Not Federation)
+
+**Context:** In production ML, embeddings are scattered across systems (S3, Kafka, model serving APIs, other vector DBs). Full data virtualization (query-time federation like Denodo) would let CVX query remote sources directly. However, CVX's temporal analytics (velocity, change points, trajectories) require the full history of each entity — latency from remote fetches would be prohibitive.
+
+**Decision:** Adopt selective data virtualization concepts:
+1. **Source connectors** for declarative ingestion (not query-time federation)
+2. **Model version alignment** to handle retraining discontinuities
+3. **Temporal materialized views** for caching repeated analytics
+4. **Provenance/lineage** tracking per embedding
+5. **Monitors** for declarative alerting on temporal patterns
+
+Reject full query federation, distributed query optimizer, SQL interface, and row/column security.
+
+**Alternatives Considered:**
+- **Full data virtualization (Denodo-style):** Query remote sources at query time. Rejected because temporal analytics need complete history — can't compute velocity from a single remote snapshot.
+- **Pure ETL (no CVX involvement):** Leave ingestion entirely to user scripts. Works but creates friction and loses provenance.
+- **Embedding-specific lakehouse (like LanceDB):** Merges storage and compute but doesn't address temporal analytics or model versioning.
+
+**Consequences:**
+- (+) Reduces ingestion friction dramatically (declare sources, CVX syncs).
+- (+) Model version alignment is a unique differentiator — no other VDB does this.
+- (+) Materialized views eliminate redundant computation for iterative research.
+- (+) Provenance enables "is this drift real or a model artifact?" analysis.
+- (-) Source connectors add maintenance burden (one per source type).
+- (-) Model alignment quality depends on overlap data between versions.
+
+**Full Spec:** `CVX_Data_Virtualization_Spec.md`
+
+---
+
+### ADR-014: Stochastic Analytics Layer
+
+**Context:** CVX's trajectory analytics (velocity, acceleration, drift) are deterministic measures. The quantitative finance and stochastic processes literature provides richer tools: drift significance testing, volatility modeling (GARCH), mean reversion analysis (Ornstein-Uhlenbeck), path signatures (rough path theory), regime detection (HMM), and Neural SDEs. These tools characterize not just how embeddings move, but the statistical nature of their movement.
+
+**Decision:** Extend `cvx-analytics` with a `stochastic/` module implementing per-entity process characterization (drift tests, GARCH, mean reversion, Hurst exponent), path signatures for trajectory descriptors, regime detection via HMM, and Neural SDE extension of the existing Neural ODE. Cross-entity analysis includes DCC, co-integration, and Granger causality.
+
+**Alternatives Considered:**
+- **External analytics only (export to R/Python):** CVX exports trajectories, user runs statsmodels/R. Viable but loses the value of integrated analysis and real-time computation.
+- **Only neural approaches (Neural SDE, no classical stats):** Misses the diagnostic value of simple statistical tests (ADF, GARCH) that are interpretable and well-understood.
+
+**Consequences:**
+- (+) CVX becomes a temporal analytics platform, not just a temporal database.
+- (+) Path signatures enable a new query type: trajectory similarity search.
+- (+) Neural SDE adds uncertainty quantification to predictions.
+- (+) Stochastic characterization feeds directly into the interpretability layer (cvx-explain).
+- (-) Significant implementation effort across multiple mathematical domains.
+- (-) Some methods (GARCH, ADF) require numerical optimization — need robust implementations.
+
+**Full Spec:** `CVX_Stochastic_Analytics_Spec.md`
+
+---
+
+### ADR-015: Domain-Agnostic Core, Domain-Specific Analytics as Composition
+
+**Context:** CVX incorpora conceptos de múltiples dominios — NLP (drift semántico, embeddings diacrónicos), finanzas cuantitativas (GARCH, mean reversion, path signatures, flow imbalance à la López de Prado), y clinical NLP (detección temprana desde redes sociales). Existe el riesgo de que el core de CVX se "contamine" con asunciones de un dominio específico, limitando su generalidad.
+
+**Decision:** Separación estricta en tres capas:
+
+1. **Core** (`cvx-core`, `cvx-index`, `cvx-storage`): completamente agnóstico al dominio. Solo sabe de `(entity_id, space_id, timestamp, vector)`. No conoce conceptos como "volatilidad financiera", "drift semántico" ni "publicaciones en redes sociales".
+
+2. **Primitivas analíticas** (`cvx-analytics`): operaciones genéricas sobre trayectorias — velocity, drift, change points, stationarity tests, path signatures, regime detection. Los nombres y APIs son genéricos (e.g., "neighborhood drift coherence", no "order flow imbalance").
+
+3. **Composición de dominio**: los conceptos de dominio específico son **combinaciones de primitivas**, no features del core. Ejemplos:
+   - "Flow imbalance" (finanzas) = kNN + velocity + coherencia direccional
+   - "Adaptive delta threshold" = ingestion policy configurable, no hardcoded
+   - "Fractional differentiation" = función analítica sobre trajectory, no transformación del storage
+   - "Meta-labeling" = regime confidence × prediction, no un módulo separado
+
+**Alternatives Considered:**
+- **Vertical financiero primero:** Optimizar CVX para quant finance y luego generalizar. Riesgo: las asunciones financieras (GBM, log-returns) se embeben en el core y son difíciles de extraer después.
+- **Plugins por dominio:** Crates separados (`cvx-finance`, `cvx-nlp`, `cvx-clinical`). Overhead de mantenimiento alto, y la mayoría de las "features de dominio" son simplemente composiciones de 2-3 primitivas — no justifican un crate entero.
+
+**Consequences:**
+- (+) CVX es general: cualquier dato temporal vectorial, de cualquier dominio.
+- (+) Las primitivas son reutilizables: un test de mean reversion sirve para finanzas, NLP y clinical.
+- (+) Nuevos dominios no requieren cambios en el core — solo nuevas composiciones.
+- (+) El naming genérico evita alienar a usuarios de otros campos.
+- (-) Los usuarios de un dominio específico deben componer las primitivas ellos mismos (mitigado por documentación de use cases y ejemplos).
+- (-) Algunas optimizaciones domain-specific (e.g., log-returns para datos financieros) no se implementan "out of the box".
+
+**Principio rector:** *"CVX no sabe de finanzas, NLP, ni medicina. Sabe de trayectorias vectoriales en el tiempo. Los dominios son configuraciones y composiciones, no features."*
+
+---
+
+## 3.5 Implementation Decisions
+
+The following implementation-level decisions are documented in `CVX_Implementation_Decisions.md`:
+
+| IDR | Decision | Choice |
+|-----|---------|--------|
+| IDR-001 | Concurrency model | Message passing (channels) + RwLock (index) |
+| IDR-002 | Compute parallelism | Rayon thread pool with work-stealing |
+| IDR-003 | Serialization | rkyv (HNSW graph) + postcard (storage/WAL) |
+| IDR-004 | Global allocator | jemalloc (per-thread arenas) |
+| IDR-005 | SIMD strategy | pulp (safe, stable, runtime dispatch) |
+| IDR-006 | RocksDB key encoding | BE + sign-bit flip, separate CFs |
+| IDR-007 | Error handling | thiserror (libs) + anyhow (binary) |
+| IDR-008 | Testing strategy | proptest + criterion + cargo-fuzz |
+| IDR-009 | Unsafe policy | deny by default, allow in 2 crates |
+| IDR-010 | Index persistence | Read-into-memory → mmap + prefetch |
+
+These are implementation-level decisions (HOW), complementing the architectural decisions above (WHAT/WHY).
+
+---
+
 ## 4. Decisions Deferred
 
 | Decision | Deferred To | Reason |
@@ -270,6 +491,15 @@ cvx-server → cvx-api
 | Learned distance combination (replacing linear α) | Phase 5 | Linear is baseline; optimize later |
 | Sharding strategy (hash vs range) | Phase 5 (distributed) | Single-node first |
 | Lance format replacing Parquet | Continuous evaluation | Depends on Lance crate maturity |
+| UMAP implementation (custom vs linfa-reduction) | Layer 7.5 | PCA first; UMAP if demand warrants the dependency |
+| nalgebra vs ndarray for CCA/Procrustes | Layer 7.5 implementation | Both viable; evaluate ergonomics during implementation |
+| Cross-modal prediction viability | Post Layer 10 | Requires trained Neural ODE + alignment data; test Granger causality first |
+| Natural language narratives via LLM | Post Layer 12 | Explore generating human-readable explanations from structured explain data |
+| Projection cache strategy for UMAP | Layer 7.5 implementation | LRU cache by (entity_id, time_range, method) — evaluate if hit rate justifies memory |
+| burn vs candle for BERT encoder loading | Layer 10.5 | candle has better HuggingFace integration; burn has better training ergonomics. May coexist. |
+| Learnable temperature schedule for soft CPD | Layer 10.5 | Fixed τ, learnable τ, or annealing schedule during training? Empirical evaluation needed. |
+| Source connector priority (S3 vs Kafka vs pgvector first) | Layer 9 | Depends on user demand; S3-Parquet likely first (most common in data lakes) |
+| Alignment quality threshold for canonical trajectories | Layer 7.5+ | Need empirical data on Procrustes residuals across real model retrains |
 
 ---
 

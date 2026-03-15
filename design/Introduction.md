@@ -483,8 +483,23 @@ Este proyecto te obligará a dominar aspectos avanzados de Rust en cada fase:
 | Hyperbolic metrics | ❌ | ❌ | ❌ | ❌ | **✅ Poincaré ball** |
 | Disk-optimized | Via quantization | DiskANN support | ❌ | Managed | **✅ DiskANN-style** |
 | Delta compression | ❌ | ❌ | ❌ | ❌ | **✅ Temporal deltas** |
+| **Drift attribution** | ❌ | ❌ | ❌ | ❌ | **✅ Per-dimension** |
+| **Trajectory visualization** | ❌ | ❌ | ❌ | ❌ | **✅ PCA/UMAP proj** |
+| **Multi-space alignment** | Named vectors (no analysis) | ❌ | ❌ | Namespaces (no analysis) | **✅ Cross-modal** |
+| **Multi-scale analysis** | ❌ | ❌ | ❌ | ❌ | **✅ Scale-robust CPD** |
+| **Differentiable features** | ❌ | ❌ | ❌ | ❌ | **✅ burn + tch-rs** |
+| **End-to-end training** | ❌ | ❌ | ❌ | ❌ | **✅ backprop to encoder** |
+| **Source connectors** | REST API only | Bulk import | REST API only | REST API only | **✅ S3, Kafka, pgvector** |
+| **Model version alignment** | ❌ | ❌ | ❌ | ❌ | **✅ Auto Procrustes** |
+| **Materialized views** | ❌ | ❌ | ❌ | ❌ | **✅ Temporal views** |
+| **Embedding provenance** | ❌ | ❌ | ❌ | ❌ | **✅ Full lineage** |
+| **Stochastic characterization** | ❌ | ❌ | ❌ | ❌ | **✅ GARCH, ADF, Hurst** |
+| **Path signatures** | ❌ | ❌ | ❌ | ❌ | **✅ Trajectory descriptors** |
+| **Trajectory similarity search** | ❌ | ❌ | ❌ | ❌ | **✅ Signature kNN** |
+| **Neural SDE prediction** | ❌ | ❌ | ❌ | ❌ | **✅ Stochastic forecasting** |
+| **Regime detection** | ❌ | ❌ | ❌ | ❌ | **✅ HMM/Markov switching** |
 
-**CVX no compite frontalmente con bases de datos vectoriales generales.** Se posiciona como **infraestructura especializada para análisis temporal de embeddings** — un nicho que ninguna solución actual cubre nativamente.
+**CVX no compite frontalmente con bases de datos vectoriales generales.** Se posiciona como **infraestructura especializada para análisis temporal de embeddings** — un nicho que ninguna solución actual cubre nativamente. Las capas de interpretabilidad (drift attribution, trajectory projection, change point narratives) y de alignment multi-modal/multi-escala amplían esta diferenciación hacia un territorio donde CVX no solo *almacena* embeddings temporales sino que los hace *comprensibles*.
 
 ---
 
@@ -500,6 +515,21 @@ Este proyecto te obligará a dominar aspectos avanzados de Rust en cada fase:
 
 5. **¿Puede un Neural ODE ligero (pocas capas, inferencia rápida) predecir trayectorias útilmente?** El balance entre complejidad del modelo y latencia de query es crítico.
 
+6. **¿Qué método de alignment cross-modal es más robusto?** Structural (Jaccard kNN) no requiere misma dimensionalidad pero es costoso; Behavioral (correlación de drift) es eficiente pero ignora la geometría absoluta. ¿Un ensemble de ambos?
+
+7. **¿La evolución en un espacio de embeddings predice la evolución en otro?** Cross-modal prediction vía alineamiento temporal asume correlación causal que puede no existir. Tests de causalidad de Granger podrían validar esta hipótesis antes de ofrecer predicciones.
+
+8. **¿Cuál es la escala temporal óptima para detección de change points?** El análisis multi-escala puede identificar la escala con mejor SNR, pero ¿existe una relación teórica entre la frecuencia de actualización de embeddings y la resolución óptima de detección?
+
 ---
 
 *Este documento será actualizado iterativamente conforme avance la implementación y la investigación.*
+
+**Documentos complementarios (añadidos March 2026):**
+- `CVX_Explain_Interpretability_Spec.md` — Capa de interpretabilidad y visualización
+- `CVX_Benchmark_Plan.md` — Plan de benchmarking y evaluación competitiva
+- `CVX_MultiScale_Alignment_Spec.md` — Soporte multi-modal y multi-escala
+- `CVX_Temporal_ML_Spec.md` — Features temporales diferenciables, dual backend (burn + tch-rs), caso de uso de clasificación temporal de redes sociales
+- `CVX_Data_Virtualization_Spec.md` — Source connectors, model version alignment, materialized views, provenance, monitors
+- `CVX_Implementation_Decisions.md` — 10 implementation decisions: concurrency, serialization, SIMD, allocator, RocksDB encoding, error handling, testing, unsafe policy, index persistence
+- `CVX_Stochastic_Analytics_Spec.md` — Stochastic process characterization, path signatures, regime detection, Neural SDE, quantitative finance use cases
