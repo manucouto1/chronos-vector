@@ -6,6 +6,7 @@
 
 mod change_point;
 mod delta_entry;
+mod embedding_space;
 mod entity_timeline;
 mod scored_result;
 mod temporal_filter;
@@ -13,6 +14,7 @@ mod temporal_point;
 
 pub use change_point::ChangePoint;
 pub use delta_entry::DeltaEntry;
+pub use embedding_space::EmbeddingSpace;
 pub use entity_timeline::EntityTimeline;
 pub use scored_result::ScoredResult;
 pub use temporal_filter::TemporalFilter;

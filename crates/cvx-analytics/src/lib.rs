@@ -10,3 +10,5 @@
 #![warn(missing_docs)]
 
 pub mod calculus;
+pub mod explain;
+pub mod multiscale;
