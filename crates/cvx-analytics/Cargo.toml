@@ -25,3 +25,7 @@ thiserror = { workspace = true }
 proptest = { workspace = true }
 criterion = { workspace = true }
 rand = { workspace = true }
+
+[[bench]]
+name = "analytics_bench"
+harness = false

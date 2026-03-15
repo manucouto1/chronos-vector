@@ -31,3 +31,7 @@ serde_json = "1"
 [[bench]]
 name = "distance_kernels"
 harness = false
+
+[[bench]]
+name = "hnsw_search"
+harness = false
