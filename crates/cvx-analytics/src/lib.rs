@@ -9,6 +9,8 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod bocpd;
 pub mod calculus;
 pub mod explain;
 pub mod multiscale;
+pub mod pelt;
