@@ -34,6 +34,7 @@
 //! ```
 
 pub mod concurrent;
+pub mod optimized;
 pub mod temporal;
 
 pub use concurrent::ConcurrentTemporalHnsw;
@@ -384,6 +385,27 @@ impl<D: DistanceMetric> HnswGraph<D> {
     /// Get the stored vector for a node.
     pub fn vector(&self, node_id: u32) -> &[f32] {
         &self.nodes[node_id as usize].vector
+    }
+
+    /// Get the configuration.
+    pub fn config(&self) -> &HnswConfig {
+        &self.config
+    }
+
+    /// Get the entry point node ID.
+    pub fn entry_point(&self) -> Option<u32> {
+        self.entry_point
+    }
+
+    /// Get the maximum level in the graph.
+    pub fn max_level(&self) -> usize {
+        self.max_level
+    }
+
+    /// Get all neighbor lists for a node (one per level).
+    pub fn all_neighbors(&self, node_id: u32) -> Vec<Vec<u32>> {
+        let node = &self.nodes[node_id as usize];
+        node.neighbors.iter().map(|n| n.to_vec()).collect()
     }
 
     /// Compute distance between a stored node and a query vector.
