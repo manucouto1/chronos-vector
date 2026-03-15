@@ -12,6 +12,12 @@
 //!
 //! All implement [`cvx_core::DistanceMetric`] and automatically dispatch to
 //! the best SIMD instruction set available at runtime (AVX-512, AVX2, NEON, or scalar).
+//!
+//! ## Layer 4: Spatiotemporal Index (ST-HNSW)
+//!
+//! [`hnsw::TemporalHnsw`] — temporal-aware HNSW with Roaring Bitmap pre-filtering,
+//! composite distance $d_{ST} = \alpha \cdot d_{sem} + (1-\alpha) \cdot d_{time}$,
+//! and trajectory retrieval.
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
