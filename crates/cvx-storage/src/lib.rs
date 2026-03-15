@@ -10,6 +10,10 @@
 //! ## Layer 5: Write-Ahead Log
 //! [`wal`] — Append-only, CRC32-validated log with segment rotation and crash recovery.
 //!
+//! ## Layer 9: Warm Store & Tiered Storage
+//! [`warm::WarmStore`] — File-based partitioned storage for less-frequently accessed data.
+//! [`tiered::TieredStorage`] — Composite router across hot → warm tiers.
+//!
 //! ## Shared
 //! [`keys`] — Big-endian key encoding with sign-bit flip for correct timestamp ordering.
 
@@ -20,4 +24,6 @@
 pub mod hot;
 pub mod keys;
 pub mod memory;
+pub mod tiered;
 pub mod wal;
+pub mod warm;
