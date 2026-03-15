@@ -9,16 +9,17 @@ rust-version.workspace = true
 repository.workspace = true
 
 [features]
-default = ["simd-auto"]
-simd-auto = []
-simd-explicit = []
+default = []
 poincare = []
 
 [dependencies]
 cvx-core = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
+pulp = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
 criterion = { workspace = true }
+
+[[bench]]
+name = "distance_kernels"
+harness = false
