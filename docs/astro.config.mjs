@@ -88,6 +88,7 @@ export default defineConfig({
 						{ label: 'API Contract', slug: 'specs/api-contract' },
 						{ label: 'Benchmark Strategy', slug: 'specs/benchmark-plan' },
 						{ label: 'Implementation Decisions', slug: 'specs/implementation-guide' },
+						{ label: 'Git Workflow & Versioning', slug: 'specs/git-workflow' },
 					],
 				},
 				{
