@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Enforce conventional commit format on commit messages.
+# Install: git config core.hooksPath .githooks
+
+commit_msg_file="$1"
+commit_msg=$(head -1 "$commit_msg_file")
+
+# Conventional commit pattern: type(optional scope): description
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .{1,}'
+
+if ! echo "$commit_msg" | grep -qE "$pattern"; then
+  echo "ERROR: Commit message does not follow Conventional Commits format."
+  echo ""
+  echo "  Format: <type>(<scope>): <description>"
+  echo ""
+  echo "  Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+  echo ""
+  echo "  Example: feat(index): add ST-HNSW temporal decay"
+  echo ""
+  exit 1
+fi
