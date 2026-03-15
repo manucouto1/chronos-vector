@@ -5,7 +5,7 @@
 use cvx_core::TemporalFilter;
 use cvx_index::hnsw::temporal::TemporalHnsw;
 use cvx_index::hnsw::{HnswConfig, HnswGraph, recall_at_k};
-use cvx_index::metrics::L2Distance;
+use cvx_index::metrics::{CosineDistance, L2Distance};
 
 fn random_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
     let mut rng = rand::rng();
@@ -18,14 +18,21 @@ fn random_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
         .collect()
 }
 
-fn report_vanilla_recall(n: u32, dim: usize, k: usize, ef_search: usize, label: &str) {
+fn report_vanilla_recall_with<D: cvx_core::DistanceMetric>(
+    metric: D,
+    n: u32,
+    dim: usize,
+    k: usize,
+    ef_search: usize,
+    label: &str,
+) {
     let config = HnswConfig {
         m: 16,
         ef_construction: 200,
         ef_search,
         ..Default::default()
     };
-    let mut graph = HnswGraph::new(config, L2Distance);
+    let mut graph = HnswGraph::new(config, metric);
 
     let vectors = random_vectors(n as usize, dim);
     for (i, v) in vectors.iter().enumerate() {
@@ -116,12 +123,19 @@ fn metrics_report() {
     println!("║              ChronosVector Performance Metrics                  ║");
     println!("╠══════════════════════════════════════════════════════════════════╣");
 
-    // ─── Vanilla HNSW Recall ─────────────────────────────────────────
-    println!("║ Vanilla HNSW (L2Distance)                                      ║");
+    // ─── Vanilla HNSW Recall (L2) ──────────────────────────────────────
+    println!("║ Vanilla HNSW — L2Distance (heuristic=true)                     ║");
     println!("╟──────────────────────────────────────────────────────────────────╢");
-    report_vanilla_recall(1_000, 32, 10, 50, "1K vectors, D=32, ef_search=50");
-    report_vanilla_recall(1_000, 128, 10, 50, "1K vectors, D=128, ef_search=50");
-    report_vanilla_recall(10_000, 128, 10, 200, "10K vectors, D=128, ef_search=200");
+    report_vanilla_recall_with(L2Distance, 1_000, 32, 10, 50, "L2  1K D=32  ef=50");
+    report_vanilla_recall_with(L2Distance, 1_000, 128, 10, 50, "L2  1K D=128 ef=50");
+    report_vanilla_recall_with(L2Distance, 10_000, 128, 10, 200, "L2  10K D=128 ef=200");
+
+    // ─── Vanilla HNSW Recall (Cosine) ───────────────────────────────────
+    println!("╟──────────────────────────────────────────────────────────────────╢");
+    println!("║ Vanilla HNSW — CosineDistance (heuristic=true)                 ║");
+    println!("╟──────────────────────────────────────────────────────────────────╢");
+    report_vanilla_recall_with(CosineDistance, 1_000, 32, 10, 50, "Cos 1K D=32  ef=50");
+    report_vanilla_recall_with(CosineDistance, 1_000, 128, 10, 50, "Cos 1K D=128 ef=50");
 
     // ─── ST-HNSW Temporal Recall ─────────────────────────────────────
     println!("╟──────────────────────────────────────────────────────────────────╢");
