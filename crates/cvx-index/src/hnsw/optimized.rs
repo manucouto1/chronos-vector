@@ -32,7 +32,6 @@ use super::HnswGraph;
 /// Returns at most `m` neighbor IDs.
 pub fn select_neighbors_heuristic<D: DistanceMetric>(
     metric: &D,
-    _target_vector: &[f32],
     candidates: &[(u32, f32)], // (node_id, distance_to_target)
     node_vectors: &[Vec<f32>], // all node vectors indexed by id
     m: usize,
@@ -226,8 +225,7 @@ mod tests {
             (3, metric.distance(&target, &node_vectors[3])),
         ];
 
-        let selected =
-            select_neighbors_heuristic(&metric, &target, &candidates, &node_vectors, 3, false);
+        let selected = select_neighbors_heuristic(&metric, &candidates, &node_vectors, 3, false);
         assert_eq!(selected.len(), 3);
 
         // The heuristic should exclude one of {0, 1} since they're in the same direction
@@ -245,7 +243,7 @@ mod tests {
     #[test]
     fn heuristic_empty_candidates() {
         let metric = L2Distance;
-        let result = select_neighbors_heuristic(&metric, &[0.0], &[], &[], 5, false);
+        let result = select_neighbors_heuristic(&metric, &[], &[], 5, false);
         assert!(result.is_empty());
     }
 
@@ -254,7 +252,7 @@ mod tests {
         let metric = L2Distance;
         let vectors = vec![vec![1.0], vec![2.0]];
         let candidates = vec![(0, 1.0), (1, 2.0)];
-        let selected = select_neighbors_heuristic(&metric, &[0.0], &candidates, &vectors, 5, false);
+        let selected = select_neighbors_heuristic(&metric, &candidates, &vectors, 5, false);
         assert_eq!(selected.len(), 2); // only 2 available
     }
 
