@@ -44,6 +44,9 @@ smallvec = { version = "1", features = ["union"] }
 # Random
 rand = "0.9"
 
+# Storage
+rocksdb = "0.23"
+
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
