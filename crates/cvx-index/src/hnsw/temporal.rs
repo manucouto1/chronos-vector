@@ -102,7 +102,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
     }
 
     /// Build a Roaring Bitmap of node IDs matching the temporal filter.
-    fn build_filter_bitmap(&self, filter: &TemporalFilter) -> RoaringBitmap {
+    pub fn build_filter_bitmap(&self, filter: &TemporalFilter) -> RoaringBitmap {
         let mut bitmap = RoaringBitmap::new();
         for (i, &ts) in self.timestamps.iter().enumerate() {
             if filter.matches(ts) {
