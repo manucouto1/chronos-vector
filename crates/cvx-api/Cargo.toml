@@ -15,12 +15,21 @@ grpc-api = []
 
 [dependencies]
 cvx-core = { workspace = true }
-cvx-query = { workspace = true }
+cvx-index = { workspace = true }
 cvx-ingest = { workspace = true }
+cvx-storage = { workspace = true }
+axum = { workspace = true }
 serde = { workspace = true }
-thiserror = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
+http-body-util = "0.1"
 proptest = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }

@@ -1,6 +1,18 @@
-//! `cvx-api` — Dual-protocol API gateway for ChronosVector.
+//! `cvx-api` — REST API gateway for ChronosVector.
 //!
-//! Exposes ChronosVector functionality over REST and gRPC:
-//! - **rest**: Axum HTTP handlers (ingest, query, entity lookup, health, admin)
-//! - **grpc**: Tonic gRPC service (IngestStream, QueryStream, WatchDrift)
-//! - **proto**: Generated protobuf types for wire format
+//! ## Endpoints
+//!
+//! | Method | Path | Description |
+//! |--------|------|-------------|
+//! | POST | `/v1/ingest` | Batch ingest temporal points |
+//! | POST | `/v1/query` | Spatiotemporal kNN search |
+//! | GET | `/v1/entities/{id}/trajectory` | Entity trajectory retrieval |
+//! | GET | `/v1/health` | Health check with server info |
+//! | GET | `/v1/ready` | Readiness probe |
+
+#![deny(unsafe_code)]
+#![warn(missing_docs)]
+
+pub mod handlers;
+pub mod router;
+pub mod state;
