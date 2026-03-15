@@ -33,13 +33,18 @@
 //! assert_eq!(results[1].0, 1); // second closest
 //! ```
 
+pub mod concurrent;
 pub mod temporal;
+
+pub use concurrent::ConcurrentTemporalHnsw;
+pub use temporal::TemporalHnsw;
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
 use cvx_core::DistanceMetric;
-use rand::Rng;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use smallvec::SmallVec;
 
 /// HNSW index configuration.
@@ -89,7 +94,7 @@ pub struct HnswGraph<D: DistanceMetric> {
     nodes: Vec<HnswNode>,
     entry_point: Option<u32>,
     max_level: usize,
-    rng: rand::rngs::ThreadRng,
+    rng: SmallRng,
 }
 
 impl<D: DistanceMetric> HnswGraph<D> {
@@ -101,7 +106,7 @@ impl<D: DistanceMetric> HnswGraph<D> {
             nodes: Vec::new(),
             entry_point: None,
             max_level: 0,
-            rng: rand::rng(),
+            rng: SmallRng::from_os_rng(),
         }
     }
 

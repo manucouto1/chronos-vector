@@ -7,6 +7,9 @@
 //! [`hot::HotStore`] — persistent storage with column families, prefix bloom filters,
 //! and per-CF compression. Requires the `hot-storage` feature flag.
 //!
+//! ## Layer 5: Write-Ahead Log
+//! [`wal`] — Append-only, CRC32-validated log with segment rotation and crash recovery.
+//!
 //! ## Shared
 //! [`keys`] — Big-endian key encoding with sign-bit flip for correct timestamp ordering.
 
@@ -17,3 +20,4 @@
 pub mod hot;
 pub mod keys;
 pub mod memory;
+pub mod wal;

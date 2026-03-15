@@ -339,6 +339,7 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "cvx-core",
+ "parking_lot",
  "proptest",
  "pulp",
  "rand",
@@ -390,6 +391,8 @@ dependencies = [
  "postcard",
  "proptest",
  "rocksdb",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 
