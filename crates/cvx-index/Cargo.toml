@@ -17,6 +17,7 @@ cvx-core = { workspace = true }
 pulp = { workspace = true }
 smallvec = { workspace = true }
 rand = { workspace = true }
+roaring = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

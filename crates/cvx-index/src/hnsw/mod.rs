@@ -33,6 +33,8 @@
 //! assert_eq!(results[1].0, 1); // second closest
 //! ```
 
+pub mod temporal;
+
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
@@ -336,6 +338,47 @@ impl<D: DistanceMetric> HnswGraph<D> {
         let mut results = self.search_layer(current, query, self.config.ef_search.max(k), 0);
         results.truncate(k);
         results
+    }
+
+    /// Search with a predicate filter.
+    ///
+    /// Like [`search`](Self::search), but only returns nodes where `filter(node_id)` is true.
+    /// The HNSW graph is still traversed through filtered-out nodes (they act as bridges),
+    /// but only matching nodes appear in the results.
+    pub fn search_filtered(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: impl Fn(u32) -> bool,
+    ) -> Vec<(u32, f32)> {
+        if self.nodes.is_empty() {
+            return Vec::new();
+        }
+
+        let entry = self.entry_point.unwrap();
+        let mut current = entry;
+
+        // Greedy descend from top to level 1
+        for lev in (1..=self.max_level).rev() {
+            current = self.greedy_closest(current, query, lev);
+        }
+
+        // Beam search on level 0, collecting all candidates
+        let ef = self.config.ef_search.max(k * 4); // over-fetch to compensate for filtering
+        let all_candidates = self.search_layer(current, query, ef, 0);
+
+        // Apply filter and take top-k
+        let mut results: Vec<(u32, f32)> = all_candidates
+            .into_iter()
+            .filter(|&(id, _)| filter(id))
+            .collect();
+        results.truncate(k);
+        results
+    }
+
+    /// Get the stored vector for a node.
+    pub fn vector(&self, node_id: u32) -> &[f32] {
+        &self.nodes[node_id as usize].vector
     }
 
     /// Compute distance between a stored node and a query vector.
