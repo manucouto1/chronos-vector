@@ -281,6 +281,8 @@ dependencies = [
  "cvx-core",
  "proptest",
  "pulp",
+ "rand",
+ "smallvec",
 ]
 
 [[package]]

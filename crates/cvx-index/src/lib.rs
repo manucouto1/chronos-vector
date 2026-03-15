@@ -16,4 +16,5 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod hnsw;
 pub mod metrics;
