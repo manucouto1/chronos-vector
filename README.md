@@ -1,6 +1,6 @@
 # ChronosVector (CVX)
 
-[![CI](https://github.com/manuelcoutopintos/chronos-vector/actions/workflows/ci.yml/badge.svg)](https://github.com/manuelcoutopintos/chronos-vector/actions/workflows/ci.yml)
+[![CI](https://github.com/manucouto1/chronos-vector/actions/workflows/ci.yml/badge.svg)](https://github.com/manucouto1/chronos-vector/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
 
 A temporal vector database that tracks how embeddings evolve over time. ChronosVector answers not just "what is similar?" but "what *was* similar, what *changed*, and what *will be* similar?"
