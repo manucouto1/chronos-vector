@@ -44,6 +44,9 @@ smallvec = { version = "1", features = ["union"] }
 # Random
 rand = "0.9"
 
+# Bitmaps
+roaring = "0.10"
+
 # Storage
 rocksdb = "0.23"
 
