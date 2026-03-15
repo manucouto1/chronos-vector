@@ -61,6 +61,9 @@ pub struct HnswConfig {
     pub max_level: usize,
     /// Level generation multiplier: 1 / ln(M).
     pub level_mult: f64,
+    /// Use heuristic neighbor selection (Malkov §4.2) for better connectivity.
+    /// When false, uses simple closest-M selection.
+    pub use_heuristic: bool,
 }
 
 impl Default for HnswConfig {
@@ -72,6 +75,7 @@ impl Default for HnswConfig {
             ef_search: 50,
             max_level: 0,
             level_mult: 1.0 / (m as f64).ln(),
+            use_heuristic: true,
         }
     }
 }
@@ -86,6 +90,12 @@ struct HnswNode {
     /// Neighbors at each level this node participates in.
     /// `neighbors[0]` = layer 0 (max 2*M neighbors), `neighbors[1]` = layer 1 (max M), etc.
     neighbors: Vec<NeighborList>,
+}
+
+impl optimized::NodeVectors for [HnswNode] {
+    fn get_vector(&self, id: u32) -> &[f32] {
+        &self[id as usize].vector
+    }
 }
 
 /// HNSW graph index for approximate nearest neighbor search.
@@ -175,9 +185,19 @@ impl<D: DistanceMetric> HnswGraph<D> {
         for lev in (0..=insert_from).rev() {
             let neighbors = self.search_layer(current, vector, self.config.ef_construction, lev);
 
-            // Select best M neighbors (guaranteed non-empty since current is always found)
+            // Select best M neighbors
             let max_n = self.max_neighbors(lev);
-            let mut selected: Vec<u32> = neighbors.iter().take(max_n).map(|&(n, _)| n).collect();
+            let mut selected: Vec<u32> = if self.config.use_heuristic {
+                optimized::select_neighbors_heuristic(
+                    &self.metric,
+                    &neighbors,
+                    self.nodes.as_slice(),
+                    max_n,
+                    false,
+                )
+            } else {
+                neighbors.iter().take(max_n).map(|&(n, _)| n).collect()
+            };
 
             // Safety: ensure at least one connection at every level
             if selected.is_empty() {
@@ -305,10 +325,13 @@ impl<D: DistanceMetric> HnswGraph<D> {
         result_vec
     }
 
-    /// Prune a node's neighbor list to keep only the closest `max_n`.
+    /// Prune a node's neighbor list to keep only the best `max_n`.
+    ///
+    /// Uses heuristic selection when enabled (diverse directions),
+    /// otherwise keeps the closest `max_n` by distance.
     fn prune_neighbors(&mut self, node_id: u32, level: usize, max_n: usize) {
         let node_vec = self.nodes[node_id as usize].vector.clone();
-        let mut scored: Vec<(u32, f32)> = self.nodes[node_id as usize].neighbors[level]
+        let scored: Vec<(u32, f32)> = self.nodes[node_id as usize].neighbors[level]
             .iter()
             .map(|&n| {
                 (
@@ -318,10 +341,23 @@ impl<D: DistanceMetric> HnswGraph<D> {
                 )
             })
             .collect();
-        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        scored.truncate(max_n);
 
-        self.nodes[node_id as usize].neighbors[level] = scored.iter().map(|&(n, _)| n).collect();
+        let pruned = if self.config.use_heuristic {
+            optimized::select_neighbors_heuristic(
+                &self.metric,
+                &scored,
+                self.nodes.as_slice(),
+                max_n,
+                false,
+            )
+        } else {
+            let mut s = scored;
+            s.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            s.truncate(max_n);
+            s.iter().map(|&(n, _)| n).collect()
+        };
+
+        self.nodes[node_id as usize].neighbors[level] = pruned.into_iter().collect();
     }
 
     /// Search for the k nearest neighbors of `query`.

@@ -30,10 +30,29 @@ use super::HnswGraph;
 /// neighbor set with better graph connectivity.
 ///
 /// Returns at most `m` neighbor IDs.
-pub fn select_neighbors_heuristic<D: DistanceMetric>(
+/// Trait for accessing node vectors by ID, avoiding full-collection clones.
+pub trait NodeVectors {
+    /// Get the vector for a given node ID.
+    fn get_vector(&self, id: u32) -> &[f32];
+}
+
+/// Implementation for a slice of Vec<f32>.
+impl NodeVectors for [Vec<f32>] {
+    fn get_vector(&self, id: u32) -> &[f32] {
+        &self[id as usize]
+    }
+}
+
+/// Select neighbors using the heuristic from Malkov & Yashunin (2018) §4.2.
+///
+/// Greedily selects neighbors closer to target than to any already-selected
+/// neighbor, producing a diverse set with better graph connectivity.
+///
+/// Returns at most `m` neighbor IDs.
+pub fn select_neighbors_heuristic<D: DistanceMetric, N: NodeVectors + ?Sized>(
     metric: &D,
     candidates: &[(u32, f32)], // (node_id, distance_to_target)
-    node_vectors: &[Vec<f32>], // all node vectors indexed by id
+    node_vectors: &N,
     m: usize,
     extend_candidates: bool,
 ) -> Vec<u32> {
@@ -54,14 +73,15 @@ pub fn select_neighbors_heuristic<D: DistanceMetric>(
         }
 
         // Check if candidate is closer to target than to any selected neighbor
+        let cand_vec = node_vectors.get_vector(cand_id);
         let is_good = selected_vectors.iter().all(|&sel_vec| {
-            let dist_to_selected = metric.distance(&node_vectors[cand_id as usize], sel_vec);
+            let dist_to_selected = metric.distance(cand_vec, sel_vec);
             cand_dist <= dist_to_selected
         });
 
         if is_good || (extend_candidates && selected.len() < m / 2) {
             selected.push(cand_id);
-            selected_vectors.push(&node_vectors[cand_id as usize]);
+            selected_vectors.push(cand_vec);
         }
     }
 
@@ -225,7 +245,8 @@ mod tests {
             (3, metric.distance(&target, &node_vectors[3])),
         ];
 
-        let selected = select_neighbors_heuristic(&metric, &candidates, &node_vectors, 3, false);
+        let selected =
+            select_neighbors_heuristic(&metric, &candidates, node_vectors.as_slice(), 3, false);
         assert_eq!(selected.len(), 3);
 
         // The heuristic should exclude one of {0, 1} since they're in the same direction
@@ -243,7 +264,8 @@ mod tests {
     #[test]
     fn heuristic_empty_candidates() {
         let metric = L2Distance;
-        let result = select_neighbors_heuristic(&metric, &[], &[], 5, false);
+        let empty: &[Vec<f32>] = &[];
+        let result = select_neighbors_heuristic(&metric, &[], empty, 5, false);
         assert!(result.is_empty());
     }
 
@@ -252,7 +274,8 @@ mod tests {
         let metric = L2Distance;
         let vectors = vec![vec![1.0], vec![2.0]];
         let candidates = vec![(0, 1.0), (1, 2.0)];
-        let selected = select_neighbors_heuristic(&metric, &candidates, &vectors, 5, false);
+        let selected =
+            select_neighbors_heuristic(&metric, &candidates, vectors.as_slice(), 5, false);
         assert_eq!(selected.len(), 2); // only 2 available
     }
 
