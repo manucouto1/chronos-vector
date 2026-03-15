@@ -40,3 +40,20 @@ Este proyecto te obligará a dominar aspectos avanzados de Rust en cada fase:
 | Phase 5 | **Memory management** | Arenas, memory pools, direct memory access para buffers fuera del heap |
 | Phase 5 | **Procedural macros** | DSL para definir queries temporales de forma declarativa |
 | Phase 6 | **WASM compilation** | Compilar kernels de distancia para browser-based demos |
+
+## Implementation Choices
+
+The following technical choices were made during the design phase (see [Implementation Decisions](/specs/implementation-guide) for full rationale):
+
+| Category | Choice | Why |
+|----------|--------|-----|
+| **Async runtime** | Tokio | Industry standard, axum/tonic integration |
+| **CPU parallelism** | Rayon | Work-stealing thread pool for SIMD/search (same as Qdrant) |
+| **SIMD** | pulp | Safe, stable Rust, automatic runtime dispatch (AVX2/AVX-512/NEON) |
+| **Index concurrency** | parking_lot::RwLock | Reader-biased, no poisoning, concurrent searches |
+| **Serialization (HNSW)** | rkyv | Zero-copy deserialization, mmap support for large indices |
+| **Serialization (storage)** | postcard | Compact, schema-evolvable via serde |
+| **Allocator** | jemalloc | Per-thread arenas, used by Qdrant/TiKV |
+| **Collections** | SmallVec<[u32; 16]> | Inline neighbor lists, zero heap allocation for HNSW |
+| **Error handling** | thiserror (libs) + anyhow (binary) | Typed errors for pattern matching, ergonomic for startup |
+| **ML framework** | burn (+ tch-rs for PyTorch interop) | Pure Rust autograd + CUDA |

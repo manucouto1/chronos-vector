@@ -57,6 +57,10 @@ export default defineConfig({
 						{ label: 'Tiered Storage', slug: 'architecture/tiered-storage' },
 						{ label: 'Query Engine', slug: 'architecture/query-engine' },
 						{ label: 'Analytics Engine', slug: 'architecture/analytics-engine' },
+						{ label: 'Interpretability', slug: 'architecture/interpretability' },
+						{ label: 'Multi-Space & Multi-Scale', slug: 'architecture/multi-scale-alignment' },
+						{ label: 'Temporal ML', slug: 'architecture/temporal-ml' },
+						{ label: 'Data Virtualization', slug: 'architecture/data-virtualization' },
 						{ label: 'API Gateway', slug: 'architecture/api-gateway' },
 						{ label: 'Concurrency Model', slug: 'architecture/concurrency' },
 						{ label: 'Crate Structure', slug: 'architecture/crate-structure' },
@@ -68,8 +72,11 @@ export default defineConfig({
 					label: 'Research',
 					items: [
 						{ label: 'Theoretical Foundations', slug: 'research/foundations' },
+						{ label: 'Stochastic Processes', slug: 'research/stochastic-processes' },
+						{ label: 'Path Signatures', slug: 'research/path-signatures' },
 						{ label: 'Query Types', slug: 'research/query-types' },
 						{ label: 'Tech Stack', slug: 'research/tech-stack' },
+						{ label: 'Use Cases', slug: 'research/use-cases' },
 						{ label: 'Competitive Landscape', slug: 'research/competitive-landscape' },
 						{ label: 'Open Questions', slug: 'research/open-questions' },
 					],
@@ -79,6 +86,8 @@ export default defineConfig({
 					items: [
 						{ label: 'Storage Layout', slug: 'specs/storage-layout' },
 						{ label: 'API Contract', slug: 'specs/api-contract' },
+						{ label: 'Benchmark Strategy', slug: 'specs/benchmark-plan' },
+						{ label: 'Implementation Decisions', slug: 'specs/implementation-guide' },
 					],
 				},
 				{

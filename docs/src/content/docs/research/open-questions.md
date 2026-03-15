@@ -15,6 +15,22 @@ description: "Unsolved problems and research directions for ChronosVector"
 
 5. **¿Puede un Neural ODE ligero (pocas capas, inferencia rápida) predecir trayectorias útilmente?** El balance entre complejidad del modelo y latencia de query es crítico.
 
+## Stochastic Analytics
+
+6. **¿Qué profundidad de path signature es óptima?** Depth 2 captura drift y volatilidad. Depth 3+ captura patrones más complejos pero crece exponencialmente. ¿Cuál es el sweet spot para embedding trajectories?
+
+7. **¿Neural SDE vs Neural CDE?** Los Neural CDEs (Kidger et al., 2020) manejan mejor datos irregulares que los SDEs. ¿Merece la complejidad adicional?
+
+8. **¿Los embeddings exhiben mean reversion?** Si los embeddings de conceptos estables mean-revert, el modelo Ornstein-Uhlenbeck es apropiado. Si no, un random walk o trending model es mejor. Requiere validación empírica.
+
+## Implementation & Integration
+
+9. **¿Cómo escalan las path signatures a D=768?** La computación directa sobre 768 dimensiones es intratable. La reducción via PCA a 5-10 dims pierde información. ¿Cuánta?
+
+10. **¿El flow imbalance (coherencia de drift del vecindario) es predictivo?** Concepto inspirado en microestructura financiera. Necesita validación empírica en embeddings.
+
+11. **¿Modelo version alignment funciona en la práctica?** Procrustes alignment entre model v1 y v2 asume una transformación lineal. ¿Es suficiente cuando los modelos cambian significativamente?
+
 ---
 
 ## 8. Development Roadmap (The "Rustacean" Path)

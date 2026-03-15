@@ -619,3 +619,17 @@ graph TB
 ```
 
 *Each layer is a shippable increment. If you stop at any layer, you have a working (if incomplete) system.*
+
+---
+
+## Parallel Tracks
+
+Some capabilities develop in parallel with the main layer sequence:
+
+| Track | Depends on | Scope |
+|-------|-----------|-------|
+| **Provenance & Sources** | Layer 6 (API) | Source connectors, embedding provenance metadata |
+| **Materialized Views** | Layer 8 (PELT/BOCPD) | Cached analytics with invalidation-on-ingest |
+| **Model Version Alignment** | Layer 7.5 (Multi-Scale) | Procrustes alignment across model retrains |
+| **Monitors** | Layer 8 (BOCPD) | Declarative alerting on temporal patterns |
+| **Stochastic Analytics** | Layer 7 (Vector Calculus) | GARCH, mean reversion, Hurst, path signatures |
