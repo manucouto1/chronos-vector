@@ -41,6 +41,9 @@ pulp = { version = "0.22", features = ["macro"] }
 # Collections
 smallvec = { version = "1", features = ["union"] }
 
+# Random
+rand = "0.9"
+
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
