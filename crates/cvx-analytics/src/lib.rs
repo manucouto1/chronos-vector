@@ -15,3 +15,4 @@ pub mod explain;
 pub mod multiscale;
 pub mod ode;
 pub mod pelt;
+pub mod temporal_ml;
