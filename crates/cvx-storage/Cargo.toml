@@ -9,14 +9,17 @@ rust-version.workspace = true
 repository.workspace = true
 
 [features]
-default = []
-hot-storage = []
+default = ["hot-storage"]
+hot-storage = ["rocksdb"]
 warm-storage = []
 cold-storage = []
 
 [dependencies]
 cvx-core = { workspace = true }
 parking_lot = { workspace = true }
+postcard = { workspace = true }
+rocksdb = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+tempfile = "3"
