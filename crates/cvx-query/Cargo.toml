@@ -10,12 +10,12 @@ repository.workspace = true
 
 [dependencies]
 cvx-core = { workspace = true }
-cvx-index = { workspace = true }
 cvx-storage = { workspace = true }
 cvx-analytics = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+cvx-index = { workspace = true }
 proptest = { workspace = true }
 criterion = { workspace = true }

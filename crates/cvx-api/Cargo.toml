@@ -18,6 +18,7 @@ cvx-core = { workspace = true }
 cvx-analytics = { workspace = true }
 cvx-index = { workspace = true }
 cvx-ingest = { workspace = true }
+cvx-query = { workspace = true }
 cvx-storage = { workspace = true }
 axum = { workspace = true }
 prost = { workspace = true }

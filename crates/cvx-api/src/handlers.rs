@@ -313,43 +313,24 @@ pub async fn velocity(
     Path(entity_id): Path<u64>,
     axum::extract::Query(params): axum::extract::Query<VelocityParams>,
 ) -> Result<Json<VelocityResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let traj_data = state.index.trajectory(entity_id, TemporalFilter::All);
-    if traj_data.len() < 2 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: format!(
-                    "entity {entity_id} has insufficient data ({} points, need 2)",
-                    traj_data.len()
-                ),
-            }),
-        ));
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::Velocity {
+            entity_id,
+            timestamp: params.timestamp,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Velocity(vel) = result {
+        Ok(Json(VelocityResponse {
+            entity_id,
+            timestamp: params.timestamp,
+            velocity: vel,
+        }))
+    } else {
+        unreachable!()
     }
-
-    let vectors: Vec<Vec<f32>> = traj_data
-        .iter()
-        .map(|&(_, node_id)| state.index.vector(node_id))
-        .collect();
-    let traj: Vec<(i64, &[f32])> = traj_data
-        .iter()
-        .zip(vectors.iter())
-        .map(|(&(ts, _), v)| (ts, v.as_slice()))
-        .collect();
-
-    let vel = cvx_analytics::calculus::velocity(&traj, params.timestamp).map_err(|e| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: e.to_string(),
-            }),
-        )
-    })?;
-
-    Ok(Json(VelocityResponse {
-        entity_id,
-        timestamp: params.timestamp,
-        velocity: vel,
-    }))
 }
 
 /// Drift request params.
@@ -396,41 +377,31 @@ pub async fn drift(
     Path(entity_id): Path<u64>,
     axum::extract::Query(params): axum::extract::Query<DriftParams>,
 ) -> Result<Json<DriftResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let traj = state.index.trajectory(entity_id, TemporalFilter::All);
-    if traj.is_empty() {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: format!("entity {entity_id} not found"),
-            }),
-        ));
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::DriftQuant {
+            entity_id,
+            t1: params.t1,
+            t2: params.t2,
+            top_n: params.top_n,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Drift(drift) = result {
+        Ok(Json(DriftResponse {
+            entity_id,
+            l2_magnitude: drift.l2_magnitude,
+            cosine_drift: drift.cosine_drift,
+            top_dimensions: drift
+                .top_dimensions
+                .into_iter()
+                .map(|(index, change)| DimensionChange { index, change })
+                .collect(),
+        }))
+    } else {
+        unreachable!()
     }
-
-    // Find nearest points to t1 and t2
-    let find_nearest = |target: i64| -> u32 {
-        traj.iter()
-            .min_by_key(|&&(ts, _)| (ts - target).unsigned_abs())
-            .unwrap()
-            .1
-    };
-
-    let node1 = find_nearest(params.t1);
-    let node2 = find_nearest(params.t2);
-    let v1 = state.index.vector(node1);
-    let v2 = state.index.vector(node2);
-
-    let report = cvx_analytics::calculus::drift_report(&v1, &v2, params.top_n);
-
-    Ok(Json(DriftResponse {
-        entity_id,
-        l2_magnitude: report.l2_magnitude,
-        cosine_drift: report.cosine_drift,
-        top_dimensions: report
-            .top_dimensions
-            .into_iter()
-            .map(|(index, change)| DimensionChange { index, change })
-            .collect(),
-    }))
 }
 
 /// Changepoint request params.
@@ -465,41 +436,138 @@ pub async fn changepoints(
     State(state): State<SharedState>,
     Path(entity_id): Path<u64>,
     axum::extract::Query(params): axum::extract::Query<ChangepointParams>,
-) -> Json<ChangepointResponse> {
-    let traj_data = state
-        .index
-        .trajectory(entity_id, TemporalFilter::Range(params.start, params.end));
-
-    let changepoints = if traj_data.len() >= 4 {
-        let vectors: Vec<Vec<f32>> = traj_data
-            .iter()
-            .map(|&(_, node_id)| state.index.vector(node_id))
-            .collect();
-        let traj: Vec<(i64, &[f32])> = traj_data
-            .iter()
-            .zip(vectors.iter())
-            .map(|(&(ts, _), v)| (ts, v.as_slice()))
-            .collect();
-
-        cvx_analytics::pelt::detect(
+) -> Result<Json<ChangepointResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::ChangePointDetect {
             entity_id,
-            &traj,
-            &cvx_analytics::pelt::PeltConfig::default(),
-        )
-        .into_iter()
-        .map(|cp| ChangepointEntry {
-            timestamp: cp.timestamp(),
-            severity: cp.severity(),
-        })
-        .collect()
-    } else {
-        Vec::new()
-    };
+            start: params.start,
+            end: params.end,
+        },
+    )
+    .map_err(query_err)?;
 
-    Json(ChangepointResponse {
-        entity_id,
-        changepoints,
-    })
+    if let cvx_query::types::QueryResult::ChangePoints(cps) = result {
+        Ok(Json(ChangepointResponse {
+            entity_id,
+            changepoints: cps
+                .into_iter()
+                .map(|cp| ChangepointEntry {
+                    timestamp: cp.timestamp(),
+                    severity: cp.severity(),
+                })
+                .collect(),
+        }))
+    } else {
+        unreachable!()
+    }
+}
+
+// ─── Prediction & Analogy endpoints ────────────────────────────
+
+/// Prediction request params.
+#[derive(Debug, Deserialize)]
+pub struct PredictionParams {
+    /// Target timestamp for prediction.
+    pub target_timestamp: i64,
+}
+
+/// Prediction response.
+#[derive(Debug, Serialize)]
+pub struct PredictionResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Predicted vector.
+    pub vector: Vec<f32>,
+    /// Target timestamp.
+    pub timestamp: i64,
+    /// Method used.
+    pub method: String,
+}
+
+/// GET /v1/entities/:id/prediction?target_timestamp=T — Predict future vector.
+pub async fn prediction(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<PredictionParams>,
+) -> Result<Json<PredictionResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::Prediction {
+            entity_id,
+            target_timestamp: params.target_timestamp,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Prediction(pred) = result {
+        Ok(Json(PredictionResponse {
+            entity_id,
+            vector: pred.vector,
+            timestamp: pred.timestamp,
+            method: format!("{:?}", pred.method),
+        }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Analogy request.
+#[derive(Debug, Deserialize)]
+pub struct AnalogyRequest {
+    /// Source entity A.
+    pub entity_a: u64,
+    /// Source timestamp 1.
+    pub t1: i64,
+    /// Source timestamp 2.
+    pub t2: i64,
+    /// Target entity B.
+    pub entity_b: u64,
+    /// Target timestamp 3.
+    pub t3: i64,
+}
+
+/// Analogy response.
+#[derive(Debug, Serialize)]
+pub struct AnalogyResponse {
+    /// Resulting vector: B@t3 + (A@t2 - A@t1).
+    pub vector: Vec<f32>,
+}
+
+/// POST /v1/analogy — Temporal analogy query.
+pub async fn analogy(
+    State(state): State<SharedState>,
+    Json(req): Json<AnalogyRequest>,
+) -> Result<Json<AnalogyResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::Analogy {
+            entity_a: req.entity_a,
+            t1: req.t1,
+            t2: req.t2,
+            entity_b: req.entity_b,
+            t3: req.t3,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Analogy(vec) = result {
+        Ok(Json(AnalogyResponse { vector: vec }))
+    } else {
+        unreachable!()
+    }
+}
+
+// ─── Helper ────────────────────────────────────────────────────
+
+/// Convert QueryError to HTTP error response.
+fn query_err(e: cvx_core::error::QueryError) -> (StatusCode, Json<ErrorResponse>) {
+    let status = match &e {
+        cvx_core::error::QueryError::EntityNotFound(_) => StatusCode::NOT_FOUND,
+        cvx_core::error::QueryError::InsufficientData { .. } => StatusCode::BAD_REQUEST,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    (status, Json(ErrorResponse { error: e.to_string() }))
 }
 
 /// GET /v1/health — Health check with server info.
