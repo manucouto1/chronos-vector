@@ -447,6 +447,53 @@ impl<D: DistanceMetric> HnswGraph<D> {
         node.neighbors.iter().map(|n| n.to_vec()).collect()
     }
 
+    /// Return node IDs present at the given HNSW level (RFC-004).
+    ///
+    /// These are the natural "hub" nodes of the graph hierarchy.
+    /// Level 0 = all nodes, higher levels = fewer, more connected hubs.
+    /// Count follows geometric distribution: ~N/M^level.
+    pub fn nodes_at_level(&self, level: usize) -> Vec<u32> {
+        (0..self.nodes.len() as u32)
+            .filter(|&id| self.nodes[id as usize].neighbors.len() > level)
+            .collect()
+    }
+
+    /// Assign a vector to its nearest hub at the given level (RFC-004).
+    ///
+    /// Uses greedy descent from the entry point — O(log N).
+    /// Returns the node_id of the nearest hub at that level.
+    pub fn assign_region(&self, vector: &[f32], level: usize) -> Option<u32> {
+        if self.nodes.is_empty() {
+            return None;
+        }
+
+        let entry = self.entry_point.unwrap();
+        let mut current = entry;
+
+        // Greedy descend from top to target level + 1
+        for lev in (level + 1..=self.max_level).rev() {
+            current = self.greedy_closest(current, vector, lev);
+        }
+
+        // At the target level, find the closest hub
+        if level <= self.max_level {
+            current = self.greedy_closest(current, vector, level);
+        }
+
+        // Ensure result is actually at the target level
+        if self.nodes[current as usize].neighbors.len() > level {
+            Some(current)
+        } else {
+            // Fallback: search among known hubs at this level
+            let hubs = self.nodes_at_level(level);
+            hubs.into_iter()
+                .min_by(|&a, &b| {
+                    self.distance(a, vector)
+                        .total_cmp(&self.distance(b, vector))
+                })
+        }
+    }
+
     /// Compute distance between a stored node and a query vector.
     #[inline]
     fn distance(&self, node_id: u32, query: &[f32]) -> f32 {
