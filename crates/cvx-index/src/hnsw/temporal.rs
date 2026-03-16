@@ -172,7 +172,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             })
             .collect();
 
-        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        scored.sort_by(|a, b| a.1.total_cmp(&b.1));
         scored.truncate(k);
         scored
     }
@@ -494,7 +494,7 @@ mod tests {
                     )
                 })
                 .collect();
-            truth.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            truth.sort_by(|a, b| a.1.total_cmp(&b.1));
             truth.truncate(k);
 
             total_recall += super::super::recall_at_k(&results, &truth);

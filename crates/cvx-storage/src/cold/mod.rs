@@ -268,7 +268,7 @@ impl ColdStore {
                 (e.entity_id, e.timestamp, dist)
             })
             .collect();
-        scored.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap());
+        scored.sort_by(|a, b| a.2.total_cmp(&b.2));
         scored.truncate(k);
         scored
     }

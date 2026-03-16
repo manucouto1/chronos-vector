@@ -132,9 +132,12 @@ impl<D: DistanceMetric> HnswGraph<D> {
     }
 
     /// Generate a random level for a new node.
+    ///
+    /// Capped at 32 (supports up to M^32 ≈ 10^38 nodes). See RFC-002-07.
     fn random_level(&mut self) -> usize {
         let r: f64 = self.rng.random();
-        (-r.ln() * self.config.level_mult).floor() as usize
+        let level = (-r.ln() * self.config.level_mult).floor() as usize;
+        level.min(32)
     }
 
     /// Max neighbors allowed at a given level.
@@ -321,7 +324,7 @@ impl<D: DistanceMetric> HnswGraph<D> {
 
         // Extract results sorted by distance (ascending)
         let mut result_vec: Vec<(u32, f32)> = results.into_iter().map(|e| (e.1, e.0)).collect();
-        result_vec.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        result_vec.sort_by(|a, b| a.1.total_cmp(&b.1));
         result_vec
     }
 
@@ -352,7 +355,7 @@ impl<D: DistanceMetric> HnswGraph<D> {
             )
         } else {
             let mut s = scored;
-            s.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            s.sort_by(|a, b| a.1.total_cmp(&b.1));
             s.truncate(max_n);
             s.iter().map(|&(n, _)| n).collect()
         };
@@ -497,7 +500,7 @@ impl<D: DistanceMetric> HnswGraph<D> {
             .enumerate()
             .map(|(i, node)| (i as u32, self.metric.distance(&node.vector, query)))
             .collect();
-        all.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        all.sort_by(|a, b| a.1.total_cmp(&b.1));
         all.truncate(k);
         all
     }
@@ -523,10 +526,7 @@ impl PartialOrd for OrdF32Entry {
 
 impl Ord for OrdF32Entry {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0
-            .partial_cmp(&other.0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(self.1.cmp(&other.1))
+        self.0.total_cmp(&other.0).then(self.1.cmp(&other.1))
     }
 }
 

@@ -107,7 +107,7 @@ fn report_temporal_recall(
                 (i, d)
             })
             .collect();
-        truth.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        truth.sort_by(|a, b| a.1.total_cmp(&b.1));
         truth.truncate(k);
 
         total_recall += recall_at_k(&results, &truth);
