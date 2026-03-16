@@ -11,6 +11,7 @@ mod entity_timeline;
 mod scored_result;
 mod temporal_filter;
 mod temporal_point;
+mod vector;
 
 pub use change_point::ChangePoint;
 pub use delta_entry::DeltaEntry;
@@ -19,6 +20,7 @@ pub use entity_timeline::EntityTimeline;
 pub use scored_result::ScoredResult;
 pub use temporal_filter::TemporalFilter;
 pub use temporal_point::TemporalPoint;
+pub use vector::DenseVector;
 
 /// Method used for change point detection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

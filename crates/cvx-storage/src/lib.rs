@@ -11,7 +11,7 @@
 //! [`wal`] — Append-only, CRC32-validated log with segment rotation and crash recovery.
 //!
 //! ## Layer 9: Warm Store & Tiered Storage
-//! [`warm::WarmStore`] — File-based partitioned storage for less-frequently accessed data.
+//! [`warm::WarmStore`] — File-based partitioned storage. Requires `warm-storage` feature.
 //! [`tiered::TieredStorage`] — Composite router across hot → warm tiers.
 //!
 //! ## Shared
@@ -24,6 +24,8 @@
 pub mod hot;
 pub mod keys;
 pub mod memory;
+#[cfg(feature = "warm-storage")]
 pub mod tiered;
 pub mod wal;
+#[cfg(feature = "warm-storage")]
 pub mod warm;
