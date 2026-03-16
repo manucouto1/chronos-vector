@@ -239,15 +239,29 @@ fn drift(v1: Vec<f32>, v2: Vec<f32>, top_n: usize) -> (f32, f32, Vec<(usize, f32
 
 /// Detect change points using PELT.
 ///
+/// Args:
+///     entity_id: Entity identifier.
+///     trajectory: List of (timestamp, vector) tuples.
+///     penalty: Optional penalty per change point. If None, uses BIC (dim * ln(n) / 2).
+///              For high-dimensional embeddings (D>100), consider using 3*ln(n) or lower.
+///     min_segment_len: Minimum segment length (default 2).
+///
 /// Returns:
 ///     List of (timestamp, severity) tuples.
 #[pyfunction]
+#[pyo3(signature = (entity_id, trajectory, penalty=None, min_segment_len=2))]
 fn detect_changepoints(
     entity_id: u64,
     trajectory: Vec<(i64, Vec<f32>)>,
+    penalty: Option<f64>,
+    min_segment_len: usize,
 ) -> Vec<(i64, f64)> {
     let traj: Vec<(i64, &[f32])> = trajectory.iter().map(|(t, v)| (*t, v.as_slice())).collect();
-    pelt::detect(entity_id, &traj, &PeltConfig::default())
+    let config = PeltConfig {
+        penalty,
+        min_segment_len,
+    };
+    pelt::detect(entity_id, &traj, &config)
         .into_iter()
         .map(|cp| (cp.timestamp(), cp.severity()))
         .collect()

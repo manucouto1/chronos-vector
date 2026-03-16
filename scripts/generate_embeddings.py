@@ -41,6 +41,31 @@ def generate_embeddings(records: list[dict], model_name: str, batch_size: int) -
     print(f"Loading model: {model_name}")
     model = SentenceTransformer(model_name)
 
+    # Sanitize all texts: force string, strip, filter empty/None
+    valid_records = []
+    n_filtered = 0
+    for r in records:
+        text = r.get("text")
+        if text is None:
+            n_filtered += 1
+            continue
+        # Force to string (handles ints, floats, lists, etc.)
+        if not isinstance(text, str):
+            text = str(text)
+        # Remove surrogate characters (broken emoji from Twitter API) and null bytes
+        text = text.encode("utf-8", errors="replace").decode("utf-8")
+        text = text.strip().replace("\x00", "")
+        if len(text) == 0:
+            n_filtered += 1
+            continue
+        r["text"] = text[:10000]  # cap length to avoid tokenizer OOM
+        valid_records.append(r)
+
+    if n_filtered > 0:
+        print(f"Filtered {n_filtered} invalid/empty texts")
+    records.clear()
+    records.extend(valid_records)
+
     texts = [r["text"] for r in records]
     print(f"Encoding {len(texts)} texts (batch_size={batch_size})...")
 
