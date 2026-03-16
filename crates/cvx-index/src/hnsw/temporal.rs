@@ -115,7 +115,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
     /// Compute normalized temporal distance between two timestamps.
     ///
     /// Returns a value in `[0.0, 1.0]` where 0 = same timestamp, 1 = max range.
-    fn temporal_distance(&self, t1: i64, t2: i64) -> f32 {
+    pub fn temporal_distance_normalized(&self, t1: i64, t2: i64) -> f32 {
         let range = (self.max_timestamp - self.min_timestamp).max(1) as f64;
         let diff = (t1 as f64 - t2 as f64).abs();
         (diff / range) as f32
@@ -165,7 +165,8 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         let mut scored: Vec<(u32, f32)> = candidates
             .into_iter()
             .map(|(id, sem_dist)| {
-                let t_dist = self.temporal_distance(self.timestamps[id as usize], query_timestamp);
+                let t_dist = self
+                    .temporal_distance_normalized(self.timestamps[id as usize], query_timestamp);
                 let combined = alpha * sem_dist + (1.0 - alpha) * t_dist;
                 (id, combined)
             })

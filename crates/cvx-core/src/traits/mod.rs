@@ -80,23 +80,34 @@ pub trait StorageBackend: Send + Sync {
 /// Abstracts over the indexing structure (HNSW, brute-force, etc.).
 pub trait IndexBackend: Send + Sync {
     /// Insert a point into the index.
-    fn insert(&self, point_id: u64, vector: &[f32], timestamp: i64) -> Result<(), IndexError>;
+    fn insert(&self, entity_id: u64, vector: &[f32], timestamp: i64) -> Result<u32, IndexError>;
 
     /// Search for the k nearest neighbors with temporal filtering.
     ///
     /// `alpha` controls the semantic vs temporal weight:
     /// - `alpha = 1.0`: pure semantic distance
     /// - `alpha = 0.0`: pure temporal distance
+    ///
+    /// `query_timestamp` is the reference time for temporal distance computation.
     fn search(
         &self,
         query: &[f32],
-        k: u32,
+        k: usize,
         filter: TemporalFilter,
         alpha: f32,
+        query_timestamp: i64,
     ) -> Result<Vec<ScoredResult>, QueryError>;
 
     /// Remove a point from the index.
     fn remove(&self, point_id: u64) -> Result<(), IndexError>;
+
+    /// Number of points in the index.
+    fn len(&self) -> usize;
+
+    /// Whether the index is empty.
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// Analytics backend for temporal analysis operations.

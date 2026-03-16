@@ -15,6 +15,7 @@ grpc-api = []
 
 [dependencies]
 cvx-core = { workspace = true }
+cvx-analytics = { workspace = true }
 cvx-index = { workspace = true }
 cvx-ingest = { workspace = true }
 cvx-storage = { workspace = true }

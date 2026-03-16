@@ -255,3 +255,94 @@ async fn query_empty_vector_returns_400() {
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
+
+// ─── Analytics endpoints ────────────────────────────────────────
+
+fn app_with_data() -> axum::Router {
+    let state = Arc::new(AppState::new());
+    let app = build_router(Arc::clone(&state));
+
+    // Pre-populate with trajectory data
+    for i in 0..20u64 {
+        state.index.insert(
+            1,
+            (i as i64) * 1_000_000,
+            &[i as f32 * 0.1, (20.0 - i as f32) * 0.1, 0.5],
+        );
+    }
+    // Entity 2 with a regime change (same dim=3)
+    for i in 0..10u64 {
+        state
+            .index
+            .insert(2, (i as i64) * 1_000_000, &[0.0, 0.0, 0.0]);
+    }
+    for i in 10..20u64 {
+        state
+            .index
+            .insert(2, (i as i64) * 1_000_000, &[10.0, 10.0, 10.0]);
+    }
+
+    app
+}
+
+#[tokio::test]
+async fn velocity_endpoint() {
+    let app = app_with_data();
+    let req = Request::get("/v1/entities/1/velocity?timestamp=10000000")
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["entity_id"], 1);
+    assert_eq!(json["timestamp"], 10_000_000);
+    assert!(json["velocity"].as_array().unwrap().len() == 3);
+}
+
+#[tokio::test]
+async fn drift_endpoint() {
+    let app = app_with_data();
+    let req = Request::get("/v1/entities/1/drift?t1=0&t2=19000000&top_n=2")
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["entity_id"], 1);
+    assert!(json["l2_magnitude"].as_f64().unwrap() > 0.0);
+    assert!(json["top_dimensions"].as_array().unwrap().len() <= 2);
+}
+
+#[tokio::test]
+async fn changepoints_endpoint() {
+    let app = app_with_data();
+    let req = Request::get("/v1/entities/2/changepoints?start=0&end=20000000")
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["entity_id"], 2);
+    let cps = json["changepoints"].as_array().unwrap();
+    assert!(!cps.is_empty(), "should detect changepoint in entity 2");
+}
+
+#[tokio::test]
+async fn velocity_unknown_entity() {
+    let app = app_with_data();
+    let req = Request::get("/v1/entities/999/velocity?timestamp=0")
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
