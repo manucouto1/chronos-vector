@@ -1,0 +1,1142 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ChronosVector API",
+    "description": "High-performance temporal vector database REST API.\n\nChronosVector stores, indexes, and analyzes time-evolving embedding vectors with spatiotemporal queries, change point detection, and trajectory analytics.",
+    "contact": {
+      "name": "Manuel Couto Pintos"
+    },
+    "license": {
+      "name": "MIT OR Apache-2.0"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/analogy": {
+      "post": {
+        "tags": [
+          "query"
+        ],
+        "summary": "Temporal analogy: B@t3 + (A@t2 - A@t1).",
+        "operationId": "analogy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalogyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Analogy result vector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalogyResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/entities/{id}/changepoints": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Detect change points in a time window.",
+        "operationId": "changepoints",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Entity identifier",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "description": "Start timestamp",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "description": "End timestamp",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detected change points",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangepointResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/entities/{id}/drift": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Drift quantification between two timestamps.",
+        "operationId": "drift",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Entity identifier",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "t1",
+            "in": "query",
+            "description": "Start timestamp",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "t2",
+            "in": "query",
+            "description": "End timestamp",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "top_n",
+            "in": "query",
+            "description": "Number of top dimensions (default 5)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Drift report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriftResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Entity not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/entities/{id}/prediction": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Predict future vector state via linear extrapolation.",
+        "operationId": "prediction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Entity identifier",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "target_timestamp",
+            "in": "query",
+            "description": "Target timestamp for prediction",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Predicted vector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Insufficient data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/entities/{id}/trajectory": {
+      "get": {
+        "tags": [
+          "query"
+        ],
+        "summary": "Retrieve entity trajectory.",
+        "operationId": "trajectory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Entity identifier",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Entity trajectory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrajectoryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/entities/{id}/velocity": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Compute velocity at timestamp.",
+        "operationId": "velocity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Entity identifier",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "timestamp",
+            "in": "query",
+            "description": "Timestamp to compute velocity at",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Velocity vector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VelocityResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Insufficient data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Health check with server info.",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Server health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ingest": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Batch ingest temporal points.",
+        "operationId": "ingest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchIngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Points ingested successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchIngestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/query": {
+      "post": {
+        "tags": [
+          "query"
+        ],
+        "summary": "Spatiotemporal kNN search.",
+        "operationId": "query",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ready": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Readiness probe.",
+        "operationId": "ready",
+        "responses": {
+          "200": {
+            "description": "Server is ready"
+          },
+          "503": {
+            "description": "Server is not ready"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalogyRequest": {
+        "type": "object",
+        "description": "Analogy request.",
+        "required": [
+          "entity_a",
+          "t1",
+          "t2",
+          "entity_b",
+          "t3"
+        ],
+        "properties": {
+          "entity_a": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Source entity A.",
+            "minimum": 0
+          },
+          "entity_b": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Target entity B.",
+            "minimum": 0
+          },
+          "t1": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Source timestamp 1."
+          },
+          "t2": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Source timestamp 2."
+          },
+          "t3": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Target timestamp 3."
+          }
+        }
+      },
+      "AnalogyResponse": {
+        "type": "object",
+        "description": "Analogy response.",
+        "required": [
+          "vector"
+        ],
+        "properties": {
+          "vector": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Resulting vector: B@t3 + (A@t2 - A@t1)."
+          }
+        }
+      },
+      "BatchIngestRequest": {
+        "type": "object",
+        "description": "Batch ingest request.",
+        "required": [
+          "points"
+        ],
+        "properties": {
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestRequest"
+            },
+            "description": "List of points to ingest."
+          }
+        }
+      },
+      "BatchIngestResponse": {
+        "type": "object",
+        "description": "Batch ingest response.",
+        "required": [
+          "ingested",
+          "receipts"
+        ],
+        "properties": {
+          "ingested": {
+            "type": "integer",
+            "description": "Number of points successfully ingested.",
+            "minimum": 0
+          },
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestReceipt"
+            },
+            "description": "Receipts for each ingested point."
+          }
+        }
+      },
+      "ChangepointEntry": {
+        "type": "object",
+        "description": "A detected change point.",
+        "required": [
+          "timestamp",
+          "severity"
+        ],
+        "properties": {
+          "severity": {
+            "type": "number",
+            "format": "double",
+            "description": "Severity [0, 1]."
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Timestamp of the change."
+          }
+        }
+      },
+      "ChangepointParams": {
+        "type": "object",
+        "description": "Changepoint request params.",
+        "required": [
+          "start",
+          "end"
+        ],
+        "properties": {
+          "end": {
+            "type": "integer",
+            "format": "int64",
+            "description": "End timestamp."
+          },
+          "start": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Start timestamp."
+          }
+        }
+      },
+      "ChangepointResponse": {
+        "type": "object",
+        "description": "Changepoint response.",
+        "required": [
+          "entity_id",
+          "changepoints"
+        ],
+        "properties": {
+          "changepoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChangepointEntry"
+            },
+            "description": "Detected change points."
+          },
+          "entity_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entity identifier.",
+            "minimum": 0
+          }
+        }
+      },
+      "DimensionChange": {
+        "type": "object",
+        "description": "A single dimension change.",
+        "required": [
+          "index",
+          "change"
+        ],
+        "properties": {
+          "change": {
+            "type": "number",
+            "format": "float",
+            "description": "Absolute change."
+          },
+          "index": {
+            "type": "integer",
+            "description": "Dimension index.",
+            "minimum": 0
+          }
+        }
+      },
+      "DriftParams": {
+        "type": "object",
+        "description": "Drift request params.",
+        "required": [
+          "t1",
+          "t2"
+        ],
+        "properties": {
+          "t1": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Start timestamp."
+          },
+          "t2": {
+            "type": "integer",
+            "format": "int64",
+            "description": "End timestamp."
+          },
+          "top_n": {
+            "type": "integer",
+            "description": "Number of top dimensions (default 5).",
+            "minimum": 0
+          }
+        }
+      },
+      "DriftResponse": {
+        "type": "object",
+        "description": "Drift response.",
+        "required": [
+          "entity_id",
+          "l2_magnitude",
+          "cosine_drift",
+          "top_dimensions"
+        ],
+        "properties": {
+          "cosine_drift": {
+            "type": "number",
+            "format": "float",
+            "description": "Cosine drift (1 - similarity)."
+          },
+          "entity_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entity identifier.",
+            "minimum": 0
+          },
+          "l2_magnitude": {
+            "type": "number",
+            "format": "float",
+            "description": "L2 drift magnitude."
+          },
+          "top_dimensions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DimensionChange"
+            },
+            "description": "Top changed dimensions."
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "Error response body.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error message."
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "description": "Health response.",
+        "required": [
+          "status",
+          "version",
+          "uptime_secs",
+          "index_size"
+        ],
+        "properties": {
+          "index_size": {
+            "type": "integer",
+            "description": "Number of indexed vectors.",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "description": "Server status."
+          },
+          "uptime_secs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Uptime in seconds.",
+            "minimum": 0
+          },
+          "version": {
+            "type": "string",
+            "description": "Server version."
+          }
+        }
+      },
+      "IngestReceipt": {
+        "type": "object",
+        "description": "Ingest receipt for a single point.",
+        "required": [
+          "node_id",
+          "entity_id",
+          "timestamp"
+        ],
+        "properties": {
+          "entity_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entity identifier.",
+            "minimum": 0
+          },
+          "node_id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Internal node ID assigned to this point.",
+            "minimum": 0
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Timestamp."
+          }
+        }
+      },
+      "IngestRequest": {
+        "type": "object",
+        "description": "Ingest request: a single temporal point.",
+        "required": [
+          "entity_id",
+          "timestamp",
+          "vector"
+        ],
+        "properties": {
+          "entity_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entity identifier.",
+            "minimum": 0
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Timestamp in microseconds."
+          },
+          "vector": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Embedding vector."
+          }
+        }
+      },
+      "PredictionParams": {
+        "type": "object",
+        "description": "Prediction request params.",
+        "required": [
+          "target_timestamp"
+        ],
+        "properties": {
+          "target_timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Target timestamp for prediction."
+          }
+        }
+      },
+      "PredictionResponse": {
+        "type": "object",
+        "description": "Prediction response.",
+        "required": [
+          "entity_id",
+          "vector",
+          "timestamp",
+          "method"
+        ],
+        "properties": {
+          "entity_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entity identifier.",
+            "minimum": 0
+          },
+          "method": {
+            "type": "string",
+            "description": "Method used."
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Target timestamp."
+          },
+          "vector": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Predicted vector."
+          }
+        }
+      },
+      "QueryFilter": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "No temporal constraint.",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "all"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Exact timestamp match.",
+            "required": [
+              "timestamp",
+              "type"
+            ],
+            "properties": {
+              "timestamp": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Target timestamp."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "snapshot"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Time range.",
+            "required": [
+              "start",
+              "end",
+              "type"
+            ],
+            "properties": {
+              "end": {
+                "type": "integer",
+                "format": "int64",
+                "description": "End timestamp (inclusive)."
+              },
+              "start": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Start timestamp (inclusive)."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "range"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Before timestamp.",
+            "required": [
+              "timestamp",
+              "type"
+            ],
+            "properties": {
+              "timestamp": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Maximum timestamp (inclusive)."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "before"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "After timestamp.",
+            "required": [
+              "timestamp",
+              "type"
+            ],
+            "properties": {
+              "timestamp": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Minimum timestamp (inclusive)."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "after"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Temporal filter for queries."
+      },
+      "QueryRequest": {
+        "type": "object",
+        "description": "Query request.",
+        "required": [
+          "vector"
+        ],
+        "properties": {
+          "alpha": {
+            "type": "number",
+            "format": "float",
+            "description": "Semantic vs temporal weight (1.0 = pure semantic)."
+          },
+          "filter": {
+            "$ref": "#/components/schemas/QueryFilter",
+            "description": "Temporal filter."
+          },
+          "k": {
+            "type": "integer",
+            "description": "Number of results.",
+            "minimum": 0
+          },
+          "query_timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Reference timestamp for temporal distance."
+          },
+          "vector": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Query vector."
+          }
+        }
+      },
+      "QueryResponse": {
+        "type": "object",
+        "description": "Query response.",
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueryResult"
+            },
+            "description": "Search results ordered by score."
+          }
+        }
+      },
+      "QueryResult": {
+        "type": "object",
+        "description": "A single query result.",
+        "required": [
+          "node_id",
+          "entity_id",
+          "timestamp",
+          "score"
+        ],
+        "properties": {
+          "entity_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entity identifier.",
+            "minimum": 0
+          },
+          "node_id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Internal node ID.",
+            "minimum": 0
+          },
+          "score": {
+            "type": "number",
+            "format": "float",
+            "description": "Combined distance score."
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Timestamp of the matched point."
+          }
+        }
+      },
+      "TrajectoryEntry": {
+        "type": "object",
+        "description": "Trajectory entry.",
+        "required": [
+          "timestamp",
+          "node_id"
+        ],
+        "properties": {
+          "node_id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Node ID.",
+            "minimum": 0
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Timestamp."
+          }
+        }
+      },
+      "TrajectoryResponse": {
+        "type": "object",
+        "description": "Trajectory response.",
+        "required": [
+          "entity_id",
+          "points"
+        ],
+        "properties": {
+          "entity_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entity identifier.",
+            "minimum": 0
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrajectoryEntry"
+            },
+            "description": "Trajectory points ordered by timestamp."
+          }
+        }
+      },
+      "VelocityParams": {
+        "type": "object",
+        "description": "Velocity request params.",
+        "required": [
+          "timestamp"
+        ],
+        "properties": {
+          "timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Timestamp to compute velocity at."
+          }
+        }
+      },
+      "VelocityResponse": {
+        "type": "object",
+        "description": "Velocity response.",
+        "required": [
+          "entity_id",
+          "timestamp",
+          "velocity"
+        ],
+        "properties": {
+          "entity_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entity identifier.",
+            "minimum": 0
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Timestamp."
+          },
+          "velocity": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "description": "Velocity vector per dimension."
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "ingestion",
+      "description": "Data ingestion endpoints"
+    },
+    {
+      "name": "query",
+      "description": "Spatiotemporal search and retrieval"
+    },
+    {
+      "name": "analytics",
+      "description": "Temporal analytics (velocity, drift, change points, prediction)"
+    },
+    {
+      "name": "system",
+      "description": "Health checks and operational endpoints"
+    }
+  ]
+}
