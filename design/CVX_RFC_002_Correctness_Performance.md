@@ -125,7 +125,7 @@ result_vec.sort_by(|a, b| a.1.total_cmp(&b.1));
 
 ## RFC-002-03: Heuristic Neighbor Selection Condition
 
-**Status**: Proposed
+**Status**: ✅ Implemented
 **Severity**: HIGH
 **Effort**: Medium
 
@@ -297,7 +297,7 @@ Client                          Server
 
 ## RFC-002-06: PELT Candidate Set Bounding
 
-**Status**: Proposed
+**Status**: ✅ Implemented
 **Severity**: MEDIUM
 **Effort**: Medium
 

@@ -65,11 +65,10 @@ pub fn detect(
     for t in config.min_segment_len..=n {
         let mut best_cost = f64::INFINITY;
         let mut best_cp = 0;
-        let mut new_candidates = Vec::new();
 
+        // Phase 1: find optimal cost f[t] over all candidates
         for &s in &candidates {
             if t - s < config.min_segment_len {
-                new_candidates.push(s);
                 continue;
             }
 
@@ -80,16 +79,37 @@ pub fn detect(
                 best_cost = total;
                 best_cp = s;
             }
-
-            // Pruning: keep candidate if it could still be optimal
-            if f[s] + seg_cost <= f[t] + penalty || f[t] == f64::INFINITY {
-                new_candidates.push(s);
-            }
         }
 
         f[t] = best_cost;
         last_cp[t] = best_cp;
+
+        // Phase 2: prune candidates using the now-known f[t]
+        // (RFC-002-06, Killick Theorem 3.1). Pruning AFTER f[t] is set
+        // avoids the f[t]==INFINITY fallback that caused O(N) candidate growth.
+        let mut new_candidates = Vec::new();
+        for &s in &candidates {
+            if t - s < config.min_segment_len {
+                new_candidates.push(s);
+                continue;
+            }
+
+            let seg_cost = segment_cost(&cumsum, s, t, dim);
+            if f[s] + seg_cost <= f[t] + penalty {
+                new_candidates.push(s);
+            }
+        }
         new_candidates.push(t);
+
+        // Safety cap: prevent O(N²) worst case if pruning is ineffective.
+        // Keep candidates with lowest f[s] values.
+        if new_candidates.len() > n / 2 {
+            new_candidates.sort_by(|&a, &b| {
+                f[a].partial_cmp(&f[b]).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            new_candidates.truncate(n / 4);
+        }
+
         candidates = new_candidates;
     }
 
