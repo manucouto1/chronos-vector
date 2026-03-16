@@ -29,3 +29,15 @@ Thumbs.db
 *.profraw
 lcov.info
 tarpaulin-report.html
+
+# Research data (sensitive, local only — see data/README.md)
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+
+# Models (large binaries)
+models/*.pt
