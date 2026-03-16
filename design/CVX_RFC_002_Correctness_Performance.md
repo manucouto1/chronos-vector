@@ -173,7 +173,7 @@ Based on Malkov's benchmarks, the correct heuristic improves recall by 1-3% at t
 
 ## RFC-002-04: Concurrent Insert Architecture
 
-**Status**: Proposed
+**Status**: ✅ Implemented (Option A: Insert Queue)
 **Severity**: HIGH
 **Effort**: High
 
@@ -244,7 +244,7 @@ Defer to implementation phase. Option A is recommended for initial improvement.
 
 ## RFC-002-05: gRPC Delivery Semantics
 
-**Status**: Proposed
+**Status**: ✅ Implemented
 **Severity**: HIGH
 **Effort**: High
 
@@ -375,7 +375,7 @@ The value 32 supports up to M^32 ≈ 10^38 nodes with M=16, far beyond any pract
 
 ## RFC-002-08: Warm Store Zone Maps
 
-**Status**: Proposed
+**Status**: ✅ Implemented
 **Severity**: MEDIUM
 **Effort**: Medium
 
@@ -415,7 +415,7 @@ For a range query on 1% of the time span with 100 chunks: current reads 100 chun
 
 ## RFC-002-09: PQ Codebook Initialization
 
-**Status**: Proposed
+**Status**: ✅ Implemented
 **Severity**: MEDIUM
 **Effort**: Medium
 
