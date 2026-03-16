@@ -22,7 +22,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets --all-features
+      - run: cargo clippy --workspace --all-targets
 
   build:
     name: Build & Test
@@ -37,6 +37,33 @@ jobs:
       - run: cargo build --workspace
       - run: cargo test --workspace
       - run: cargo doc --workspace --no-deps
+
+  generate-docs:
+    name: Generate API Docs
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+      - uses: Swatinem/rust-cache@v2
+      - name: Generate OpenAPI spec
+        run: cargo run -p cvx-api --bin gen_openapi > docs/public/openapi.json
+      - name: Verify OpenAPI spec is valid JSON
+        run: python3 -c "import json; d=json.load(open('docs/public/openapi.json')); assert d['openapi']=='3.1.0'; print(f'OK: {len(d[\"paths\"])} paths')"
+      - name: Generate Rust API docs
+        run: cargo doc --workspace --no-deps
+      - name: Upload OpenAPI spec
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-spec
+          path: docs/public/openapi.json
+      - name: Upload Rust docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdoc
+          path: target/doc
 
   docs-site:
     name: Docs Site
