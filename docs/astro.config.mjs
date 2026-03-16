@@ -110,6 +110,14 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Tutorials',
+					badge: { text: 'NEW', variant: 'tip' },
+					items: [
+						{ label: 'Overview', slug: 'tutorials/overview' },
+						{ label: 'B1: Mental Health Trajectories', slug: 'tutorials/b1-mental-health' },
+					],
+				},
+				{
 					label: 'Roadmap',
 					items: [
 						{ label: 'Development Plan', slug: 'roadmap/iterative-plan' },
