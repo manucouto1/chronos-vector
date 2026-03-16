@@ -26,18 +26,31 @@
 //! ```
 
 use cvx_core::{DistanceMetric, TemporalFilter};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 
 use super::HnswConfig;
 use super::temporal::TemporalHnsw;
 
-/// Thread-safe spatiotemporal HNSW index.
+/// A pending insert waiting in the queue.
+struct PendingInsert {
+    entity_id: u64,
+    timestamp: i64,
+    vector: Vec<f32>,
+}
+
+/// Thread-safe spatiotemporal HNSW index with insert queue (RFC-002-04).
 ///
-/// Uses `parking_lot::RwLock` for efficient reader-biased locking:
-/// - Searches acquire a read lock (concurrent)
-/// - Inserts acquire a write lock (exclusive)
+/// Uses a two-tier approach to reduce write lock contention:
+/// - Inserts are queued into a `Mutex<Vec<...>>` (sub-microsecond)
+/// - `flush_inserts()` drains the queue under a single write lock
+/// - Searches always acquire a read lock (concurrent, unblocked during queue drain)
+///
+/// For immediate visibility, use `insert()` which still takes the write lock directly.
+/// For high-throughput ingestion, use `queue_insert()` + `flush_inserts()`.
 pub struct ConcurrentTemporalHnsw<D: DistanceMetric> {
     inner: RwLock<TemporalHnsw<D>>,
+    /// Insert queue for batched commits (RFC-002-04, Option A).
+    insert_queue: Mutex<Vec<PendingInsert>>,
 }
 
 impl<D: DistanceMetric> ConcurrentTemporalHnsw<D> {
@@ -45,6 +58,7 @@ impl<D: DistanceMetric> ConcurrentTemporalHnsw<D> {
     pub fn new(config: HnswConfig, metric: D) -> Self {
         Self {
             inner: RwLock::new(TemporalHnsw::new(config, metric)),
+            insert_queue: Mutex::new(Vec::new()),
         }
     }
 
@@ -95,6 +109,44 @@ impl<D: DistanceMetric> ConcurrentTemporalHnsw<D> {
     /// Get vector for a node (shared read lock).
     pub fn vector(&self, node_id: u32) -> Vec<f32> {
         self.inner.read().vector(node_id).to_vec()
+    }
+
+    /// Queue an insert for batched processing (RFC-002-04).
+    ///
+    /// This only takes a `Mutex` (sub-microsecond), NOT the write lock.
+    /// The insert becomes visible after `flush_inserts()` is called.
+    pub fn queue_insert(&self, entity_id: u64, timestamp: i64, vector: Vec<f32>) {
+        self.insert_queue.lock().push(PendingInsert {
+            entity_id,
+            timestamp,
+            vector,
+        });
+    }
+
+    /// Number of pending inserts in the queue.
+    pub fn pending_inserts(&self) -> usize {
+        self.insert_queue.lock().len()
+    }
+
+    /// Flush all queued inserts, applying them under a single write lock.
+    ///
+    /// Returns the number of inserts applied.
+    pub fn flush_inserts(&self) -> usize {
+        let pending: Vec<PendingInsert> = {
+            let mut queue = self.insert_queue.lock();
+            std::mem::take(&mut *queue)
+        };
+
+        if pending.is_empty() {
+            return 0;
+        }
+
+        let count = pending.len();
+        let mut inner = self.inner.write();
+        for p in pending {
+            inner.insert(p.entity_id, p.timestamp, &p.vector);
+        }
+        count
     }
 }
 
@@ -282,6 +334,73 @@ mod tests {
         for h in handles {
             h.join().unwrap();
         }
+    }
+
+    #[test]
+    fn queue_insert_and_flush() {
+        let index = make_concurrent_index();
+
+        // Queue 100 inserts (no write lock held)
+        for i in 0..100u64 {
+            index.queue_insert(i, (i * 100) as i64, vec![i as f32, 0.0, 0.0]);
+        }
+
+        // Not yet visible
+        assert_eq!(index.len(), 0);
+        assert_eq!(index.pending_inserts(), 100);
+
+        // Flush applies them all under a single write lock
+        let flushed = index.flush_inserts();
+        assert_eq!(flushed, 100);
+        assert_eq!(index.len(), 100);
+        assert_eq!(index.pending_inserts(), 0);
+
+        // Searchable after flush
+        let results = index.search(&[50.0, 0.0, 0.0], 5, TemporalFilter::All, 1.0, 0);
+        assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn queue_insert_concurrent_with_search() {
+        let index = make_concurrent_index();
+
+        // Pre-populate so searches always return results
+        for i in 0..50u64 {
+            index.insert(i, (i * 100) as i64, &[i as f32, 0.0, 0.0]);
+        }
+
+        let idx_queue = Arc::clone(&index);
+        let idx_search: Vec<_> = (0..4).map(|_| Arc::clone(&index)).collect();
+
+        // Queue thread: queues inserts without blocking searches
+        let queue_thread = thread::spawn(move || {
+            for i in 50..200u64 {
+                idx_queue.queue_insert(i, (i * 100) as i64, vec![i as f32, 0.0, 0.0]);
+            }
+        });
+
+        // Search threads: run concurrently with queue thread
+        let search_threads: Vec<_> = idx_search
+            .into_iter()
+            .map(|idx| {
+                thread::spawn(move || {
+                    for _ in 0..50 {
+                        let results = idx.search(&[25.0, 0.0, 0.0], 5, TemporalFilter::All, 1.0, 0);
+                        assert!(!results.is_empty());
+                    }
+                })
+            })
+            .collect();
+
+        queue_thread.join().unwrap();
+        for t in search_threads {
+            t.join().unwrap();
+        }
+
+        // Flush and verify
+        let flushed = index.flush_inserts();
+        assert_eq!(flushed, 150);
+        assert_eq!(index.len(), 200);
     }
 
     #[test]

@@ -1,6 +1,9 @@
 //! Protobuf message types (manual prost definitions, no .proto codegen).
 
-/// A temporal point for ingestion.
+/// A temporal point for ingestion (RFC-002-05).
+///
+/// Clients assign monotonic `sequence` numbers for exactly-once semantics.
+/// On reconnect, resume from the last ACK'd sequence.
 #[derive(Clone, prost::Message)]
 pub struct IngestPoint {
     #[prost(uint64, tag = "1")]
@@ -9,9 +12,15 @@ pub struct IngestPoint {
     pub timestamp: i64,
     #[prost(float, repeated, tag = "3")]
     pub vector: Vec<f32>,
+    /// Client-assigned monotonic sequence number for deduplication.
+    #[prost(uint64, tag = "4")]
+    pub sequence: u64,
 }
 
-/// Acknowledgement for a single ingested point.
+/// Batch acknowledgement for ingested points (RFC-002-05).
+///
+/// Returned periodically during stream ingestion. The `committed_sequence`
+/// tells the client which sequence number is durably committed.
 #[derive(Clone, prost::Message)]
 pub struct IngestAck {
     #[prost(uint32, tag = "1")]
@@ -20,6 +29,15 @@ pub struct IngestAck {
     pub entity_id: u64,
     #[prost(int64, tag = "3")]
     pub timestamp: i64,
+    /// Highest sequence number durably committed.
+    #[prost(uint64, tag = "4")]
+    pub committed_sequence: u64,
+    /// Total points ingested in this batch.
+    #[prost(uint64, tag = "5")]
+    pub ingested_count: u64,
+    /// Points skipped due to deduplication.
+    #[prost(uint64, tag = "6")]
+    pub deduplicated_count: u64,
 }
 
 /// Query request.

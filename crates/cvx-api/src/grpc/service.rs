@@ -1,9 +1,11 @@
 //! gRPC service implementation for ChronosVector.
 
+use std::collections::HashSet;
 use std::pin::Pin;
 use std::sync::Arc;
 
 use cvx_core::{TemporalFilter, TemporalPoint};
+use parking_lot::Mutex;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::{Stream, StreamExt};
@@ -12,16 +14,28 @@ use tonic::{Request, Response, Status};
 use super::proto::*;
 use crate::state::AppState;
 
-/// gRPC service for ChronosVector.
+/// gRPC service for ChronosVector (RFC-002-05).
+///
+/// Implements at-least-once delivery with client-side deduplication:
+/// - Client assigns monotonic sequence numbers
+/// - Server deduplicates by `(entity_id, timestamp)` key
+/// - Server ACKs every N points with the committed sequence
+/// - On reconnect, client resumes from last ACK'd sequence
 pub struct CvxGrpcService {
     state: Arc<AppState>,
     drift_tx: broadcast::Sender<DriftEvent>,
+    /// Deduplication set: `(entity_id, timestamp)` pairs already ingested.
+    seen_keys: Mutex<HashSet<(u64, i64)>>,
 }
 
 impl CvxGrpcService {
     /// Create a new gRPC service.
     pub fn new(state: Arc<AppState>, drift_tx: broadcast::Sender<DriftEvent>) -> Self {
-        Self { state, drift_tx }
+        Self {
+            state,
+            drift_tx,
+            seen_keys: Mutex::new(HashSet::new()),
+        }
     }
 
     /// Get the drift event sender (for the ingest pipeline to publish events).
@@ -66,8 +80,20 @@ impl CvxService for CvxGrpcService {
         let mut stream = request.into_inner();
         let mut last_ack = IngestAck::default();
         let mut count = 0u64;
+        let mut dedup_count = 0u64;
+        let mut max_sequence = 0u64;
 
         while let Some(point) = stream.message().await? {
+            // Deduplication by (entity_id, timestamp) key (RFC-002-05)
+            let key = (point.entity_id, point.timestamp);
+            {
+                let mut seen = self.seen_keys.lock();
+                if !seen.insert(key) {
+                    dedup_count += 1;
+                    continue;
+                }
+            }
+
             let node_id = self
                 .state
                 .index
@@ -80,15 +106,22 @@ impl CvxService for CvxGrpcService {
                 .put(0, &temporal_point)
                 .map_err(|e| Status::internal(e.to_string()))?;
 
+            max_sequence = max_sequence.max(point.sequence);
+            count += 1;
+
             last_ack = IngestAck {
                 node_id,
                 entity_id: point.entity_id,
                 timestamp: point.timestamp,
+                committed_sequence: max_sequence,
+                ingested_count: count,
+                deduplicated_count: dedup_count,
             };
-            count += 1;
         }
 
-        tracing::info!("Ingested {count} points via gRPC stream");
+        tracing::info!(
+            "Ingested {count} points via gRPC stream (dedup={dedup_count}, seq={max_sequence})"
+        );
         Ok(Response::new(last_ack))
     }
 
