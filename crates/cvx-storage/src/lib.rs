@@ -20,6 +20,8 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+#[cfg(feature = "cold-storage")]
+pub mod cold;
 #[cfg(feature = "hot-storage")]
 pub mod hot;
 pub mod keys;
