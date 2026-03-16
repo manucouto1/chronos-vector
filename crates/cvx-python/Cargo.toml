@@ -1,0 +1,20 @@
+[package]
+name = "cvx-python"
+description = "Python bindings for ChronosVector via PyO3"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lib]
+name = "chronos_vector"
+crate-type = ["cdylib"]
+
+[dependencies]
+cvx-core = { workspace = true }
+cvx-index = { workspace = true }
+cvx-analytics = { workspace = true }
+cvx-storage = { workspace = true }
+pyo3 = { workspace = true }

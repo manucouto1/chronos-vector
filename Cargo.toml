@@ -10,6 +10,9 @@ members = [
   "crates/cvx-api",
   "crates/cvx-server",
 ]
+exclude = [
+  "crates/cvx-python",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -67,6 +70,9 @@ tokio = { version = "1", features = ["full"] }
 # Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Python bindings
+pyo3 = { version = "0.24", features = ["extension-module"] }
 
 # Testing
 proptest = "1"
