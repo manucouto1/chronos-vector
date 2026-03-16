@@ -72,11 +72,13 @@ pub fn select_neighbors_heuristic<D: DistanceMetric, N: NodeVectors + ?Sized>(
             break;
         }
 
-        // Check if candidate is closer to target than to any selected neighbor
+        // Check if candidate is closer to target than to any selected neighbor.
+        // Strict inequality per Malkov Algorithm 4 (RFC-002-03): forces
+        // genuinely diverse directions instead of accepting equidistant candidates.
         let cand_vec = node_vectors.get_vector(cand_id);
         let is_good = selected_vectors.iter().all(|&sel_vec| {
             let dist_to_selected = metric.distance(cand_vec, sel_vec);
-            cand_dist <= dist_to_selected
+            cand_dist < dist_to_selected
         });
 
         if is_good || (extend_candidates && selected.len() < m / 2) {
