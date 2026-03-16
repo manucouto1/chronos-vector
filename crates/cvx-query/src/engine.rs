@@ -4,311 +4,37 @@
 
 use cvx_core::error::QueryError;
 use cvx_core::types::TemporalFilter;
-use cvx_core::{DistanceMetric, StorageBackend};
+use cvx_core::{StorageBackend, TemporalIndexAccess};
 
 use cvx_analytics::calculus;
 use cvx_analytics::ode;
 use cvx_analytics::pelt::{self, PeltConfig};
 
-use cvx_index::hnsw::temporal::TemporalHnsw;
-
 use crate::types::*;
 
 /// Query engine that coordinates index + storage + analytics.
 ///
-/// Generic over the distance metric `D` and storage backend `S`.
-pub struct QueryEngine<D: DistanceMetric, S: StorageBackend> {
-    index: TemporalHnsw<D>,
+/// Generic over the index `I` (any `TemporalIndexAccess` impl) and storage `S`.
+/// This allows the same engine to work with both `TemporalHnsw` (single-threaded)
+/// and `ConcurrentTemporalHnsw` (thread-safe).
+pub struct QueryEngine<I: TemporalIndexAccess, S: StorageBackend> {
+    index: I,
     store: S,
 }
 
-impl<D: DistanceMetric, S: StorageBackend> QueryEngine<D, S> {
+impl<I: TemporalIndexAccess, S: StorageBackend> QueryEngine<I, S> {
     /// Create a new query engine.
-    pub fn new(index: TemporalHnsw<D>, store: S) -> Self {
+    pub fn new(index: I, store: S) -> Self {
         Self { index, store }
     }
 
     /// Execute a temporal query.
     pub fn execute(&self, query: TemporalQuery) -> Result<QueryResult, QueryError> {
-        match query {
-            TemporalQuery::SnapshotKnn {
-                vector,
-                timestamp,
-                k,
-            } => self.snapshot_knn(&vector, timestamp, k),
-
-            TemporalQuery::RangeKnn {
-                vector,
-                start,
-                end,
-                k,
-                alpha,
-            } => self.range_knn(&vector, start, end, k, alpha),
-
-            TemporalQuery::Trajectory { entity_id, filter } => self.trajectory(entity_id, filter),
-
-            TemporalQuery::Velocity {
-                entity_id,
-                timestamp,
-            } => self.velocity(entity_id, timestamp),
-
-            TemporalQuery::Prediction {
-                entity_id,
-                target_timestamp,
-            } => self.prediction(entity_id, target_timestamp),
-
-            TemporalQuery::ChangePointDetect {
-                entity_id,
-                start,
-                end,
-            } => self.change_points(entity_id, start, end),
-
-            TemporalQuery::DriftQuant {
-                entity_id,
-                t1,
-                t2,
-                top_n,
-            } => self.drift_quant(entity_id, t1, t2, top_n),
-
-            TemporalQuery::Analogy {
-                entity_a,
-                t1,
-                t2,
-                entity_b,
-                t3,
-            } => self.analogy(entity_a, t1, t2, entity_b, t3),
-        }
-    }
-
-    /// Snapshot kNN: nearest neighbors at exact timestamp.
-    fn snapshot_knn(
-        &self,
-        vector: &[f32],
-        timestamp: i64,
-        k: usize,
-    ) -> Result<QueryResult, QueryError> {
-        let results = self.index.search(
-            vector,
-            k,
-            TemporalFilter::Snapshot(timestamp),
-            1.0,
-            timestamp,
-        );
-
-        Ok(QueryResult::Knn(
-            results
-                .into_iter()
-                .map(|(node_id, score)| KnnResult {
-                    entity_id: self.index.entity_id(node_id),
-                    timestamp: self.index.timestamp(node_id),
-                    score,
-                })
-                .collect(),
-        ))
-    }
-
-    /// Range kNN: nearest neighbors over time window with alpha blending.
-    fn range_knn(
-        &self,
-        vector: &[f32],
-        start: i64,
-        end: i64,
-        k: usize,
-        alpha: f32,
-    ) -> Result<QueryResult, QueryError> {
-        let mid = start + (end - start) / 2;
-        let results = self
-            .index
-            .search(vector, k, TemporalFilter::Range(start, end), alpha, mid);
-
-        Ok(QueryResult::Knn(
-            results
-                .into_iter()
-                .map(|(node_id, score)| KnnResult {
-                    entity_id: self.index.entity_id(node_id),
-                    timestamp: self.index.timestamp(node_id),
-                    score,
-                })
-                .collect(),
-        ))
-    }
-
-    /// Trajectory: all points for an entity.
-    fn trajectory(
-        &self,
-        entity_id: u64,
-        filter: TemporalFilter,
-    ) -> Result<QueryResult, QueryError> {
-        let traj = self.index.trajectory(entity_id, filter);
-
-        let points: Result<Vec<_>, _> = traj
-            .iter()
-            .map(|&(ts, node_id)| {
-                let vector = self.index.vector(node_id).to_vec();
-                Ok(cvx_core::TemporalPoint::new(entity_id, ts, vector))
-            })
-            .collect();
-
-        Ok(QueryResult::Trajectory(points?))
-    }
-
-    /// Velocity at a given timestamp.
-    fn velocity(&self, entity_id: u64, timestamp: i64) -> Result<QueryResult, QueryError> {
-        let traj_data = self.index.trajectory(entity_id, TemporalFilter::All);
-        if traj_data.len() < 2 {
-            return Err(QueryError::InsufficientData {
-                needed: 2,
-                have: traj_data.len(),
-            });
-        }
-
-        let vectors: Vec<Vec<f32>> = traj_data
-            .iter()
-            .map(|&(_, node_id)| self.index.vector(node_id).to_vec())
-            .collect();
-        let traj: Vec<(i64, &[f32])> = traj_data
-            .iter()
-            .zip(vectors.iter())
-            .map(|(&(ts, _), v)| (ts, v.as_slice()))
-            .collect();
-
-        let vel =
-            calculus::velocity(&traj, timestamp).map_err(|_| QueryError::InsufficientData {
-                needed: 2,
-                have: traj.len(),
-            })?;
-
-        Ok(QueryResult::Velocity(vel))
-    }
-
-    /// Prediction: extrapolate future vector.
-    fn prediction(&self, entity_id: u64, target_timestamp: i64) -> Result<QueryResult, QueryError> {
-        let traj_data = self.index.trajectory(entity_id, TemporalFilter::All);
-        if traj_data.len() < 2 {
-            return Err(QueryError::InsufficientData {
-                needed: 2,
-                have: traj_data.len(),
-            });
-        }
-
-        let vectors: Vec<Vec<f32>> = traj_data
-            .iter()
-            .map(|&(_, node_id)| self.index.vector(node_id).to_vec())
-            .collect();
-        let traj: Vec<(i64, &[f32])> = traj_data
-            .iter()
-            .zip(vectors.iter())
-            .map(|(&(ts, _), v)| (ts, v.as_slice()))
-            .collect();
-
-        let predicted = ode::linear_extrapolate(&traj, target_timestamp).map_err(|_| {
-            QueryError::InsufficientData {
-                needed: 2,
-                have: traj.len(),
-            }
-        })?;
-
-        Ok(QueryResult::Prediction(PredictionResult {
-            vector: predicted,
-            timestamp: target_timestamp,
-            method: PredictionMethod::Linear,
-        }))
-    }
-
-    /// Change point detection on a time window.
-    fn change_points(
-        &self,
-        entity_id: u64,
-        start: i64,
-        end: i64,
-    ) -> Result<QueryResult, QueryError> {
-        let traj_data = self
-            .index
-            .trajectory(entity_id, TemporalFilter::Range(start, end));
-        if traj_data.len() < 4 {
-            return Ok(QueryResult::ChangePoints(Vec::new()));
-        }
-
-        let vectors: Vec<Vec<f32>> = traj_data
-            .iter()
-            .map(|&(_, node_id)| self.index.vector(node_id).to_vec())
-            .collect();
-        let traj: Vec<(i64, &[f32])> = traj_data
-            .iter()
-            .zip(vectors.iter())
-            .map(|(&(ts, _), v)| (ts, v.as_slice()))
-            .collect();
-
-        let cps = pelt::detect(entity_id, &traj, &PeltConfig::default());
-        Ok(QueryResult::ChangePoints(cps))
-    }
-
-    /// Drift quantification between two timestamps.
-    fn drift_quant(
-        &self,
-        entity_id: u64,
-        t1: i64,
-        t2: i64,
-        top_n: usize,
-    ) -> Result<QueryResult, QueryError> {
-        let p1 = self.find_nearest_point(entity_id, t1)?;
-        let p2 = self.find_nearest_point(entity_id, t2)?;
-
-        let v1 = self.index.vector(p1);
-        let v2 = self.index.vector(p2);
-
-        let report = calculus::drift_report(v1, v2, top_n);
-        Ok(QueryResult::Drift(DriftResult {
-            l2_magnitude: report.l2_magnitude,
-            cosine_drift: report.cosine_drift,
-            top_dimensions: report.top_dimensions,
-        }))
-    }
-
-    /// Temporal analogy: A@t1 → A@t2 displacement applied to B@t3.
-    fn analogy(
-        &self,
-        entity_a: u64,
-        t1: i64,
-        t2: i64,
-        entity_b: u64,
-        t3: i64,
-    ) -> Result<QueryResult, QueryError> {
-        let a1 = self.find_nearest_point(entity_a, t1)?;
-        let a2 = self.find_nearest_point(entity_a, t2)?;
-        let b3 = self.find_nearest_point(entity_b, t3)?;
-
-        let va1 = self.index.vector(a1);
-        let va2 = self.index.vector(a2);
-        let vb3 = self.index.vector(b3);
-
-        // analogy = B@t3 + (A@t2 - A@t1)
-        let result: Vec<f32> = vb3
-            .iter()
-            .zip(va2.iter().zip(va1.iter()))
-            .map(|(&b, (&a2, &a1))| b + (a2 - a1))
-            .collect();
-
-        Ok(QueryResult::Analogy(result))
-    }
-
-    /// Find the node closest in time for an entity.
-    fn find_nearest_point(&self, entity_id: u64, timestamp: i64) -> Result<u32, QueryError> {
-        let traj = self.index.trajectory(entity_id, TemporalFilter::All);
-        if traj.is_empty() {
-            return Err(QueryError::EntityNotFound(entity_id));
-        }
-
-        let (_, node_id) = traj
-            .iter()
-            .min_by_key(|&&(ts, _)| (ts - timestamp).unsigned_abs())
-            .unwrap();
-
-        Ok(*node_id)
+        execute_query(&self.index, query)
     }
 
     /// Access the underlying index.
-    pub fn index(&self) -> &TemporalHnsw<D> {
+    pub fn index(&self) -> &I {
         &self.index
     }
 
@@ -318,11 +44,255 @@ impl<D: DistanceMetric, S: StorageBackend> QueryEngine<D, S> {
     }
 }
 
+/// Execute a temporal query against any index without owning it.
+///
+/// This is the primary entry point for API handlers that share index/store
+/// via `Arc<AppState>`.
+pub fn execute_query(
+    index: &dyn TemporalIndexAccess,
+    query: TemporalQuery,
+) -> Result<QueryResult, QueryError> {
+    match query {
+        TemporalQuery::SnapshotKnn {
+            vector,
+            timestamp,
+            k,
+        } => {
+            let results = index.search_raw(
+                &vector,
+                k,
+                TemporalFilter::Snapshot(timestamp),
+                1.0,
+                timestamp,
+            );
+            Ok(QueryResult::Knn(
+                results
+                    .into_iter()
+                    .map(|(node_id, score)| KnnResult {
+                        entity_id: index.entity_id(node_id),
+                        timestamp: index.timestamp(node_id),
+                        score,
+                    })
+                    .collect(),
+            ))
+        }
+
+        TemporalQuery::RangeKnn {
+            vector,
+            start,
+            end,
+            k,
+            alpha,
+        } => {
+            let mid = start + (end - start) / 2;
+            let results =
+                index.search_raw(&vector, k, TemporalFilter::Range(start, end), alpha, mid);
+            Ok(QueryResult::Knn(
+                results
+                    .into_iter()
+                    .map(|(node_id, score)| KnnResult {
+                        entity_id: index.entity_id(node_id),
+                        timestamp: index.timestamp(node_id),
+                        score,
+                    })
+                    .collect(),
+            ))
+        }
+
+        TemporalQuery::Trajectory { entity_id, filter } => {
+            let traj = index.trajectory(entity_id, filter);
+            let points = traj
+                .iter()
+                .map(|&(ts, node_id)| {
+                    cvx_core::TemporalPoint::new(entity_id, ts, index.vector(node_id))
+                })
+                .collect();
+            Ok(QueryResult::Trajectory(points))
+        }
+
+        TemporalQuery::Velocity {
+            entity_id,
+            timestamp,
+        } => do_velocity(index, entity_id, timestamp),
+
+        TemporalQuery::Prediction {
+            entity_id,
+            target_timestamp,
+        } => do_prediction(index, entity_id, target_timestamp),
+
+        TemporalQuery::ChangePointDetect {
+            entity_id,
+            start,
+            end,
+        } => do_change_points(index, entity_id, start, end),
+
+        TemporalQuery::DriftQuant {
+            entity_id,
+            t1,
+            t2,
+            top_n,
+        } => do_drift_quant(index, entity_id, t1, t2, top_n),
+
+        TemporalQuery::Analogy {
+            entity_a,
+            t1,
+            t2,
+            entity_b,
+            t3,
+        } => do_analogy(index, entity_a, t1, t2, entity_b, t3),
+    }
+}
+
+// ─── Internal helpers ──────────────────────────────────────────────
+
+fn build_traj(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    filter: TemporalFilter,
+) -> (Vec<(i64, u32)>, Vec<Vec<f32>>) {
+    let traj_data = index.trajectory(entity_id, filter);
+    let vectors: Vec<Vec<f32>> = traj_data
+        .iter()
+        .map(|&(_, node_id)| index.vector(node_id))
+        .collect();
+    (traj_data, vectors)
+}
+
+fn to_slices<'a>(
+    traj_data: &'a [(i64, u32)],
+    vectors: &'a [Vec<f32>],
+) -> Vec<(i64, &'a [f32])> {
+    traj_data
+        .iter()
+        .zip(vectors.iter())
+        .map(|(&(ts, _), v)| (ts, v.as_slice()))
+        .collect()
+}
+
+fn find_nearest(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    timestamp: i64,
+) -> Result<u32, QueryError> {
+    let traj = index.trajectory(entity_id, TemporalFilter::All);
+    if traj.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_id));
+    }
+    let (_, node_id) = traj
+        .iter()
+        .min_by_key(|&&(ts, _)| (ts - timestamp).unsigned_abs())
+        .unwrap();
+    Ok(*node_id)
+}
+
+fn do_velocity(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    timestamp: i64,
+) -> Result<QueryResult, QueryError> {
+    let (traj_data, vectors) = build_traj(index, entity_id, TemporalFilter::All);
+    if traj_data.len() < 2 {
+        return Err(QueryError::InsufficientData {
+            needed: 2,
+            have: traj_data.len(),
+        });
+    }
+    let traj = to_slices(&traj_data, &vectors);
+    let vel = calculus::velocity(&traj, timestamp).map_err(|_| QueryError::InsufficientData {
+        needed: 2,
+        have: traj.len(),
+    })?;
+    Ok(QueryResult::Velocity(vel))
+}
+
+fn do_prediction(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    target_timestamp: i64,
+) -> Result<QueryResult, QueryError> {
+    let (traj_data, vectors) = build_traj(index, entity_id, TemporalFilter::All);
+    if traj_data.len() < 2 {
+        return Err(QueryError::InsufficientData {
+            needed: 2,
+            have: traj_data.len(),
+        });
+    }
+    let traj = to_slices(&traj_data, &vectors);
+    let predicted = ode::linear_extrapolate(&traj, target_timestamp).map_err(|_| {
+        QueryError::InsufficientData {
+            needed: 2,
+            have: traj.len(),
+        }
+    })?;
+    Ok(QueryResult::Prediction(PredictionResult {
+        vector: predicted,
+        timestamp: target_timestamp,
+        method: PredictionMethod::Linear,
+    }))
+}
+
+fn do_change_points(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    start: i64,
+    end: i64,
+) -> Result<QueryResult, QueryError> {
+    let (traj_data, vectors) = build_traj(index, entity_id, TemporalFilter::Range(start, end));
+    if traj_data.len() < 4 {
+        return Ok(QueryResult::ChangePoints(Vec::new()));
+    }
+    let traj = to_slices(&traj_data, &vectors);
+    let cps = pelt::detect(entity_id, &traj, &PeltConfig::default());
+    Ok(QueryResult::ChangePoints(cps))
+}
+
+fn do_drift_quant(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    t1: i64,
+    t2: i64,
+    top_n: usize,
+) -> Result<QueryResult, QueryError> {
+    let p1 = find_nearest(index, entity_id, t1)?;
+    let p2 = find_nearest(index, entity_id, t2)?;
+    let v1 = index.vector(p1);
+    let v2 = index.vector(p2);
+    let report = calculus::drift_report(&v1, &v2, top_n);
+    Ok(QueryResult::Drift(DriftResult {
+        l2_magnitude: report.l2_magnitude,
+        cosine_drift: report.cosine_drift,
+        top_dimensions: report.top_dimensions,
+    }))
+}
+
+fn do_analogy(
+    index: &dyn TemporalIndexAccess,
+    entity_a: u64,
+    t1: i64,
+    t2: i64,
+    entity_b: u64,
+    t3: i64,
+) -> Result<QueryResult, QueryError> {
+    let a1 = find_nearest(index, entity_a, t1)?;
+    let a2 = find_nearest(index, entity_a, t2)?;
+    let b3 = find_nearest(index, entity_b, t3)?;
+    let va1 = index.vector(a1);
+    let va2 = index.vector(a2);
+    let vb3 = index.vector(b3);
+    let result: Vec<f32> = vb3
+        .iter()
+        .zip(va2.iter().zip(va1.iter()))
+        .map(|(&b, (&a2, &a1))| b + (a2 - a1))
+        .collect();
+    Ok(QueryResult::Analogy(result))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use cvx_core::TemporalPoint;
     use cvx_index::hnsw::HnswConfig;
+    use cvx_index::hnsw::temporal::TemporalHnsw;
     use cvx_index::metrics::L2Distance;
     use cvx_storage::memory::InMemoryStore;
 
@@ -330,7 +300,7 @@ mod tests {
         n_entities: u64,
         points_per_entity: usize,
         dim: usize,
-    ) -> QueryEngine<L2Distance, InMemoryStore> {
+    ) -> QueryEngine<TemporalHnsw<L2Distance>, InMemoryStore> {
         let config = HnswConfig {
             m: 16,
             ef_construction: 200,
@@ -354,8 +324,6 @@ mod tests {
         QueryEngine::new(index, store)
     }
 
-    // ─── SnapshotKnn ────────────────────────────────────────────────
-
     #[test]
     fn snapshot_knn_returns_at_timestamp() {
         let engine = setup_engine(5, 20, 4);
@@ -375,8 +343,6 @@ mod tests {
             panic!("expected Knn result");
         }
     }
-
-    // ─── RangeKnn ───────────────────────────────────────────────────
 
     #[test]
     fn range_knn_returns_in_range() {
@@ -404,8 +370,6 @@ mod tests {
             panic!("expected Knn result");
         }
     }
-
-    // ─── Trajectory ─────────────────────────────────────────────────
 
     #[test]
     fn trajectory_returns_all_points_ordered() {
@@ -441,13 +405,11 @@ mod tests {
             .unwrap();
 
         if let QueryResult::Trajectory(points) = result {
-            assert_eq!(points.len(), 6); // 5M, 6M, 7M, 8M, 9M, 10M
+            assert_eq!(points.len(), 6);
         } else {
             panic!("expected Trajectory result");
         }
     }
-
-    // ─── Velocity ───────────────────────────────────────────────────
 
     #[test]
     fn velocity_returns_vector() {
@@ -461,7 +423,6 @@ mod tests {
 
         if let QueryResult::Velocity(vel) = result {
             assert_eq!(vel.len(), 4);
-            // Linear trajectory → velocity should be approximately constant
             for &v in &vel {
                 assert!(v.is_finite());
             }
@@ -484,8 +445,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ─── Prediction ─────────────────────────────────────────────────
-
     #[test]
     fn prediction_linear_extrapolation() {
         let engine = setup_engine(1, 20, 4);
@@ -505,8 +464,6 @@ mod tests {
         }
     }
 
-    // ─── ChangePoints ───────────────────────────────────────────────
-
     #[test]
     fn changepoint_on_stationary() {
         let engine = setup_engine(1, 50, 2);
@@ -519,8 +476,6 @@ mod tests {
             .unwrap();
 
         if let QueryResult::ChangePoints(cps) = result {
-            // Linear trajectory with small slope → might detect 0 or few
-            // The important thing is it doesn't crash
             assert!(
                 cps.len() <= 5,
                 "too many CPs on near-linear data: {}",
@@ -530,8 +485,6 @@ mod tests {
             panic!("expected ChangePoints result");
         }
     }
-
-    // ─── DriftQuant ─────────────────────────────────────────────────
 
     #[test]
     fn drift_quant_returns_report() {
@@ -553,8 +506,6 @@ mod tests {
         }
     }
 
-    // ─── Analogy ────────────────────────────────────────────────────
-
     #[test]
     fn analogy_computes_displacement() {
         let engine = setup_engine(3, 20, 4);
@@ -570,7 +521,6 @@ mod tests {
 
         if let QueryResult::Analogy(vec) = result {
             assert_eq!(vec.len(), 4);
-            // Result = B@t3 + (A@t2 - A@t1), should be finite
             for &v in &vec {
                 assert!(v.is_finite());
             }

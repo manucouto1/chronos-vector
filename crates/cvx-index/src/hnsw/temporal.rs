@@ -224,6 +224,39 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
     }
 }
 
+impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for TemporalHnsw<D> {
+    fn search_raw(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+    ) -> Vec<(u32, f32)> {
+        self.search(query, k, filter, alpha, query_timestamp)
+    }
+
+    fn trajectory(&self, entity_id: u64, filter: TemporalFilter) -> Vec<(i64, u32)> {
+        self.trajectory(entity_id, filter)
+    }
+
+    fn vector(&self, node_id: u32) -> Vec<f32> {
+        self.graph.vector(node_id).to_vec()
+    }
+
+    fn entity_id(&self, node_id: u32) -> u64 {
+        self.entity_ids[node_id as usize]
+    }
+
+    fn timestamp(&self, node_id: u32) -> i64 {
+        self.timestamps[node_id as usize]
+    }
+
+    fn len(&self) -> usize {
+        self.graph.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
