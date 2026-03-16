@@ -222,6 +222,162 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
     pub fn graph(&self) -> &HnswGraph<D> {
         &self.graph
     }
+
+    // ─── Semantic Regions (RFC-004) ────────────────────────────────
+
+    /// Get semantic regions at a given HNSW level.
+    ///
+    /// Returns `(hub_node_id, hub_vector, n_assigned_nodes)` for each region.
+    /// Use level 2-3 for interpretable granularity (~N/M^L regions).
+    pub fn regions(&self, level: usize) -> Vec<(u32, Vec<f32>, usize)> {
+        let hubs = self.graph.nodes_at_level(level);
+        let n = self.graph.len();
+
+        // Count assignments: for each node, find nearest hub
+        let mut counts = vec![0usize; hubs.len()];
+        let hub_set: std::collections::HashMap<u32, usize> = hubs
+            .iter()
+            .enumerate()
+            .map(|(i, &h)| (h, i))
+            .collect();
+
+        for node_id in 0..n as u32 {
+            if let Some(hub) = self.graph.assign_region(self.graph.vector(node_id), level) {
+                if let Some(&idx) = hub_set.get(&hub) {
+                    counts[idx] += 1;
+                }
+            }
+        }
+
+        hubs.iter()
+            .enumerate()
+            .map(|(i, &hub_id)| {
+                (hub_id, self.graph.vector(hub_id).to_vec(), counts[i])
+            })
+            .collect()
+    }
+
+    /// Compute smoothed region-distribution trajectory for an entity (RFC-004).
+    ///
+    /// - `level`: HNSW level for region granularity
+    /// - `window_days`: sliding window in timestamp units (same scale as ingested timestamps)
+    /// - `alpha`: EMA smoothing factor (0.3 typical, higher = more reactive)
+    ///
+    /// Returns `(timestamp, distribution)` where distribution is a Vec<f32> of length K
+    /// (number of regions) that sums to ~1.0.
+    pub fn region_trajectory(
+        &self,
+        entity_id: u64,
+        level: usize,
+        window_days: i64,
+        alpha: f32,
+    ) -> Vec<(i64, Vec<f32>)> {
+        let hubs = self.graph.nodes_at_level(level);
+        let k = hubs.len();
+        if k == 0 {
+            return Vec::new();
+        }
+
+        // Map hub_node_id → region index
+        let hub_index: std::collections::HashMap<u32, usize> = hubs
+            .iter()
+            .enumerate()
+            .map(|(i, &h)| (h, i))
+            .collect();
+
+        // Get entity's posts sorted by time
+        let posts = self.trajectory(entity_id, TemporalFilter::All);
+        if posts.is_empty() {
+            return Vec::new();
+        }
+
+        // Assign each post to a region
+        let assignments: Vec<(i64, usize)> = posts
+            .iter()
+            .filter_map(|&(ts, node_id)| {
+                let vec = self.graph.vector(node_id);
+                self.graph
+                    .assign_region(vec, level)
+                    .and_then(|hub| hub_index.get(&hub).map(|&idx| (ts, idx)))
+            })
+            .collect();
+
+        if assignments.is_empty() {
+            return Vec::new();
+        }
+
+        // Group by time windows
+        let t_start = assignments[0].0;
+        let t_end = assignments.last().unwrap().0;
+        let mut result = Vec::new();
+        let mut ema_state: Vec<f32> = vec![0.0; k];
+        let mut first = true;
+
+        let mut window_start = t_start;
+        while window_start <= t_end {
+            let window_end = window_start + window_days;
+
+            // Count posts per region in this window
+            let mut counts = vec![0.0f32; k];
+            let mut n_in_window = 0.0f32;
+            for &(ts, region_idx) in &assignments {
+                if ts >= window_start && ts < window_end {
+                    counts[region_idx] += 1.0;
+                    n_in_window += 1.0;
+                }
+            }
+
+            if n_in_window > 0.0 {
+                // Normalize to distribution
+                for c in &mut counts {
+                    *c /= n_in_window;
+                }
+
+                // EMA smoothing
+                if first {
+                    ema_state = counts;
+                    first = false;
+                } else {
+                    for i in 0..k {
+                        ema_state[i] = alpha * counts[i] + (1.0 - alpha) * ema_state[i];
+                    }
+                }
+
+                let mid_ts = window_start + window_days / 2;
+                result.push((mid_ts, ema_state.clone()));
+            }
+
+            window_start = window_end;
+        }
+
+        result
+    }
+
+    /// Get posts assigned to a specific region (RFC-004).
+    ///
+    /// Returns `(entity_id, timestamp, node_id)` for all posts in the region.
+    pub fn region_members(
+        &self,
+        region_hub: u32,
+        level: usize,
+        filter: &TemporalFilter,
+    ) -> Vec<(u64, i64, u32)> {
+        let mut members = Vec::new();
+        for node_id in 0..self.graph.len() as u32 {
+            let ts = self.timestamps[node_id as usize];
+            if !filter.matches(ts) {
+                continue;
+            }
+            let vec = self.graph.vector(node_id);
+            if let Some(assigned_hub) = self.graph.assign_region(vec, level) {
+                if assigned_hub == region_hub {
+                    let eid = self.entity_ids[node_id as usize];
+                    members.push((eid, ts, node_id));
+                }
+            }
+        }
+        members
+    }
 }
 
 impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for TemporalHnsw<D> {
@@ -254,6 +410,20 @@ impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for TemporalHnsw<D> {
 
     fn len(&self) -> usize {
         self.graph.len()
+    }
+
+    fn regions(&self, level: usize) -> Vec<(u32, Vec<f32>, usize)> {
+        self.regions(level)
+    }
+
+    fn region_trajectory(
+        &self,
+        entity_id: u64,
+        level: usize,
+        window_days: i64,
+        alpha: f32,
+    ) -> Vec<(i64, Vec<f32>)> {
+        self.region_trajectory(entity_id, level, window_days, alpha)
     }
 }
 

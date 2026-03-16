@@ -200,6 +200,46 @@ impl TemporalIndex {
         }
     }
 
+    // ─── Semantic Regions (RFC-004) ──────────────────────────────
+
+    /// Get semantic regions from the HNSW graph hierarchy.
+    ///
+    /// Args:
+    ///     level: HNSW level (higher = fewer, coarser regions).
+    ///            Level 2 typically gives ~N/256 regions.
+    ///
+    /// Returns:
+    ///     List of (region_id, centroid_vector, n_members).
+    #[pyo3(signature = (level=2))]
+    fn regions(&self, level: usize) -> Vec<(u32, Vec<f32>, usize)> {
+        self.inner.regions(level)
+    }
+
+    /// Compute smoothed region-distribution trajectory for an entity.
+    ///
+    /// Tracks how the user's posts distribute across semantic regions
+    /// over time, smoothed with Exponential Moving Average.
+    ///
+    /// Args:
+    ///     entity_id: Entity to analyze.
+    ///     level: HNSW level for region granularity (default 2).
+    ///     window_days: Sliding window width in timestamp units (default 7).
+    ///     alpha: EMA smoothing factor, 0-1 (default 0.3).
+    ///
+    /// Returns:
+    ///     List of (timestamp, region_distribution) tuples.
+    ///     Each distribution is a list of floats summing to ~1.0.
+    #[pyo3(signature = (entity_id, level=2, window_days=7, alpha=0.3))]
+    fn region_trajectory(
+        &self,
+        entity_id: u64,
+        level: usize,
+        window_days: i64,
+        alpha: f32,
+    ) -> Vec<(i64, Vec<f32>)> {
+        self.inner.region_trajectory(entity_id, level, window_days, alpha)
+    }
+
     /// Number of points in the index.
     fn __len__(&self) -> usize {
         self.inner.len()

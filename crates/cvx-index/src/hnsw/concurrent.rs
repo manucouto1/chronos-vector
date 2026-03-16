@@ -181,6 +181,20 @@ impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for ConcurrentTemporalHnsw
     fn len(&self) -> usize {
         self.inner.read().len()
     }
+
+    fn regions(&self, level: usize) -> Vec<(u32, Vec<f32>, usize)> {
+        self.inner.read().regions(level)
+    }
+
+    fn region_trajectory(
+        &self,
+        entity_id: u64,
+        level: usize,
+        window_days: i64,
+        alpha: f32,
+    ) -> Vec<(i64, Vec<f32>)> {
+        self.inner.read().region_trajectory(entity_id, level, window_days, alpha)
+    }
 }
 
 impl<D: DistanceMetric> cvx_core::IndexBackend for ConcurrentTemporalHnsw<D> {
