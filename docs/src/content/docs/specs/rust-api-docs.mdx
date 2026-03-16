@@ -1,0 +1,86 @@
+---
+title: "Rust API Documentation"
+description: "Auto-generated rustdoc for all ChronosVector crates"
+---
+
+The Rust API documentation is generated from source code doc comments using `cargo doc`.
+
+## Generate Locally
+
+```bash
+# Generate documentation for all workspace crates
+cargo doc --workspace --no-deps --document-private-items
+
+# Open in browser
+open target/doc/cvx_core/index.html
+```
+
+## Crate Reference
+
+| Crate | Description | Key Types |
+|-------|-------------|-----------|
+| [`cvx-core`](#cvx-core) | Core types, traits, config, errors | `TemporalPoint`, `DistanceMetric`, `StorageBackend`, `TemporalIndexAccess` |
+| [`cvx-index`](#cvx-index) | HNSW spatial-temporal index | `HnswGraph`, `TemporalHnsw`, `ConcurrentTemporalHnsw` |
+| [`cvx-storage`](#cvx-storage) | Tiered storage (hot/warm/cold) | `InMemoryStore`, `WarmStore`, `ColdStore`, `Wal` |
+| [`cvx-analytics`](#cvx-analytics) | Temporal analytics engine | `calculus::velocity`, `pelt::detect`, `ode::linear_extrapolate` |
+| [`cvx-query`](#cvx-query) | Query execution engine | `QueryEngine`, `TemporalQuery`, `execute_query` |
+| [`cvx-ingest`](#cvx-ingest) | Ingestion pipeline & validation | `validate_point`, `ValidationConfig` |
+| [`cvx-api`](#cvx-api) | REST + gRPC API gateway | `AppState`, `build_router`, `ApiDoc` |
+| [`cvx-server`](#cvx-server) | Server binary | `main()` |
+
+## Core Traits
+
+### `DistanceMetric`
+
+```rust
+pub trait DistanceMetric: Send + Sync {
+    fn distance(&self, a: &[f32], b: &[f32]) -> f32;
+    fn name(&self) -> &str;
+}
+```
+
+Implementations: `L2Distance`, `CosineDistance`, `DotProductDistance`
+
+### `TemporalIndexAccess`
+
+```rust
+pub trait TemporalIndexAccess: Send + Sync {
+    fn search_raw(&self, query: &[f32], k: usize, filter: TemporalFilter,
+                   alpha: f32, query_timestamp: i64) -> Vec<(u32, f32)>;
+    fn trajectory(&self, entity_id: u64, filter: TemporalFilter) -> Vec<(i64, u32)>;
+    fn vector(&self, node_id: u32) -> Vec<f32>;
+    fn entity_id(&self, node_id: u32) -> u64;
+    fn timestamp(&self, node_id: u32) -> i64;
+    fn len(&self) -> usize;
+}
+```
+
+Implementations: `TemporalHnsw<D>`, `ConcurrentTemporalHnsw<D>`
+
+### `StorageBackend`
+
+```rust
+pub trait StorageBackend: Send + Sync {
+    fn get(&self, entity_id: u64, space_id: u32, timestamp: i64)
+        -> Result<Option<TemporalPoint>, StorageError>;
+    fn put(&self, space_id: u32, point: &TemporalPoint) -> Result<(), StorageError>;
+    fn range(&self, entity_id: u64, space_id: u32, start: i64, end: i64)
+        -> Result<Vec<TemporalPoint>, StorageError>;
+    fn delete(&self, entity_id: u64, space_id: u32, timestamp: i64)
+        -> Result<(), StorageError>;
+}
+```
+
+Implementations: `InMemoryStore`, `HotStore` (RocksDB), `WarmStore`, `TieredStorage`
+
+## CI Integration
+
+Add to your CI pipeline to auto-generate docs:
+
+```yaml
+- name: Generate Rust docs
+  run: cargo doc --workspace --no-deps
+
+- name: Generate OpenAPI spec
+  run: cargo run -p cvx-api --bin gen_openapi > docs/public/openapi.json
+```
