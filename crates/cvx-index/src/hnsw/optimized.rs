@@ -62,7 +62,7 @@ pub fn select_neighbors_heuristic<D: DistanceMetric, N: NodeVectors + ?Sized>(
 
     // Working set sorted by distance (closest first)
     let mut working: Vec<(u32, f32)> = candidates.to_vec();
-    working.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    working.sort_by(|a, b| a.1.total_cmp(&b.1));
 
     let mut selected: Vec<u32> = Vec::with_capacity(m);
     let mut selected_vectors: Vec<&[f32]> = Vec::with_capacity(m);
