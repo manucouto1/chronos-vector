@@ -3,11 +3,16 @@
 use axum::Router;
 use axum::routing::{get, post};
 use tower_http::trace::TraceLayer;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::handlers;
+use crate::openapi::ApiDoc;
 use crate::state::SharedState;
 
 /// Build the ChronosVector REST API router.
+///
+/// Includes Swagger UI at `/swagger-ui` and OpenAPI JSON at `/api-docs/openapi.json`.
 pub fn build_router(state: SharedState) -> Router {
     Router::new()
         // Ingestion & query
@@ -29,6 +34,8 @@ pub fn build_router(state: SharedState) -> Router {
         // System
         .route("/v1/health", get(handlers::health))
         .route("/v1/ready", get(handlers::ready))
+        // OpenAPI documentation
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
