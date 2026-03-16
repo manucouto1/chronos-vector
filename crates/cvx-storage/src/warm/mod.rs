@@ -28,11 +28,38 @@ use parking_lot::RwLock;
 /// Maximum number of points per chunk file.
 const DEFAULT_CHUNK_SIZE: usize = 10_000;
 
+/// Per-chunk metadata for zone map pruning (RFC-002-08).
+///
+/// Stores min/max timestamps so range queries can skip non-overlapping chunks
+/// without deserializing their contents. See Lamb et al. (VLDB 2012).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct ChunkMeta {
+    filename: String,
+    min_timestamp: i64,
+    max_timestamp: i64,
+    point_count: u32,
+}
+
+/// Zone map manifest: per-entity-space chunk metadata.
+/// Keys are serialized as `"entity_id:space_id"` strings for JSON compatibility.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+struct ZoneManifest {
+    chunks: BTreeMap<String, Vec<ChunkMeta>>,
+}
+
+impl ZoneManifest {
+    fn key(entity_id: u64, space_id: u32) -> String {
+        format!("{entity_id}:{space_id}")
+    }
+}
+
 /// Warm storage backend using partitioned files.
 pub struct WarmStore {
     dir: PathBuf,
     /// In-memory index: (entity_id, space_id) → sorted timestamps in this tier.
     index: RwLock<BTreeMap<(u64, u32), Vec<i64>>>,
+    /// Zone map manifest for chunk-level temporal pruning.
+    zone_map: RwLock<ZoneManifest>,
     chunk_size: usize,
 }
 
@@ -40,13 +67,36 @@ impl WarmStore {
     /// Open or create a warm store at the given directory.
     pub fn open(dir: &Path) -> Result<Self, StorageError> {
         fs::create_dir_all(dir)?;
+        let zone_map = Self::load_zone_manifest(dir)?;
         let store = Self {
             dir: dir.to_path_buf(),
             index: RwLock::new(BTreeMap::new()),
+            zone_map: RwLock::new(zone_map),
             chunk_size: DEFAULT_CHUNK_SIZE,
         };
         store.load_index()?;
         Ok(store)
+    }
+
+    fn load_zone_manifest(dir: &Path) -> Result<ZoneManifest, StorageError> {
+        let manifest_path = dir.join("manifest.json");
+        if manifest_path.exists() {
+            let content = fs::read_to_string(&manifest_path)?;
+            serde_json::from_str(&content)
+                .map_err(|_| StorageError::WalCorrupted { offset: 0 })
+        } else {
+            Ok(ZoneManifest::default())
+        }
+    }
+
+    fn persist_zone_manifest(&self) -> Result<(), StorageError> {
+        let manifest = self.zone_map.read();
+        let content = serde_json::to_string_pretty(&*manifest)
+            .map_err(|_| StorageError::WalCorrupted { offset: 0 })?;
+        let tmp = self.dir.join("manifest.json.tmp");
+        fs::write(&tmp, &content)?;
+        fs::rename(&tmp, self.dir.join("manifest.json"))?;
+        Ok(())
     }
 
     /// Write a batch of points to warm storage.
@@ -97,6 +147,29 @@ impl WarmStore {
             }
 
             fs::write(&chunk_path, &data)?;
+
+            // Update zone map metadata
+            let chunk_filename = format!("space_{space_id:04}_chunk_{chunk_num:06}.warm");
+            let timestamps: Vec<i64> = entity_points.iter().map(|p| p.timestamp()).collect();
+            let min_ts = timestamps.iter().copied().min().unwrap_or(0);
+            let max_ts = timestamps.iter().copied().max().unwrap_or(0);
+
+            let mut zone = self.zone_map.write();
+            let zone_key = ZoneManifest::key(*entity_id, space_id);
+            let chunk_list = zone.chunks.entry(zone_key).or_default();
+            // Update existing chunk meta or add new one
+            if let Some(meta) = chunk_list.iter_mut().find(|m| m.filename == chunk_filename) {
+                meta.min_timestamp = meta.min_timestamp.min(min_ts);
+                meta.max_timestamp = meta.max_timestamp.max(max_ts);
+                meta.point_count += entity_points.len() as u32;
+            } else {
+                chunk_list.push(ChunkMeta {
+                    filename: chunk_filename,
+                    min_timestamp: min_ts,
+                    max_timestamp: max_ts,
+                    point_count: entity_points.len() as u32,
+                });
+            }
         }
 
         // Sort timestamps in index
@@ -104,6 +177,9 @@ impl WarmStore {
             ts_list.sort_unstable();
             ts_list.dedup();
         }
+
+        // Persist zone manifest
+        self.persist_zone_manifest()?;
 
         Ok(())
     }
@@ -147,6 +223,62 @@ impl WarmStore {
 
         points.sort_by_key(|p| p.timestamp());
         Ok(points)
+    }
+
+    /// Read entity chunks filtered by zone map — only opens chunks whose
+    /// [min_ts, max_ts] overlaps with [start, end]. Falls back to full
+    /// read if no zone map data exists.
+    fn read_entity_chunks_filtered(
+        &self,
+        entity_id: u64,
+        space_id: u32,
+        start: i64,
+        end: i64,
+    ) -> Result<Vec<TemporalPoint>, StorageError> {
+        let entity_dir = self.entity_dir(entity_id);
+        if !entity_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let zone = self.zone_map.read();
+        let zone_key = ZoneManifest::key(entity_id, space_id);
+        let chunk_metas = zone.chunks.get(&zone_key);
+
+        // If we have zone map data, only read overlapping chunks
+        if let Some(metas) = chunk_metas {
+            let mut points = Vec::new();
+            for meta in metas {
+                // Zone map pruning: skip if chunk's range doesn't overlap query range
+                if meta.max_timestamp < start || meta.min_timestamp > end {
+                    continue;
+                }
+
+                let chunk_path = entity_dir.join(&meta.filename);
+                if !chunk_path.exists() {
+                    continue;
+                }
+
+                let data = fs::read(&chunk_path)?;
+                let mut offset = 0;
+                while offset + 4 <= data.len() {
+                    let len =
+                        u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
+                    offset += 4;
+                    if offset + len > data.len() {
+                        break;
+                    }
+                    let point: TemporalPoint = postcard::from_bytes(&data[offset..offset + len])
+                        .map_err(|_| StorageError::WalCorrupted { offset: 0 })?;
+                    points.push(point);
+                    offset += len;
+                }
+            }
+            points.sort_by_key(|p| p.timestamp());
+            Ok(points)
+        } else {
+            // No zone map — fall back to full read
+            self.read_entity_chunks(entity_id, space_id)
+        }
     }
 
     fn entity_dir(&self, entity_id: u64) -> PathBuf {
@@ -264,7 +396,8 @@ impl StorageBackend for WarmStore {
         start: i64,
         end: i64,
     ) -> Result<Vec<TemporalPoint>, StorageError> {
-        let points = self.read_entity_chunks(entity_id, space_id)?;
+        // Use zone map to skip non-overlapping chunks (RFC-002-08)
+        let points = self.read_entity_chunks_filtered(entity_id, space_id, start, end)?;
         Ok(points
             .into_iter()
             .filter(|p| p.timestamp() >= start && p.timestamp() <= end)
@@ -363,6 +496,42 @@ mod tests {
             assert_eq!(store.len(), 5);
             let result = store.get(1, 0, 3000).unwrap();
             assert!(result.is_some());
+        }
+    }
+
+    #[test]
+    fn zone_map_persists_and_prunes() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Write two batches with non-overlapping time ranges
+        {
+            let store = WarmStore::open(dir.path()).unwrap();
+            let early: Vec<TemporalPoint> = (0..10)
+                .map(|i| TemporalPoint::new(1, i * 100, vec![0.1; 4]))
+                .collect();
+            store.write_batch(0, &early).unwrap();
+
+            let late: Vec<TemporalPoint> = (0..10)
+                .map(|i| TemporalPoint::new(1, 10_000 + i * 100, vec![0.2; 4]))
+                .collect();
+            store.write_batch(0, &late).unwrap();
+        }
+
+        // Reopen — zone map should survive
+        {
+            let store = WarmStore::open(dir.path()).unwrap();
+            assert_eq!(store.len(), 20);
+
+            // Range query for early timestamps only
+            let early_results = store.range(1, 0, 0, 999).unwrap();
+            assert_eq!(early_results.len(), 10);
+
+            // Range query for late timestamps only
+            let late_results = store.range(1, 0, 10_000, 11_000).unwrap();
+            assert_eq!(late_results.len(), 10);
+
+            // Manifest file should exist
+            assert!(dir.path().join("manifest.json").exists());
         }
     }
 

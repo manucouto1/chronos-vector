@@ -48,11 +48,67 @@ impl PqCodebook {
         for sub in 0..m {
             let offset = sub * sub_dim;
 
-            // Initialize centroids from first k vectors (or cycle)
-            for c in 0..k {
-                let src = vectors[c % vectors.len()];
+            // k-means++ initialization (Arthur & Vassilvitskii, SODA 2007)
+            // Sample centroids proportional to D²(x) for O(log k) approximation.
+            // See RFC-002-09.
+            {
+                // First centroid: pick the first vector's subvector
+                let src = vectors[0];
                 for d in 0..sub_dim {
-                    centroids[sub * k * sub_dim + c * sub_dim + d] = src[offset + d];
+                    centroids[sub * k * sub_dim + d] = src[offset + d];
+                }
+                let mut rng_state: u64 = 42 + sub as u64;
+
+                for c in 1..k {
+                    // Compute D²(x): min squared distance to any existing centroid
+                    let weights: Vec<f64> = vectors
+                        .iter()
+                        .map(|v| {
+                            let sub_vec = &v[offset..offset + sub_dim];
+                            (0..c)
+                                .map(|ci| {
+                                    let base = sub * k * sub_dim + ci * sub_dim;
+                                    (0..sub_dim)
+                                        .map(|d| {
+                                            let diff =
+                                                sub_vec[d] - centroids[base + d];
+                                            (diff * diff) as f64
+                                        })
+                                        .sum::<f64>()
+                                })
+                                .fold(f64::INFINITY, f64::min)
+                        })
+                        .collect();
+
+                    // Cumulative sum for weighted sampling
+                    let total: f64 = weights.iter().sum();
+                    if total <= 0.0 {
+                        // All points coincide with existing centroids; just cycle
+                        let src = vectors[c % vectors.len()];
+                        for d in 0..sub_dim {
+                            centroids[sub * k * sub_dim + c * sub_dim + d] = src[offset + d];
+                        }
+                        continue;
+                    }
+
+                    // Simple LCG for deterministic sampling
+                    rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                    let threshold = ((rng_state >> 33) as f64 / u32::MAX as f64) * total;
+
+                    let mut cumulative = 0.0;
+                    let mut selected = vectors.len() - 1;
+                    for (i, w) in weights.iter().enumerate() {
+                        cumulative += w;
+                        if cumulative >= threshold {
+                            selected = i;
+                            break;
+                        }
+                    }
+
+                    let src = vectors[selected];
+                    for d in 0..sub_dim {
+                        centroids[sub * k * sub_dim + c * sub_dim + d] = src[offset + d];
+                    }
                 }
             }
 
