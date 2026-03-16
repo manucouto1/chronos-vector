@@ -1,0 +1,99 @@
+---
+title: "Interactive API Reference"
+description: "Auto-generated OpenAPI 3.1 documentation with Swagger UI"
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The ChronosVector REST API is documented using the [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) specification, auto-generated from Rust source code via [`utoipa`](https://github.com/juhaku/utoipa).
+
+## Swagger UI
+
+The interactive API explorer is available at **`/swagger-ui`** when the server is running.
+
+```bash
+# Start the server
+cargo run -p cvx-server
+
+# Open in browser
+open http://localhost:3000/swagger-ui
+```
+
+## Endpoints Overview
+
+<Tabs>
+  <TabItem label="Ingestion">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `POST` | `/v1/ingest` | Batch ingest temporal points |
+  </TabItem>
+  <TabItem label="Query">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `POST` | `/v1/query` | Spatiotemporal kNN search |
+    | `GET` | `/v1/entities/{id}/trajectory` | Entity trajectory retrieval |
+    | `POST` | `/v1/analogy` | Temporal analogy: B@t3 + (A@t2 - A@t1) |
+  </TabItem>
+  <TabItem label="Analytics">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `GET` | `/v1/entities/{id}/velocity` | Velocity at timestamp |
+    | `GET` | `/v1/entities/{id}/drift` | Drift quantification |
+    | `GET` | `/v1/entities/{id}/changepoints` | Change point detection |
+    | `GET` | `/v1/entities/{id}/prediction` | Predict future vector |
+  </TabItem>
+  <TabItem label="System">
+    | Method | Path | Description |
+    |--------|------|-------------|
+    | `GET` | `/v1/health` | Health check |
+    | `GET` | `/v1/ready` | Readiness probe |
+  </TabItem>
+</Tabs>
+
+## Quick Examples
+
+### Ingest a batch of points
+
+```bash
+curl -X POST http://localhost:3000/v1/ingest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "points": [
+      {"entity_id": 1, "timestamp": 1000000, "vector": [0.1, 0.2, 0.3]},
+      {"entity_id": 1, "timestamp": 2000000, "vector": [0.4, 0.5, 0.6]}
+    ]
+  }'
+```
+
+### Spatiotemporal kNN search
+
+```bash
+curl -X POST http://localhost:3000/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vector": [0.1, 0.2, 0.3],
+    "k": 5,
+    "alpha": 0.8,
+    "query_timestamp": 1500000,
+    "filter": {"type": "range", "start": 1000000, "end": 3000000}
+  }'
+```
+
+### Get entity velocity
+
+```bash
+curl "http://localhost:3000/v1/entities/1/velocity?timestamp=1500000"
+```
+
+### Predict future state
+
+```bash
+curl "http://localhost:3000/v1/entities/1/prediction?target_timestamp=5000000"
+```
+
+## OpenAPI Spec
+
+The raw OpenAPI JSON spec is available at:
+- **Runtime**: `GET /api-docs/openapi.json` (from running server)
+- **Static**: [`/openapi.json`](/openapi.json) (bundled with docs)
+- **Generate**: `cargo run -p cvx-api --bin gen_openapi`
