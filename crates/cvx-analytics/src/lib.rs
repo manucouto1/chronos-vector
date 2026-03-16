@@ -17,3 +17,7 @@ pub mod multiscale;
 pub mod ode;
 pub mod pelt;
 pub mod temporal_ml;
+
+/// TorchScript Neural ODE model (requires `torch-backend` feature).
+#[cfg(feature = "torch-backend")]
+pub mod torch_ode;
