@@ -21,6 +21,11 @@ pub fn build_router(state: SharedState) -> Router {
             "/v1/entities/{id}/changepoints",
             get(handlers::changepoints),
         )
+        .route(
+            "/v1/entities/{id}/prediction",
+            get(handlers::prediction),
+        )
+        .route("/v1/analogy", post(handlers::analogy))
         // System
         .route("/v1/health", get(handlers::health))
         .route("/v1/ready", get(handlers::ready))
