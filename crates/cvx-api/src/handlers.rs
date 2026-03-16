@@ -5,7 +5,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use cvx_core::{StorageBackend, TemporalFilter, TemporalPoint};
+use cvx_core::{TemporalFilter, TemporalPoint};
 use cvx_ingest::validation::validate_point;
 use serde::{Deserialize, Serialize};
 
@@ -170,8 +170,6 @@ pub struct HealthResponse {
     pub uptime_secs: u64,
     /// Number of indexed vectors.
     pub index_size: usize,
-    /// Number of stored points.
-    pub store_size: usize,
 }
 
 /// Error response body.
@@ -511,7 +509,6 @@ pub async fn health(State(state): State<SharedState>) -> Json<HealthResponse> {
         version: env!("CARGO_PKG_VERSION"),
         uptime_secs: state.started_at.elapsed().as_secs(),
         index_size: state.index.len(),
-        store_size: state.store.len(),
     })
 }
 

@@ -2,28 +2,29 @@
 //!
 //! Orchestrates index, storage, and analytics to execute temporal queries.
 
-use cvx_core::StorageBackend;
 use cvx_core::error::QueryError;
 use cvx_core::types::TemporalFilter;
+use cvx_core::{DistanceMetric, StorageBackend};
 
 use cvx_analytics::calculus;
 use cvx_analytics::ode;
 use cvx_analytics::pelt::{self, PeltConfig};
 
 use cvx_index::hnsw::temporal::TemporalHnsw;
-use cvx_index::metrics::L2Distance;
 
 use crate::types::*;
 
 /// Query engine that coordinates index + storage + analytics.
-pub struct QueryEngine<S: StorageBackend> {
-    index: TemporalHnsw<L2Distance>,
+///
+/// Generic over the distance metric `D` and storage backend `S`.
+pub struct QueryEngine<D: DistanceMetric, S: StorageBackend> {
+    index: TemporalHnsw<D>,
     store: S,
 }
 
-impl<S: StorageBackend> QueryEngine<S> {
+impl<D: DistanceMetric, S: StorageBackend> QueryEngine<D, S> {
     /// Create a new query engine.
-    pub fn new(index: TemporalHnsw<L2Distance>, store: S) -> Self {
+    pub fn new(index: TemporalHnsw<D>, store: S) -> Self {
         Self { index, store }
     }
 
@@ -307,7 +308,7 @@ impl<S: StorageBackend> QueryEngine<S> {
     }
 
     /// Access the underlying index.
-    pub fn index(&self) -> &TemporalHnsw<L2Distance> {
+    pub fn index(&self) -> &TemporalHnsw<D> {
         &self.index
     }
 
@@ -322,13 +323,14 @@ mod tests {
     use super::*;
     use cvx_core::TemporalPoint;
     use cvx_index::hnsw::HnswConfig;
+    use cvx_index::metrics::L2Distance;
     use cvx_storage::memory::InMemoryStore;
 
     fn setup_engine(
         n_entities: u64,
         points_per_entity: usize,
         dim: usize,
-    ) -> QueryEngine<InMemoryStore> {
+    ) -> QueryEngine<L2Distance, InMemoryStore> {
         let config = HnswConfig {
             m: 16,
             ef_construction: 200,

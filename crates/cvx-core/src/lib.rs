@@ -32,5 +32,6 @@ pub use config::CvxConfig;
 pub use error::{CvxError, CvxResult};
 pub use traits::{AnalyticsBackend, DistanceMetric, IndexBackend, StorageBackend, VectorSpace};
 pub use types::{
-    ChangePoint, CpdMethod, DeltaEntry, EntityTimeline, ScoredResult, TemporalFilter, TemporalPoint,
+    ChangePoint, CpdMethod, DeltaEntry, DenseVector, EntityTimeline, ScoredResult, TemporalFilter,
+    TemporalPoint,
 };
