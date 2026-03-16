@@ -96,6 +96,7 @@ export default defineConfig({
 					badge: { text: 'ADR', variant: 'note' },
 					items: [
 						{ label: 'RFC-001: Architecture Decisions', slug: 'rfc/rfc-001' },
+						{ label: 'RFC-002: Correctness & Performance', slug: 'rfc/rfc-002' },
 					],
 				},
 				{
