@@ -110,6 +110,23 @@ pub trait TemporalIndexAccess: Send + Sync {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Get semantic regions at a given HNSW level (RFC-004).
+    /// Returns `(hub_node_id, hub_vector, n_assigned)` per region.
+    fn regions(&self, _level: usize) -> Vec<(u32, Vec<f32>, usize)> {
+        Vec::new()
+    }
+
+    /// Smoothed region-distribution trajectory for an entity (RFC-004).
+    fn region_trajectory(
+        &self,
+        _entity_id: u64,
+        _level: usize,
+        _window_days: i64,
+        _alpha: f32,
+    ) -> Vec<(i64, Vec<f32>)> {
+        Vec::new()
+    }
 }
 
 /// Index backend for approximate nearest neighbor search.
