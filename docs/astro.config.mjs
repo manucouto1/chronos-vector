@@ -101,6 +101,7 @@ export default defineConfig({
 						{ label: 'RFC-001: Architecture Decisions', slug: 'rfc/rfc-001' },
 						{ label: 'RFC-002: Correctness & Performance', slug: 'rfc/rfc-002' },
 						{ label: 'RFC-003: Neural ODE (TorchScript)', slug: 'rfc/rfc-003' },
+						{ label: 'RFC-004: Semantic Regions', slug: 'rfc/rfc-004' },
 					],
 				},
 				{
