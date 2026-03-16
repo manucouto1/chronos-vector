@@ -1,6 +1,6 @@
 # RFC-003: Neural ODE Prediction via TorchScript (tch-rs)
 
-**Status**: Proposed
+**Status**: ✅ Implemented
 **Created**: 2026-03-16
 **Authors**: Manuel Couto Pintos
 **Related**: RFC-002-10 (ODE Stiffness Detection), Layer 10 (Neural ODE Prediction)
@@ -353,8 +353,8 @@ The model is loaded once at startup and cached in `Arc`. Inference is thread-saf
 | 3 | TorchScript loader + inference | Medium | ✅ Done |
 | 4 | Query engine integration | Medium | ✅ Done |
 | 5 | Python training script | Low | ✅ Done |
-| 6 | Rust training API | Medium | Proposed |
-| 7 | Python bindings update | Low | Proposed |
+| 6 | Rust training API | Medium | ✅ Done |
+| 7 | Python bindings update | Low | ✅ Done |
 
 Total estimated effort: ~2-3 weeks
 
