@@ -75,6 +75,43 @@ pub trait StorageBackend: Send + Sync {
     fn delete(&self, entity_id: u64, space_id: u32, timestamp: i64) -> Result<(), StorageError>;
 }
 
+/// Low-level temporal index access for query engine orchestration.
+///
+/// Provides the methods that `QueryEngine` needs from a temporal index.
+/// Implemented by both `TemporalHnsw` (single-threaded) and
+/// `ConcurrentTemporalHnsw` (thread-safe).
+pub trait TemporalIndexAccess: Send + Sync {
+    /// Search with temporal filtering, returning (node_id, score) pairs.
+    fn search_raw(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+    ) -> Vec<(u32, f32)>;
+
+    /// Retrieve trajectory for an entity: (timestamp, node_id) pairs.
+    fn trajectory(&self, entity_id: u64, filter: TemporalFilter) -> Vec<(i64, u32)>;
+
+    /// Get the vector for a node. Returns owned vec for thread safety.
+    fn vector(&self, node_id: u32) -> Vec<f32>;
+
+    /// Get the entity_id for a node.
+    fn entity_id(&self, node_id: u32) -> u64;
+
+    /// Get the timestamp for a node.
+    fn timestamp(&self, node_id: u32) -> i64;
+
+    /// Number of points in the index.
+    fn len(&self) -> usize;
+
+    /// Whether the index is empty.
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
 /// Index backend for approximate nearest neighbor search.
 ///
 /// Abstracts over the indexing structure (HNSW, brute-force, etc.).

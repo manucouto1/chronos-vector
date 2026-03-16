@@ -30,7 +30,10 @@ pub mod types;
 // Re-export commonly used types at crate root for ergonomics.
 pub use config::CvxConfig;
 pub use error::{CvxError, CvxResult};
-pub use traits::{AnalyticsBackend, DistanceMetric, IndexBackend, StorageBackend, VectorSpace};
+pub use traits::{
+    AnalyticsBackend, DistanceMetric, IndexBackend, StorageBackend, TemporalIndexAccess,
+    VectorSpace,
+};
 pub use types::{
     ChangePoint, CpdMethod, DeltaEntry, DenseVector, EntityTimeline, ScoredResult, TemporalFilter,
     TemporalPoint,
