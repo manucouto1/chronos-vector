@@ -86,6 +86,8 @@ export default defineConfig({
 					items: [
 						{ label: 'Storage Layout', slug: 'specs/storage-layout' },
 						{ label: 'API Contract', slug: 'specs/api-contract' },
+						{ label: 'Interactive API Reference', slug: 'specs/api-reference', badge: { text: 'OpenAPI', variant: 'success' } },
+						{ label: 'Rust API Docs', slug: 'specs/rust-api-docs' },
 						{ label: 'Benchmark Strategy', slug: 'specs/benchmark-plan' },
 						{ label: 'Implementation Decisions', slug: 'specs/implementation-guide' },
 						{ label: 'Git Workflow & Versioning', slug: 'specs/git-workflow' },
