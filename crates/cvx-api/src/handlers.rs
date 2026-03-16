@@ -289,6 +289,221 @@ pub async fn trajectory(
     })
 }
 
+// ─── Analytics endpoints ────────────────────────────────────────
+
+/// Velocity request params.
+#[derive(Debug, Deserialize)]
+pub struct VelocityParams {
+    /// Timestamp to compute velocity at.
+    pub timestamp: i64,
+}
+
+/// Velocity response.
+#[derive(Debug, Serialize)]
+pub struct VelocityResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Timestamp.
+    pub timestamp: i64,
+    /// Velocity vector per dimension.
+    pub velocity: Vec<f32>,
+}
+
+/// GET /v1/entities/:id/velocity?timestamp=T — Compute velocity at timestamp.
+pub async fn velocity(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<VelocityParams>,
+) -> Result<Json<VelocityResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let traj_data = state.index.trajectory(entity_id, TemporalFilter::All);
+    if traj_data.len() < 2 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!(
+                    "entity {entity_id} has insufficient data ({} points, need 2)",
+                    traj_data.len()
+                ),
+            }),
+        ));
+    }
+
+    let vectors: Vec<Vec<f32>> = traj_data
+        .iter()
+        .map(|&(_, node_id)| state.index.vector(node_id))
+        .collect();
+    let traj: Vec<(i64, &[f32])> = traj_data
+        .iter()
+        .zip(vectors.iter())
+        .map(|(&(ts, _), v)| (ts, v.as_slice()))
+        .collect();
+
+    let vel = cvx_analytics::calculus::velocity(&traj, params.timestamp).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )
+    })?;
+
+    Ok(Json(VelocityResponse {
+        entity_id,
+        timestamp: params.timestamp,
+        velocity: vel,
+    }))
+}
+
+/// Drift request params.
+#[derive(Debug, Deserialize)]
+pub struct DriftParams {
+    /// Start timestamp.
+    pub t1: i64,
+    /// End timestamp.
+    pub t2: i64,
+    /// Number of top dimensions (default 5).
+    #[serde(default = "default_top_n")]
+    pub top_n: usize,
+}
+
+fn default_top_n() -> usize {
+    5
+}
+
+/// Drift response.
+#[derive(Debug, Serialize)]
+pub struct DriftResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// L2 drift magnitude.
+    pub l2_magnitude: f32,
+    /// Cosine drift (1 - similarity).
+    pub cosine_drift: f32,
+    /// Top changed dimensions.
+    pub top_dimensions: Vec<DimensionChange>,
+}
+
+/// A single dimension change.
+#[derive(Debug, Serialize)]
+pub struct DimensionChange {
+    /// Dimension index.
+    pub index: usize,
+    /// Absolute change.
+    pub change: f32,
+}
+
+/// GET /v1/entities/:id/drift?t1=T1&t2=T2 — Drift quantification.
+pub async fn drift(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<DriftParams>,
+) -> Result<Json<DriftResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let traj = state.index.trajectory(entity_id, TemporalFilter::All);
+    if traj.is_empty() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("entity {entity_id} not found"),
+            }),
+        ));
+    }
+
+    // Find nearest points to t1 and t2
+    let find_nearest = |target: i64| -> u32 {
+        traj.iter()
+            .min_by_key(|&&(ts, _)| (ts - target).unsigned_abs())
+            .unwrap()
+            .1
+    };
+
+    let node1 = find_nearest(params.t1);
+    let node2 = find_nearest(params.t2);
+    let v1 = state.index.vector(node1);
+    let v2 = state.index.vector(node2);
+
+    let report = cvx_analytics::calculus::drift_report(&v1, &v2, params.top_n);
+
+    Ok(Json(DriftResponse {
+        entity_id,
+        l2_magnitude: report.l2_magnitude,
+        cosine_drift: report.cosine_drift,
+        top_dimensions: report
+            .top_dimensions
+            .into_iter()
+            .map(|(index, change)| DimensionChange { index, change })
+            .collect(),
+    }))
+}
+
+/// Changepoint request params.
+#[derive(Debug, Deserialize)]
+pub struct ChangepointParams {
+    /// Start timestamp.
+    pub start: i64,
+    /// End timestamp.
+    pub end: i64,
+}
+
+/// Changepoint response.
+#[derive(Debug, Serialize)]
+pub struct ChangepointResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Detected change points.
+    pub changepoints: Vec<ChangepointEntry>,
+}
+
+/// A detected change point.
+#[derive(Debug, Serialize)]
+pub struct ChangepointEntry {
+    /// Timestamp of the change.
+    pub timestamp: i64,
+    /// Severity [0, 1].
+    pub severity: f64,
+}
+
+/// GET /v1/entities/:id/changepoints?start=S&end=E — Detect change points.
+pub async fn changepoints(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<ChangepointParams>,
+) -> Json<ChangepointResponse> {
+    let traj_data = state
+        .index
+        .trajectory(entity_id, TemporalFilter::Range(params.start, params.end));
+
+    let changepoints = if traj_data.len() >= 4 {
+        let vectors: Vec<Vec<f32>> = traj_data
+            .iter()
+            .map(|&(_, node_id)| state.index.vector(node_id))
+            .collect();
+        let traj: Vec<(i64, &[f32])> = traj_data
+            .iter()
+            .zip(vectors.iter())
+            .map(|(&(ts, _), v)| (ts, v.as_slice()))
+            .collect();
+
+        cvx_analytics::pelt::detect(
+            entity_id,
+            &traj,
+            &cvx_analytics::pelt::PeltConfig::default(),
+        )
+        .into_iter()
+        .map(|cp| ChangepointEntry {
+            timestamp: cp.timestamp(),
+            severity: cp.severity(),
+        })
+        .collect()
+    } else {
+        Vec::new()
+    };
+
+    Json(ChangepointResponse {
+        entity_id,
+        changepoints,
+    })
+}
+
 /// GET /v1/health — Health check with server info.
 pub async fn health(State(state): State<SharedState>) -> Json<HealthResponse> {
     Json(HealthResponse {

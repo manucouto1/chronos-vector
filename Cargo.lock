@@ -371,6 +371,7 @@ name = "cvx-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "cvx-analytics",
  "cvx-core",
  "cvx-index",
  "cvx-ingest",

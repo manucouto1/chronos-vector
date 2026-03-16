@@ -91,6 +91,65 @@ impl<D: DistanceMetric> ConcurrentTemporalHnsw<D> {
     pub fn entity_id(&self, node_id: u32) -> u64 {
         self.inner.read().entity_id(node_id)
     }
+
+    /// Get vector for a node (shared read lock).
+    pub fn vector(&self, node_id: u32) -> Vec<f32> {
+        self.inner.read().vector(node_id).to_vec()
+    }
+}
+
+impl<D: DistanceMetric> cvx_core::IndexBackend for ConcurrentTemporalHnsw<D> {
+    fn insert(
+        &self,
+        entity_id: u64,
+        vector: &[f32],
+        timestamp: i64,
+    ) -> Result<u32, cvx_core::error::IndexError> {
+        Ok(self.inner.write().insert(entity_id, timestamp, vector))
+    }
+
+    fn search(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+    ) -> Result<Vec<cvx_core::ScoredResult>, cvx_core::error::QueryError> {
+        let inner = self.inner.read();
+        let raw_results = inner.search(query, k, filter, alpha, query_timestamp);
+
+        let results = raw_results
+            .into_iter()
+            .map(|(node_id, combined_score)| {
+                let entity_id = inner.entity_id(node_id);
+                let timestamp = inner.timestamp(node_id);
+                let vector = inner.vector(node_id).to_vec();
+                let point = cvx_core::TemporalPoint::new(entity_id, timestamp, vector);
+
+                // Decompose combined score into semantic and temporal components
+                let temporal_dist = inner.temporal_distance_normalized(timestamp, query_timestamp);
+                let semantic_dist = if alpha > 0.0 {
+                    (combined_score - (1.0 - alpha) * temporal_dist) / alpha
+                } else {
+                    0.0
+                };
+
+                cvx_core::ScoredResult::new(point, semantic_dist, temporal_dist, combined_score)
+            })
+            .collect();
+
+        Ok(results)
+    }
+
+    fn remove(&self, _point_id: u64) -> Result<(), cvx_core::error::IndexError> {
+        // Removal not yet supported in HNSW — mark as tombstone in future
+        Ok(())
+    }
+
+    fn len(&self) -> usize {
+        self.inner.read().len()
+    }
 }
 
 #[cfg(test)]
