@@ -29,7 +29,7 @@ These must be addressed before any production deployment or public benchmarking.
 
 ## RFC-002-01: WAL fsync Guarantee on Commit
 
-**Status**: Proposed
+**Status**: ✅ Implemented
 **Severity**: CRITICAL
 **Effort**: Low (< 20 lines)
 
@@ -90,7 +90,7 @@ pub fn commit(&mut self, sequence: u64) -> Result<(), StorageError> {
 
 ## RFC-002-02: NaN-Safe Distance Sorting
 
-**Status**: Proposed
+**Status**: ✅ Implemented
 **Severity**: HIGH
 **Effort**: Low (6 line changes)
 
@@ -338,7 +338,7 @@ if new_candidates.len() > n / 2 {
 
 ## RFC-002-07: Random Level Bounding
 
-**Status**: Proposed
+**Status**: ✅ Implemented
 **Severity**: MEDIUM
 **Effort**: Low (2 lines)
 

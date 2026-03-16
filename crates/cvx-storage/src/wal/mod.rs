@@ -273,10 +273,22 @@ impl Wal {
     }
 
     /// Mark all entries up to `sequence` as committed.
+    ///
+    /// Ensures durability by syncing segment data to disk before updating
+    /// metadata, then syncing the directory to make the rename durable.
+    /// See RFC-002-01 (Pillai et al., OSDI 2014).
     pub fn commit(&mut self, sequence: u64) -> Result<(), StorageError> {
         self.meta.committed_sequence = sequence;
-        self.flush()?;
+        // 1. Flush and fsync segment data to disk BEFORE updating metadata
+        if let Some(ref mut writer) = self.current_writer {
+            writer.flush()?;
+            writer.get_ref().sync_all()?;
+        }
+        // 2. Write metadata atomically (temp file + rename)
         self.persist_meta()?;
+        // 3. Fsync directory to ensure rename is durable
+        let dir = std::fs::File::open(&self.dir)?;
+        dir.sync_all()?;
         Ok(())
     }
 
