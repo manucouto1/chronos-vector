@@ -9,7 +9,7 @@ rust-version.workspace = true
 repository.workspace = true
 
 [features]
-default = ["hot-storage", "warm-storage"]
+default = ["hot-storage", "warm-storage", "cold-storage"]
 hot-storage = ["rocksdb"]
 warm-storage = []
 cold-storage = []
