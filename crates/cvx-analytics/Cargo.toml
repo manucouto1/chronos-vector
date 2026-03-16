@@ -14,12 +14,15 @@ neural-ode = []
 pelt = []
 bocpd = []
 gpu-compute = []
+torch-backend = ["dep:tch"]
 
 [dependencies]
 cvx-core = { workspace = true }
 cvx-storage = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
+tch = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

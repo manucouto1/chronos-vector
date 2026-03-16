@@ -2,6 +2,9 @@
 //!
 //! Wires together calculus, PELT, and ODE modules into the core trait contract.
 
+#[cfg(feature = "torch-backend")]
+use std::sync::Arc;
+
 use cvx_core::error::AnalyticsError;
 use cvx_core::traits::AnalyticsBackend;
 use cvx_core::types::{ChangePoint, CpdMethod, TemporalPoint};
@@ -11,8 +14,13 @@ use crate::ode;
 use crate::pelt::{self, PeltConfig};
 
 /// Default analytics backend using pure-Rust implementations.
+///
+/// When the `torch-backend` feature is enabled and a model is loaded,
+/// prediction uses the Neural ODE. Otherwise falls back to linear extrapolation.
 pub struct DefaultAnalytics {
     pelt_config: PeltConfig,
+    #[cfg(feature = "torch-backend")]
+    torch_model: Option<Arc<crate::torch_ode::TorchOdeModel>>,
 }
 
 impl DefaultAnalytics {
@@ -20,12 +28,42 @@ impl DefaultAnalytics {
     pub fn new() -> Self {
         Self {
             pelt_config: PeltConfig::default(),
+            #[cfg(feature = "torch-backend")]
+            torch_model: None,
         }
     }
 
     /// Create with custom PELT configuration.
     pub fn with_pelt_config(pelt_config: PeltConfig) -> Self {
-        Self { pelt_config }
+        Self {
+            pelt_config,
+            #[cfg(feature = "torch-backend")]
+            torch_model: None,
+        }
+    }
+
+    /// Create with a loaded TorchScript Neural ODE model.
+    #[cfg(feature = "torch-backend")]
+    pub fn with_torch_model(
+        pelt_config: PeltConfig,
+        model: Arc<crate::torch_ode::TorchOdeModel>,
+    ) -> Self {
+        Self {
+            pelt_config,
+            torch_model: Some(model),
+        }
+    }
+
+    /// Whether a Neural ODE model is loaded.
+    pub fn has_neural_ode(&self) -> bool {
+        #[cfg(feature = "torch-backend")]
+        {
+            self.torch_model.is_some()
+        }
+        #[cfg(not(feature = "torch-backend"))]
+        {
+            false
+        }
     }
 }
 
@@ -53,10 +91,24 @@ impl AnalyticsBackend for DefaultAnalytics {
             });
         }
 
-        let traj = to_trajectory(trajectory);
-        let predicted = ode::linear_extrapolate(&traj, target_timestamp)?;
         let entity_id = trajectory.last().unwrap().entity_id();
+        let traj = to_trajectory(trajectory);
 
+        // Try Neural ODE if available (RFC-003)
+        #[cfg(feature = "torch-backend")]
+        if let Some(ref model) = self.torch_model {
+            match model.predict(&traj, target_timestamp) {
+                Ok(predicted) => {
+                    return Ok(TemporalPoint::new(entity_id, target_timestamp, predicted));
+                }
+                Err(e) => {
+                    tracing::warn!("Neural ODE prediction failed, falling back to linear: {e}");
+                }
+            }
+        }
+
+        // Fallback: linear extrapolation
+        let predicted = ode::linear_extrapolate(&traj, target_timestamp)?;
         Ok(TemporalPoint::new(entity_id, target_timestamp, predicted))
     }
 
