@@ -171,8 +171,11 @@ impl Default for IndexConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct AnalyticsConfig {
-    /// Enable Neural ODE prediction.
+    /// Enable Neural ODE prediction (requires `torch-backend` feature).
     pub neural_ode: bool,
+    /// Path to TorchScript Neural ODE model file (`.pt`).
+    /// Required when `neural_ode = true` and `torch-backend` feature is enabled.
+    pub model_path: Option<PathBuf>,
     /// Change point detection method.
     pub change_detection: String,
 }
@@ -181,6 +184,7 @@ impl Default for AnalyticsConfig {
     fn default() -> Self {
         Self {
             neural_ode: false,
+            model_path: None,
             change_detection: "pelt".into(),
         }
     }

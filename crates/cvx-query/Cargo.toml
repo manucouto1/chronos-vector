@@ -8,6 +8,10 @@ license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 
+[features]
+default = []
+torch-backend = ["cvx-analytics/torch-backend"]
+
 [dependencies]
 cvx-core = { workspace = true }
 cvx-storage = { workspace = true }
