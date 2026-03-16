@@ -342,17 +342,44 @@ mod tests {
     fn compression_ratio() {
         let dim = 768;
         let m = 8;
-        let vectors = random_vectors(100, dim, 42);
+        let n = 100;
+        let vectors = random_vectors(n, dim, 42);
         let refs: Vec<&[f32]> = vectors.iter().map(|v| v.as_slice()).collect();
         let codebook = PqCodebook::train(&refs, m, 256, 5);
 
-        let original_size = dim * 4; // f32 = 4 bytes
-        let compressed_size = m; // 1 byte per subspace
-        let ratio = original_size as f64 / compressed_size as f64;
+        // Actually encode all vectors and measure real sizes
+        let mut total_code_bytes = 0usize;
+        let mut total_reconstruction_error = 0.0f64;
+
+        for v in &vectors {
+            let codes = codebook.encode(v);
+            total_code_bytes += codes.len();
+
+            let decoded = codebook.decode(&codes);
+            let error: f64 = v
+                .iter()
+                .zip(decoded.iter())
+                .map(|(a, b)| ((*a - *b) as f64).powi(2))
+                .sum();
+            total_reconstruction_error += error;
+        }
+
+        let original_bytes = n * dim * 4;
+        let ratio = original_bytes as f64 / total_code_bytes as f64;
+        let avg_error = total_reconstruction_error / n as f64;
 
         assert!(
             ratio >= 300.0,
             "compression ratio = {ratio:.0}x, expected >= 300x for D={dim} M={m}"
+        );
+
+        // Verify each code is M bytes (1 byte per subspace with K=256)
+        assert_eq!(total_code_bytes, n * m);
+
+        // Reconstruction error should be bounded (PQ is lossy but usable)
+        assert!(
+            avg_error < 50.0,
+            "avg reconstruction error = {avg_error:.2}, expected < 50 for D={dim}"
         );
     }
 
