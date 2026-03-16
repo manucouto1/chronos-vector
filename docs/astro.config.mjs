@@ -89,6 +89,7 @@ export default defineConfig({
 						{ label: 'Interactive API Reference', slug: 'specs/api-reference', badge: { text: 'OpenAPI', variant: 'success' } },
 						{ label: 'Rust API Docs', slug: 'specs/rust-api-docs' },
 						{ label: 'Benchmark Strategy', slug: 'specs/benchmark-plan' },
+						{ label: 'Performance Benchmarks', slug: 'specs/benchmarks', badge: { text: 'Results', variant: 'success' } },
 						{ label: 'Implementation Decisions', slug: 'specs/implementation-guide' },
 						{ label: 'Git Workflow & Versioning', slug: 'specs/git-workflow' },
 					],
