@@ -21,3 +21,7 @@ pub mod temporal_ml;
 /// TorchScript Neural ODE model (requires `torch-backend` feature).
 #[cfg(feature = "torch-backend")]
 pub mod torch_ode;
+
+/// Neural ODE training in Rust (requires `torch-backend` feature).
+#[cfg(feature = "torch-backend")]
+pub mod torch_train;
