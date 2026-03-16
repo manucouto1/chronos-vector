@@ -12,6 +12,7 @@ repository.workspace = true
 default = ["rest-api"]
 rest-api = []
 grpc-api = []
+torch-backend = ["cvx-query/torch-backend"]
 
 [dependencies]
 cvx-core = { workspace = true }

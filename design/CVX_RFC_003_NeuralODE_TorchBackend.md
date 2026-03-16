@@ -348,11 +348,11 @@ The model is loaded once at startup and cached in `Arc`. Inference is thread-saf
 
 | Phase | Scope | Effort | Status |
 |-------|-------|--------|--------|
-| 1 | Feature flags & dependencies | Low | Proposed |
-| 2 | Configuration (model_path) | Low | Proposed |
-| 3 | TorchScript loader + inference | Medium | Proposed |
-| 4 | Query engine integration | Medium | Proposed |
-| 5 | Python training script | Low | Proposed |
+| 1 | Feature flags & dependencies | Low | ✅ Done |
+| 2 | Configuration (model_path) | Low | ✅ Done |
+| 3 | TorchScript loader + inference | Medium | ✅ Done |
+| 4 | Query engine integration | Medium | ✅ Done |
+| 5 | Python training script | Low | ✅ Done |
 | 6 | Rust training API | Medium | Proposed |
 | 7 | Python bindings update | Low | Proposed |
 
