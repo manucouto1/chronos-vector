@@ -346,3 +346,102 @@ async fn velocity_unknown_entity() {
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
+
+// ─── Prediction & Analogy endpoints ─────────────────────────────
+
+#[tokio::test]
+async fn prediction_endpoint() {
+    let app = app_with_data();
+    let req = Request::get("/v1/entities/1/prediction?target_timestamp=25000000")
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["entity_id"], 1);
+    assert_eq!(json["timestamp"], 25_000_000);
+    assert_eq!(json["method"], "Linear");
+    assert_eq!(json["vector"].as_array().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn prediction_unknown_entity() {
+    let app = app_with_data();
+    let req = Request::get("/v1/entities/999/prediction?target_timestamp=1000")
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn analogy_endpoint() {
+    let app = app_with_data();
+    let body = json!({
+        "entity_a": 1,
+        "t1": 0,
+        "t2": 10_000_000,
+        "entity_b": 2,
+        "t3": 5_000_000
+    });
+
+    let req = Request::post("/v1/analogy")
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    let vec = json["vector"].as_array().unwrap();
+    assert_eq!(vec.len(), 3);
+    for v in vec {
+        assert!(v.as_f64().unwrap().is_finite());
+    }
+}
+
+#[tokio::test]
+async fn analogy_unknown_entity() {
+    let app = app_with_data();
+    let body = json!({
+        "entity_a": 999,
+        "t1": 0,
+        "t2": 1000,
+        "entity_b": 1,
+        "t3": 0
+    });
+
+    let req = Request::post("/v1/analogy")
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+// ─── OpenAPI spec endpoint ──────────────────────────────────────
+
+#[tokio::test]
+async fn openapi_json_endpoint() {
+    let app = app();
+    let req = Request::get("/api-docs/openapi.json")
+        .body(Body::empty())
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["openapi"], "3.1.0");
+    assert_eq!(json["info"]["title"], "ChronosVector API");
+    let paths = json["paths"].as_object().unwrap();
+    assert!(paths.len() >= 10, "expected >= 10 paths, got {}", paths.len());
+}
