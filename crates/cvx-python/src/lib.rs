@@ -568,6 +568,33 @@ fn event_features(timestamps: Vec<i64>) -> PyResult<std::collections::HashMap<St
     Ok(map)
 }
 
+/// Fisher-Rao distance between two categorical distributions.
+///
+/// The unique Riemannian metric on the statistical manifold that is
+/// invariant under sufficient statistics. Range: [0, π].
+/// 0 = identical, π = completely orthogonal (disjoint support).
+///
+/// More principled than L2 or KL divergence for comparing region distributions.
+///
+/// Args:
+///     p: First distribution (list of floats summing to ~1.0).
+///     q: Second distribution.
+///
+/// Returns:
+///     Fisher-Rao distance in [0, π].
+#[pyfunction]
+fn fisher_rao_distance(p: Vec<f64>, q: Vec<f64>) -> f64 {
+    cvx_analytics::fisher_rao::fisher_rao_distance(&p, &q)
+}
+
+/// Hellinger distance between two distributions. Range: [0, 1].
+///
+/// Related to Fisher-Rao but bounded in [0, 1] for convenience.
+#[pyfunction]
+fn hellinger_distance(p: Vec<f64>, q: Vec<f64>) -> f64 {
+    cvx_analytics::fisher_rao::hellinger_distance(&p, &q)
+}
+
 /// Compute topological features of a point cloud via persistent homology.
 ///
 /// Tracks connected components (β₀) as filtration radius grows.
@@ -650,5 +677,7 @@ fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(wasserstein_drift, m)?)?;
     m.add_function(wrap_pyfunction!(event_features, m)?)?;
     m.add_function(wrap_pyfunction!(topological_features, m)?)?;
+    m.add_function(wrap_pyfunction!(fisher_rao_distance, m)?)?;
+    m.add_function(wrap_pyfunction!(hellinger_distance, m)?)?;
     Ok(())
 }
