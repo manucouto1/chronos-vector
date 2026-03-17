@@ -18,6 +18,7 @@ pub mod ode;
 pub mod pelt;
 pub mod signatures;
 pub mod temporal_ml;
+pub mod trajectory;
 
 /// TorchScript Neural ODE model (requires `torch-backend` feature).
 #[cfg(feature = "torch-backend")]
