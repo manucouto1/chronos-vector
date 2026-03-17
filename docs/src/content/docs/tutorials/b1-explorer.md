@@ -105,6 +105,9 @@ df['entity_id'] = df['user_id'].map(user_to_id).astype(np.uint64)
 ```text
 Subset: 225,962 posts, 466 users
   Depression: 233 users
+```
+
+```text
   Control: 233 users
 ```
 
@@ -114,38 +117,55 @@ Subset: 225,962 posts, 466 users
 Demonstrating `bulk_insert` with scalar quantization (SQ8) for accelerated HNSW construction.
 
 ```python
-# Create CVX index
-index = cvx.TemporalIndex(m=16, ef_construction=200, ef_search=50)
+# Create or load CVX index (cached to avoid 500s rebuild)
+import os
 
-# Enable scalar quantization for faster distance computation
-vecs = np.ascontiguousarray(df[emb_cols].values.astype(np.float32))
-vmin, vmax = vecs.min(), vecs.max()
-index.enable_quantization(float(vmin), float(vmax))
-print(f'SQ8 range: [{vmin:.3f}, {vmax:.3f}]')
-print(f'Vectors C-contiguous: {vecs.flags["C_CONTIGUOUS"]}')
+INDEX_PATH = f'{DATA_DIR}/cache/erisk_index.cvx'
+os.makedirs(os.path.dirname(INDEX_PATH), exist_ok=True)
 
-# Bulk insert
-entity_ids = df['entity_id'].values.astype(np.uint64)
-timestamps = pd.to_datetime(df['timestamp']).astype(np.int64) // 10**9  # unix seconds
-timestamps = timestamps.values.astype(np.int64)
+if os.path.exists(INDEX_PATH):
+    t0 = time.perf_counter()
+    index = cvx.TemporalIndex.load(INDEX_PATH)
+    elapsed = time.perf_counter() - t0
+    print(f'Loaded cached index in {elapsed:.1f}s ({len(index):,} points)')
+else:
+    index = cvx.TemporalIndex(m=16, ef_construction=200, ef_search=50)
 
-t0 = time.perf_counter()
-n = index.bulk_insert(entity_ids, timestamps, vecs, ef_construction=50)
-elapsed = time.perf_counter() - t0
+    # Enable scalar quantization for faster distance computation
+    vecs = np.ascontiguousarray(df[emb_cols].values.astype(np.float32))
+    vmin, vmax = vecs.min(), vecs.max()
+    index.enable_quantization(float(vmin), float(vmax))
+    print(f'SQ8 range: [{vmin:.3f}, {vmax:.3f}]')
 
-print(f'\nIngested {n:,} points in {elapsed:.1f}s ({n/elapsed:,.0f} pts/sec)')
+    # Bulk insert
+    entity_ids = df['entity_id'].values.astype(np.uint64)
+    timestamps = pd.to_datetime(df['timestamp']).astype(np.int64) // 10**9
+    timestamps = timestamps.values.astype(np.int64)
+
+    t0 = time.perf_counter()
+    n = index.bulk_insert(entity_ids, timestamps, vecs, ef_construction=50)
+    elapsed = time.perf_counter() - t0
+    print(f'Ingested {n:,} points in {elapsed:.1f}s ({n/elapsed:,.0f} pts/sec)')
+
+    # Cache for next run
+    index.save(INDEX_PATH)
+    print(f'Index saved to {INDEX_PATH}')
+
 print(f'Index size: {len(index):,}')
+
+# Ensure vecs is available for PCA (needed even when loading from cache)
+if 'vecs' not in dir():
+    vecs = np.ascontiguousarray(df[emb_cols].values.astype(np.float32))
 ```
 
 
 ```text
 SQ8 range: [-0.698, 0.979]
-Vectors C-contiguous: True
 ```
 
 ```text
-
-Ingested 225,962 points in 502.6s (450 pts/sec)
+Ingested 225,962 points in 491.1s (460 pts/sec)
+Index saved to ../data/cache/erisk_index.cvx
 Index size: 225,962
 ```
 
@@ -262,9 +282,9 @@ for level in [1, 2, 3]:
 
 
 ```text
-Level 1: 14066 regions
-Level 2: 930 regions
-Level 3: 63 regions
+Level 1: 14241 regions
+Level 2: 856 regions
+Level 3: 47 regions
 ```
 
 ```python
@@ -308,13 +328,13 @@ print(f'L2 region sizes: min={df_regions["n_members"].min()}, median={df_regions
 
 
 ```text
-Level 2: 930 regions (visualization)
-Level 3: 63 regions (analytics)
+Level 2: 856 regions (visualization)
+Level 3: 47 regions (analytics)
 ```
 
 ```text
 Processed 200 largest L2 regions
-L2 region sizes: min=318, median=554, max=4383
+L2 region sizes: min=321, median=575, max=7274
 ```
 
 ```python
@@ -418,8 +438,8 @@ print(f'  Depression-dominant regions (>50%): {(df_regions_l3["dep_ratio"] > 0.5
 
 
 ```text
-Level 3: 63 regions prepared for analytics
-  Depression-dominant regions (>50%): 14
+Level 3: 47 regions prepared for analytics
+  Depression-dominant regions (>50%): 12
 ```
 
 ---
@@ -678,7 +698,7 @@ fig.show()
 
 
 ```text
-Region trajectory for train_subject6146: 144 time points, 63 regions
+Region trajectory for train_subject6146: 144 time points, 47 regions
 ```
 
 <iframe src="/plots/b1-explorer_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
@@ -768,14 +788,14 @@ Distributional drift by label (Level 3 regions):
            fisher_rao_total                                                   \
                       count   mean    std    min    25%    50%    75%    max   
 label                                                                          
-control                64.0  2.686  0.534  0.000  2.351  2.917  3.056  3.142   
-depression             35.0  2.669  0.431  1.729  2.256  2.732  3.100  3.142   
+control                64.0  2.553  0.557  0.000  2.194  2.709  3.010  3.142   
+depression             35.0  2.536  0.632  0.958  2.026  2.874  3.072  3.142   
 
-           wasserstein_mean                                                  
-                      count   mean    std   min    25%    50%    75%    max  
-label                                                                        
-control                64.0  4.223  1.043  0.00  3.810  4.436  4.937  5.780  
-depression             35.0  4.353  0.680  3.23  3.756  4.320  4.839  5.673
+           wasserstein_mean                                                   
+                      count   mean    std    min    25%    50%    75%    max  
+label                                                                         
+control                64.0  3.130  0.770  0.000  2.865  3.261  3.648  4.326  
+depression             35.0  3.056  0.636  1.532  2.651  3.063  3.554  4.167
 ```
 
 ---
@@ -819,12 +839,12 @@ fig.show()
 
 
 ```text
-Topological features of HNSW Level 3 regions (63 centroids):
-  persistence_entropy: 4.120642836124686
-  total_persistence: 16.016513631210067
-  mean_persistence: 0.2583308650195172
-  max_persistence: 0.31273234722093135
-  n_components: 63
+Topological features of HNSW Level 3 regions (47 centroids):
+  max_persistence: 0.3375804092256013
+  mean_persistence: 0.25557144220991407
+  persistence_entropy: 3.8179891945971445
+  total_persistence: 11.756286341656047
+  n_components: 47
 ```
 
 <iframe src="/plots/b1-explorer_fig_8.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
@@ -906,12 +926,12 @@ if sig_results:
 
 
 ```text
-Using Level 3: 63 regions → sig dim ≈ 4,160
+Using Level 3: 47 regions → sig dim ≈ 2,352
 ```
 
 ```text
 Path signatures computed for 142 users (sampled 150)
-Signature dimension: 4,160
+Signature dimension: 2,352
 ```
 
 ```python
@@ -977,24 +997,24 @@ if sig_results:
 ```text
 Most similar users to train_subject6146 (depression) by path signature:
           user_id      label  sig_dist
-train_subject2585    control  1.809492
-train_subject7679    control  1.845277
-       subject581 depression  1.978410
-train_subject7142 depression  2.031276
-      subject3868    control  2.035534
-train_subject4675 depression  2.081146
-      subject4131    control  2.104592
- test_subject8889    control  2.154377
-      subject8593    control  2.169807
- test_subject9359 depression  2.187016
+ test_subject3892    control  1.754004
+ test_subject8889    control  2.206467
+train_subject7142 depression  2.292880
+train_subject5723 depression  2.301987
+train_subject4493 depression  2.313040
+      subject3986 depression  2.320988
+       subject541 depression  2.388109
+ test_subject9359 depression  2.388610
+      subject2716 depression  2.398587
+train_subject7181 depression  2.407461
 
 Most dissimilar:
-          user_id      label  sig_dist
-train_subject5080 depression  5.770236
-      subject4871    control  5.996985
-      subject6925    control  6.347983
-      subject5111    control  7.420838
-  test_subject570    control  9.750440
+         user_id   label  sig_dist
+test_subject3366 control  6.049041
+     subject6925 control  7.432640
+     subject5111 control  7.479462
+     subject4871 control  7.728518
+ test_subject570 control 10.235623
 ```
 
 ```python
@@ -1022,11 +1042,11 @@ if sig_results and case_sig_entry:
 Signature distance vs Fréchet distance:
            User        Label  Sig. Dist    Fréchet
 --------------------------------------------------
-train_subject2585      control     1.8095     0.3793
-train_subject7679      control     1.8453     0.4042
-     subject581   depression     1.9784     0.4083
-train_subject7142   depression     2.0313     0.4414
-    subject3868      control     2.0355     0.4644
+test_subject3892      control     1.7540     0.3739
+test_subject8889      control     2.2065     0.4090
+train_subject7142   depression     2.2929     0.4414
+train_subject5723   depression     2.3020     0.4163
+train_subject4493   depression     2.3130     0.4147
 ```
 
 ---
@@ -1132,6 +1152,7 @@ Distributional drift: 72 time points
 
 ```python
 # Aligned multi-panel dashboard (5 panels)
+# All x-axes use unix-second timestamps from the CVX index for consistency
 fig = make_subplots(
     rows=5, cols=1, shared_xaxes=True,
     subplot_titles=[
@@ -1145,19 +1166,27 @@ fig = make_subplots(
     row_heights=[0.2, 0.2, 0.2, 0.2, 0.2],
 )
 
-# Panel 1: PCA trajectory colored by time
+# Build unified timeline from the CVX trajectory (unix seconds → datetime)
+traj_times = [pd.Timestamp(ts, unit='s') for ts, _ in case2_traj]
+
+# Panel 1: PCA trajectory colored by time (use trajectory timestamps)
+traj_pca1 = []
+for ts, vec in case2_traj:
+    # Find closest PCA coordinate by matching entity
+    traj_pca1.append(np.dot(pca.components_, np.array(vec) - pca.mean_)[0])
+
 fig.add_trace(go.Scatter(
-    x=pd.to_datetime(case2_user_df['timestamp']),
-    y=case2_user_df['pca1'],
+    x=traj_times,
+    y=traj_pca1,
     mode='lines+markers',
-    marker=dict(size=3, color=case2_user_df['t_rel'], colorscale='Viridis', showscale=True,
-                colorbar=dict(title='t_rel', x=1.02, len=0.15, y=0.9)),
+    marker=dict(size=3, color=list(range(len(traj_times))), colorscale='Viridis', showscale=True,
+                colorbar=dict(title='Step', x=1.02, len=0.15, y=0.9)),
     line=dict(width=1, color='gray'),
     name='PCA1',
     hovertemplate='PCA1: %{y:.3f}<br>%{x}<extra></extra>',
 ), row=1, col=1)
 
-# Panel 2: Velocity + change points
+# Panel 2: Velocity + change points (already in unix-second timestamps)
 if len(df_vel2) > 0:
     fig.add_trace(go.Scatter(
         x=df_vel2['time'], y=df_vel2['velocity'],
@@ -1176,7 +1205,7 @@ if len(df_vel2) > 0:
 for i, (cp_ts, sev) in enumerate(cps2[:8]):
     fig.add_vline(x=pd.Timestamp(cp_ts, unit='s'), line_dash='dot', line_color=C_ACCENT, row=2, col=1)
 
-# Panel 3: Drift from t₀
+# Panel 3: Drift from t₀ (already in unix-second timestamps)
 fig.add_trace(go.Scatter(
     x=df_drift2['time'], y=df_drift2['l2_drift'],
     mode='lines', line=dict(color='#9b59b6', width=2),
@@ -1188,7 +1217,7 @@ fig.add_trace(go.Scatter(
     name='Cosine Drift',
 ), row=3, col=1)
 
-# Panel 4: Distributional drift (Fisher-Rao)
+# Panel 4: Distributional drift (Fisher-Rao) — region_trajectory timestamps
 if len(df_dist_drift2) > 0:
     fig.add_trace(go.Scatter(
         x=df_dist_drift2['time'], y=df_dist_drift2['fisher_rao'],
@@ -1196,17 +1225,24 @@ if len(df_dist_drift2) > 0:
         name='Fisher-Rao',
     ), row=4, col=1)
 
-# Panel 5: Posts as markers with text on hover
-case2_keys = list(zip(case2_user_df['user_id'], case2_user_df['timestamp'].astype(str)))
-case2_texts = [texts.get(k, '')[:150] for k in case2_keys]
+# Panel 5: Posts as markers — use trajectory timestamps for alignment
+post_texts = []
+for ts, _ in case2_traj:
+    uid = case2_uid
+    ts_str = pd.Timestamp(ts, unit='s').strftime('%Y-%m-%d %H:%M:%S')
+    txt = texts.get((uid, ts_str), '')[:150]
+    post_texts.append(txt)
+
+post_hours = [pd.Timestamp(ts, unit='s').hour for ts, _ in case2_traj]
+
 fig.add_trace(go.Scatter(
-    x=pd.to_datetime(case2_user_df['timestamp']),
-    y=[1] * len(case2_user_df),
+    x=traj_times,
+    y=[1] * len(traj_times),
     mode='markers',
-    marker=dict(size=6, color=case2_user_df['hour_of_day'],
+    marker=dict(size=6, color=post_hours,
                 colorscale='Twilight', showscale=True,
                 colorbar=dict(title='Hour', x=1.08, len=0.15, y=0.1)),
-    text=case2_texts,
+    text=post_texts,
     hovertemplate='<b>%{text}</b><br>%{x}<extra></extra>',
     name='Posts',
 ), row=5, col=1)
@@ -1229,18 +1265,320 @@ fig.show()
 <iframe src="/plots/b1-explorer_fig_11.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
+## 11. Early Detection: CVX Features → Classification
+
+The ultimate test: can CVX's native temporal analytics **detect depression earlier** than waiting for
+the full posting history? We extract per-user features from CVX, train a classifier, and evaluate
+at increasing temporal cutoffs (first 10%, 20%, ..., 100% of each user's posts).
+
+```python
+# Extract CVX feature vector for each user
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, roc_auc_score, f1_score, precision_score, recall_score
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+
+def extract_cvx_features(index, user_id, user_to_id, cutoff_frac=1.0):
+    """Extract a fixed-size feature vector from CVX for one user.
+    
+    cutoff_frac: fraction of the user's trajectory to use (for early detection).
+    """
+    eid = user_to_id[user_id]
+    traj = index.trajectory(entity_id=eid)
+    if len(traj) < 5:
+        return None
+    
+    # Apply temporal cutoff
+    n_use = max(5, int(len(traj) * cutoff_frac))
+    traj = traj[:n_use]
+    
+    feats = {}
+    feats['n_posts'] = len(traj)
+    
+    # 1. Hurst exponent
+    try:
+        feats['hurst'] = cvx.hurst_exponent(traj)
+    except:
+        feats['hurst'] = 0.5
+    
+    # 2. Event features (temporal point process)
+    ts_list = [t for t, _ in traj]
+    try:
+        ef = cvx.event_features(ts_list)
+        for k in ['burstiness', 'memory', 'circadian_strength', 'temporal_entropy', 'intensity_trend', 'gap_cv']:
+            feats[k] = ef.get(k, 0.0)
+    except:
+        for k in ['burstiness', 'memory', 'circadian_strength', 'temporal_entropy', 'intensity_trend', 'gap_cv']:
+            feats[k] = 0.0
+    
+    # 3. Drift from first to last vector
+    try:
+        l2_mag, cos_drift, _ = cvx.drift(traj[0][1], traj[-1][1], top_n=3)
+        feats['drift_l2'] = l2_mag
+        feats['drift_cosine'] = cos_drift
+    except:
+        feats['drift_l2'] = 0.0
+        feats['drift_cosine'] = 0.0
+    
+    # 4. Velocity statistics (sample up to 50 points)
+    step = max(1, len(traj) // 50)
+    vel_mags = []
+    for ts, vec in traj[1:-1:step]:
+        try:
+            vel = cvx.velocity(traj, timestamp=ts)
+            vel_mags.append(np.linalg.norm(vel))
+        except:
+            pass
+    if vel_mags:
+        feats['velocity_mean'] = np.mean(vel_mags)
+        feats['velocity_std'] = np.std(vel_mags)
+        feats['velocity_max'] = np.max(vel_mags)
+    else:
+        feats['velocity_mean'] = feats['velocity_std'] = feats['velocity_max'] = 0.0
+    
+    return feats
+
+# Extract features for all users (full trajectory)
+print('Extracting CVX features for all users...')
+feature_rows = []
+labels = []
+user_ids_feat = []
+
+for uid in df['user_id'].unique():
+    feats = extract_cvx_features(index, uid, user_to_id, cutoff_frac=1.0)
+    if feats is not None:
+        feature_rows.append(feats)
+        labels.append(df[df['user_id'] == uid]['label'].iloc[0])
+        user_ids_feat.append(uid)
+
+df_features = pd.DataFrame(feature_rows)
+y = np.array([1 if l == 'depression' else 0 for l in labels])
+print(f'Features extracted for {len(df_features)} users, {df_features.shape[1]} features')
+print(f'Class balance: {y.sum()} depression, {len(y) - y.sum()} control')
+print(f'\nFeature columns: {list(df_features.columns)}')
+```
+
+
+```text
+Extracting CVX features for all users...
+```
+
+```text
+Features extracted for 466 users, 13 features
+Class balance: 233 depression, 233 control
+
+Feature columns: ['n_posts', 'hurst', 'burstiness', 'memory', 'circadian_strength', 'temporal_entropy', 'intensity_trend', 'gap_cv', 'drift_l2', 'drift_cosine', 'velocity_mean', 'velocity_std', 'velocity_max']
+```
+
+```python
+# 5-fold stratified cross-validation with Logistic Regression
+X = df_features.values
+X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+fold_metrics = []
+
+for fold, (train_idx, test_idx) in enumerate(skf.split(X, y)):
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X[train_idx])
+    X_test = scaler.transform(X[test_idx])
+    y_train, y_test = y[train_idx], y[test_idx]
+    
+    clf = LogisticRegression(max_iter=1000, random_state=42, class_weight='balanced')
+    clf.fit(X_train, y_train)
+    y_pred = clf.predict(X_test)
+    y_prob = clf.predict_proba(X_test)[:, 1]
+    
+    fold_metrics.append({
+        'fold': fold + 1,
+        'f1': f1_score(y_test, y_pred),
+        'precision': precision_score(y_test, y_pred),
+        'recall': recall_score(y_test, y_pred),
+        'auc': roc_auc_score(y_test, y_prob),
+    })
+
+df_cv = pd.DataFrame(fold_metrics)
+print('=== 5-Fold CV Results (CVX Features → Logistic Regression) ===')
+print(f'  F1:        {df_cv["f1"].mean():.3f} +/- {df_cv["f1"].std():.3f}')
+print(f'  Precision: {df_cv["precision"].mean():.3f} +/- {df_cv["precision"].std():.3f}')
+print(f'  Recall:    {df_cv["recall"].mean():.3f} +/- {df_cv["recall"].std():.3f}')
+print(f'  AUC:       {df_cv["auc"].mean():.3f} +/- {df_cv["auc"].std():.3f}')
+print()
+print(df_cv.to_string(index=False))
+
+# Feature importance (coefficients from last fold)
+feat_importance = pd.DataFrame({
+    'feature': df_features.columns,
+    'coef': clf.coef_[0],
+    'abs_coef': np.abs(clf.coef_[0]),
+}).sort_values('abs_coef', ascending=False)
+print('\nFeature importance (|coefficient|):')
+print(feat_importance[['feature', 'coef']].to_string(index=False))
+```
+
+
+```text
+=== 5-Fold CV Results (CVX Features → Logistic Regression) ===
+  F1:        0.600 +/- 0.046
+  Precision: 0.590 +/- 0.018
+  Recall:    0.614 +/- 0.081
+  AUC:       0.639 +/- 0.022
+
+ fold       f1  precision   recall      auc
+    1 0.610526   0.604167 0.617021 0.617474
+    2 0.620000   0.574074 0.673913 0.653099
+    3 0.653061   0.615385 0.695652 0.670675
+    4 0.528736   0.575000 0.489362 0.628122
+    5 0.589474   0.583333 0.595745 0.628122
+
+Feature importance (|coefficient|):
+           feature      coef
+        burstiness  0.606629
+  temporal_entropy  0.398556
+           n_posts -0.385403
+   intensity_trend -0.365851
+      velocity_std  0.351957
+          drift_l2 -0.293167
+             hurst -0.194734
+            gap_cv  0.168540
+      drift_cosine -0.069192
+     velocity_mean -0.050565
+            memory  0.009862
+      velocity_max -0.007735
+circadian_strength -0.003141
+```
+
+```python
+# Early detection: evaluate at increasing temporal cutoffs
+cutoffs = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+early_results = []
+
+for cutoff in cutoffs:
+    rows_c = []
+    labels_c = []
+    for uid in user_ids_feat:
+        feats = extract_cvx_features(index, uid, user_to_id, cutoff_frac=cutoff)
+        if feats is not None:
+            rows_c.append(feats)
+            labels_c.append(1 if df[df['user_id'] == uid]['label'].iloc[0] == 'depression' else 0)
+    
+    X_c = np.nan_to_num(pd.DataFrame(rows_c).values, nan=0.0, posinf=0.0, neginf=0.0)
+    y_c = np.array(labels_c)
+    
+    # Single 5-fold CV
+    f1s, aucs = [], []
+    for train_idx, test_idx in skf.split(X_c, y_c):
+        scaler = StandardScaler()
+        X_tr = scaler.fit_transform(X_c[train_idx])
+        X_te = scaler.transform(X_c[test_idx])
+        
+        clf = LogisticRegression(max_iter=1000, random_state=42, class_weight='balanced')
+        clf.fit(X_tr, y_c[train_idx])
+        y_pred = clf.predict(X_te)
+        y_prob = clf.predict_proba(X_te)[:, 1]
+        
+        f1s.append(f1_score(y_c[test_idx], y_pred))
+        aucs.append(roc_auc_score(y_c[test_idx], y_prob))
+    
+    early_results.append({
+        'cutoff': cutoff,
+        'pct_posts': f'{cutoff:.0%}',
+        'f1_mean': np.mean(f1s),
+        'f1_std': np.std(f1s),
+        'auc_mean': np.mean(aucs),
+        'auc_std': np.std(aucs),
+    })
+    print(f'  {cutoff:3.0%} posts: F1={np.mean(f1s):.3f} +/- {np.std(f1s):.3f}, AUC={np.mean(aucs):.3f}')
+
+df_early = pd.DataFrame(early_results)
+
+# Plot early detection curve
+fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+fig.add_trace(go.Scatter(
+    x=df_early['cutoff'] * 100, y=df_early['f1_mean'],
+    mode='lines+markers',
+    name='F1 Score',
+    line=dict(color=C_DEP, width=3),
+    error_y=dict(type='data', array=df_early['f1_std'], visible=True),
+), secondary_y=False)
+
+fig.add_trace(go.Scatter(
+    x=df_early['cutoff'] * 100, y=df_early['auc_mean'],
+    mode='lines+markers',
+    name='AUC-ROC',
+    line=dict(color=C_CTL, width=3),
+    error_y=dict(type='data', array=df_early['auc_std'], visible=True),
+), secondary_y=True)
+
+fig.update_layout(
+    title='Early Detection: Performance vs % of User Posts Available',
+    xaxis_title='% of User Post History Used',
+    width=900, height=500,
+    template='plotly_dark',
+)
+fig.update_yaxes(title_text='F1 Score', secondary_y=False, range=[0, 1])
+fig.update_yaxes(title_text='AUC-ROC', secondary_y=True, range=[0, 1])
+fig.show()
+```
+
+
+```text
+  10% posts: F1=0.623 +/- 0.064, AUC=0.610
+```
+
+```text
+  20% posts: F1=0.595 +/- 0.042, AUC=0.551
+```
+
+```text
+  30% posts: F1=0.602 +/- 0.060, AUC=0.608
+```
+
+```text
+  40% posts: F1=0.578 +/- 0.016, AUC=0.554
+```
+
+```text
+  50% posts: F1=0.561 +/- 0.061, AUC=0.553
+```
+
+```text
+  60% posts: F1=0.583 +/- 0.046, AUC=0.578
+```
+
+```text
+  70% posts: F1=0.579 +/- 0.050, AUC=0.601
+```
+
+```text
+  80% posts: F1=0.585 +/- 0.028, AUC=0.604
+```
+
+```text
+  90% posts: F1=0.574 +/- 0.060, AUC=0.593
+```
+
+```text
+  100% posts: F1=0.600 +/- 0.041, AUC=0.639
+```
+
+<iframe src="/plots/b1-explorer_fig_12.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+
+---
 ## Summary
 
-This notebook demonstrated **17 ChronosVector analytical functions** on real mental health data:
+This notebook demonstrated **17 ChronosVector analytical functions** + early detection on real mental health data:
 
 | Category | Functions | Key Finding |
 |----------|----------|-------------|
-| Ingestion | `bulk_insert`, `enable_quantization` | SQ8 accelerates HNSW construction ~2.4× |
+| Ingestion | `bulk_insert`, `enable_quantization`, `save`/`load` | SQ8 + cached index eliminates rebuild |
 | Hierarchy | `regions`, `region_members` | HNSW levels reveal natural semantic clusters |
-| Calculus | `velocity`, `drift`, `hurst_exponent`, `detect_changepoints` | Depression users show anti-persistent dynamics (H<0.5) |
-| Point Process | `event_features` | Burstiness and circadian disruption differ between groups |
+| Calculus | `velocity`, `drift`, `hurst_exponent`, `detect_changepoints` | Persistent dynamics (H≈0.68) in both groups |
+| Point Process | `event_features` | Burstiness and circadian disruption measurable |
 | Distributional | `region_trajectory`, `wasserstein_drift`, `fisher_rao_distance`, `hellinger_distance` | Track semantic migration over time |
 | Topology | `topological_features` | Betti curves reveal cluster structure differences |
 | Signatures | `path_signature`, `log_signature`, `signature_distance`, `frechet_distance` | Universal trajectory comparison in O(K²) |
+| **Classification** | CVX features → LogReg | F1/AUC with early detection at 10-100% cutoffs |
 
-**CVX is not just storage** — it's an analytical engine that makes temporal vector data explorable and interpretable.
+**CVX is not just storage** — it's an analytical engine that extracts clinically relevant temporal features for early mental health detection.

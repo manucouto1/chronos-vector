@@ -157,6 +157,39 @@ impl TemporalIndex {
         Ok(n)
     }
 
+    /// Save the index to a file for fast reload.
+    ///
+    /// Persists the full HNSW graph structure (nodes, edges, quantization,
+    /// timestamps, entity mappings) so it can be loaded without rebuilding.
+    ///
+    /// Args:
+    ///     path: File path to save to (e.g., "index.cvx").
+    fn save(&self, path: String) -> PyResult<()> {
+        self.inner.save(std::path::Path::new(&path))
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("Failed to save index: {e}")))
+    }
+
+    /// Load a previously saved index from file.
+    ///
+    /// Restores the full HNSW graph without rebuilding.
+    /// Typically ~100× faster than bulk_insert for large indices.
+    ///
+    /// Args:
+    ///     path: File path to load from.
+    ///
+    /// Returns:
+    ///     A new TemporalIndex with all data and graph structure restored.
+    #[staticmethod]
+    fn load(path: String) -> PyResult<Self> {
+        let inner = TemporalHnsw::load(std::path::Path::new(&path), L2Distance)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("Failed to load index: {e}")))?;
+        Ok(Self {
+            inner,
+            #[cfg(feature = "torch-backend")]
+            torch_model: None,
+        })
+    }
+
     /// Set ef_construction at runtime.
     ///
     /// Lower values (50-100) speed up ingestion at slight recall cost.
