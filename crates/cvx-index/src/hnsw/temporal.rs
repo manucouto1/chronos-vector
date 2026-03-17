@@ -383,15 +383,16 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         result
     }
 
-    /// Get posts assigned to a specific region (RFC-004).
+    /// Get points assigned to a specific region, optionally time-filtered (RFC-004, RFC-005).
     ///
-    /// Returns `(entity_id, timestamp, node_id)` for all posts in the region.
+    /// Returns `(node_id, entity_id, timestamp)` for all points in the region.
+    /// This is the "SELECT * FROM points WHERE region = R" equivalent.
     pub fn region_members(
         &self,
         region_hub: u32,
         level: usize,
-        filter: &TemporalFilter,
-    ) -> Vec<(u64, i64, u32)> {
+        filter: TemporalFilter,
+    ) -> Vec<(u32, u64, i64)> {
         let mut members = Vec::new();
         for node_id in 0..self.graph.len() as u32 {
             let ts = self.timestamps[node_id as usize];
@@ -402,7 +403,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             if let Some(assigned_hub) = self.graph.assign_region(vec, level) {
                 if assigned_hub == region_hub {
                     let eid = self.entity_ids[node_id as usize];
-                    members.push((eid, ts, node_id));
+                    members.push((node_id, eid, ts));
                 }
             }
         }
@@ -444,6 +445,15 @@ impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for TemporalHnsw<D> {
 
     fn regions(&self, level: usize) -> Vec<(u32, Vec<f32>, usize)> {
         self.regions(level)
+    }
+
+    fn region_members(
+        &self,
+        region_hub: u32,
+        level: usize,
+        filter: TemporalFilter,
+    ) -> Vec<(u32, u64, i64)> {
+        self.region_members(region_hub, level, filter)
     }
 
     fn region_trajectory(
