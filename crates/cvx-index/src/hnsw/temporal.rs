@@ -94,6 +94,21 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         self.graph.config()
     }
 
+    /// Enable scalar quantization for faster distance computation.
+    pub fn enable_scalar_quantization(&mut self, min_val: f32, max_val: f32) {
+        self.graph.enable_scalar_quantization(min_val, max_val);
+    }
+
+    /// Disable scalar quantization.
+    pub fn disable_scalar_quantization(&mut self) {
+        self.graph.disable_scalar_quantization();
+    }
+
+    /// Whether scalar quantization is active.
+    pub fn is_quantized(&self) -> bool {
+        self.graph.is_quantized()
+    }
+
     /// Insert a temporal point into the index.
     ///
     /// Returns the internal node_id assigned to this point.
