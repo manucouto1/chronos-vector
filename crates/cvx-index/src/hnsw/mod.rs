@@ -46,10 +46,11 @@ use std::collections::BinaryHeap;
 use cvx_core::DistanceMetric;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
 /// HNSW index configuration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HnswConfig {
     /// Maximum connections per node per layer (except layer 0 which gets 2*M).
     pub m: usize,
@@ -84,7 +85,8 @@ impl Default for HnswConfig {
 type NeighborList = SmallVec<[u32; 16]>;
 
 /// A node in the HNSW graph.
-struct HnswNode {
+#[derive(Serialize, Deserialize)]
+pub(crate) struct HnswNode {
     /// The vector data.
     vector: Vec<f32>,
     /// Neighbors at each level this node participates in.
@@ -659,6 +661,50 @@ impl<D: DistanceMetric> HnswGraph<D> {
         all.sort_by(|a, b| a.1.total_cmp(&b.1));
         all.truncate(k);
         all
+    }
+}
+
+/// Serializable snapshot of an HNSW graph (excludes metric + RNG).
+///
+/// Used by `TemporalHnsw::save` / `TemporalHnsw::load` for index persistence.
+#[derive(Serialize, Deserialize)]
+pub(crate) struct HnswSnapshot {
+    pub(crate) config: HnswConfig,
+    pub(crate) nodes: Vec<HnswNode>,
+    pub(crate) entry_point: Option<u32>,
+    pub(crate) max_level: usize,
+    pub(crate) sq_codes: Option<Vec<Vec<u8>>>,
+    pub(crate) sq_params: (f32, f32),
+}
+
+impl<D: DistanceMetric> HnswGraph<D> {
+    /// Create a serializable snapshot (excludes metric and RNG).
+    pub(crate) fn to_snapshot(&self) -> HnswSnapshot {
+        HnswSnapshot {
+            config: self.config.clone(),
+            nodes: self.nodes.iter().map(|n| HnswNode {
+                vector: n.vector.clone(),
+                neighbors: n.neighbors.clone(),
+            }).collect(),
+            entry_point: self.entry_point,
+            max_level: self.max_level,
+            sq_codes: self.sq_codes.clone(),
+            sq_params: self.sq_params,
+        }
+    }
+
+    /// Restore from a snapshot, providing the metric.
+    pub(crate) fn from_snapshot(snapshot: HnswSnapshot, metric: D) -> Self {
+        Self {
+            config: snapshot.config,
+            metric,
+            nodes: snapshot.nodes,
+            entry_point: snapshot.entry_point,
+            max_level: snapshot.max_level,
+            rng: SmallRng::from_os_rng(),
+            sq_codes: snapshot.sq_codes,
+            sq_params: snapshot.sq_params,
+        }
     }
 }
 

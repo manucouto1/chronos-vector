@@ -42,7 +42,7 @@ postcard = { version = "1", features = ["alloc"] }
 pulp = { version = "0.22", features = ["macro"] }
 
 # Collections
-smallvec = { version = "1", features = ["union"] }
+smallvec = { version = "1", features = ["union", "serde"] }
 
 # Random
 rand = "0.9"
