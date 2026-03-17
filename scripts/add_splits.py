@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Add train/val/test split labels to embedding Parquet files.
 
-Determines split membership from dataset structure:
-- eRisk: user_id prefix (train_*, test_*) + golden truth year
-- CLPsych: chunk index (0-50 = train, 60-89 = test)
-- RSDD: source file (training-002, validation-001, testing-003)
+Strategy (v2):
+- eRisk: pool 2017+2018 → 80/20 stratified train/val, 2022 → test
+- RSDD: pool training+validation → 80/20 stratified train/val, testing → test
+- CLPsych: user-level stratified 70/15/15 split (not temporal)
 
 Usage:
     python scripts/add_splits.py
@@ -12,14 +12,18 @@ Usage:
 
 import json
 from pathlib import Path
-from collections import defaultdict
 
+import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
+
+SEED = 42
 
 
 def build_erisk_split_map(erisk_dir: Path) -> dict[str, str]:
-    """Map eRisk user_ids to splits based on golden truth files."""
-    split_map = {}
+    """Map eRisk user_ids: 2017+2018 → pool (train/val), 2022 → test."""
+    pool_users = {}   # user_id → label (for stratification)
+    test_users = set()
 
     # 2017 train
     gt = erisk_dir / "2017 (train and test)/2017/depression_train_2017/risk_golden_truth.txt"
@@ -27,23 +31,23 @@ def build_erisk_split_map(erisk_dir: Path) -> dict[str, str]:
         for line in open(gt):
             parts = line.strip().split()
             if len(parts) >= 2:
-                split_map[parts[0]] = "train"
+                pool_users[parts[0]] = int(parts[1])
 
-    # 2017 test → validation (since 2022 is the real test)
+    # 2017 test → pool
     gt = erisk_dir / "2017 (train and test)/2017/depression_test_2017/test_golden_truth.txt"
     if gt.exists():
         for line in open(gt):
             parts = line.strip().split()
             if len(parts) >= 2:
-                split_map[parts[0]] = "val"
+                pool_users[parts[0]] = int(parts[1])
 
-    # 2018 → validation
+    # 2018 → pool
     gt = erisk_dir / "2018 (test cases)/task 1 - depression (test split, train split is 2017 data)/risk-golden-truth-test.txt"
     if gt.exists():
         for line in open(gt):
             parts = line.strip().split()
             if len(parts) >= 2:
-                split_map[parts[0]] = "val"
+                pool_users[parts[0]] = int(parts[1])
 
     # 2022 → test
     gt = erisk_dir / "2022 (test cases)/test data/risk_golden_truth.txt"
@@ -51,7 +55,21 @@ def build_erisk_split_map(erisk_dir: Path) -> dict[str, str]:
         for line in open(gt):
             parts = line.strip().split()
             if len(parts) >= 2:
-                split_map[parts[0]] = "test"
+                test_users.add(parts[0])
+
+    # Stratified 80/20 split of pool
+    uids = list(pool_users.keys())
+    labels = [pool_users[u] for u in uids]
+    train_uids, val_uids = train_test_split(
+        uids, test_size=0.2, stratify=labels, random_state=SEED)
+
+    split_map = {}
+    for u in train_uids:
+        split_map[u] = "train"
+    for u in val_uids:
+        split_map[u] = "val"
+    for u in test_users:
+        split_map[u] = "test"
 
     return split_map
 
@@ -67,8 +85,11 @@ def add_erisk_splits():
     split_map = build_erisk_split_map(Path("data/eRisk"))
 
     df["split"] = df["user_id"].map(split_map).fillna("unknown")
-    counts = df.groupby("split")["user_id"].nunique()
-    print(f"eRisk splits: {dict(counts)}")
+    for split in ["train", "val", "test"]:
+        sub = df[df["split"] == split]
+        n_dep = sub[sub["label"] == "depression"]["user_id"].nunique()
+        n_ctrl = sub[sub["label"] == "control"]["user_id"].nunique()
+        print(f"  {split:>5}: {n_dep} dep + {n_ctrl} ctrl = {n_dep + n_ctrl} users")
     df.to_parquet(parquet, index=False)
     print(f"  Updated {parquet}")
 
@@ -76,19 +97,19 @@ def add_erisk_splits():
 def add_rsdd_splits():
     """Add split column to RSDD embeddings.
 
-    RSDD unified.jsonl was created from 3 files in order:
-    training-002 (first 500 users), validation-001 (next 500), testing-003 (next 500).
-    We re-read the source files to get the mapping.
+    Pool training-002 + validation-001 → 80/20 stratified train/val.
+    testing-003 → test.
     """
     parquet = Path("data/embeddings/rsdd_embeddings.parquet")
     if not parquet.exists():
         print("RSDD parquet not found, skipping")
         return
 
-    # Build user→split map from source files
     rsdd_dir = Path("data/RSDD")
-    split_map = {}
-    for fname, split in [("training-002", "train"), ("validation-001", "val"), ("testing-003", "test")]:
+
+    # Build user → (original_split, label) map
+    file_map = {}
+    for fname, orig in [("training-002", "pool"), ("validation-001", "pool"), ("testing-003", "test")]:
         fpath = rsdd_dir / fname
         if not fpath.exists():
             continue
@@ -103,14 +124,37 @@ def add_rsdd_splits():
                         data = data[0]
                     uid = str(data.get("id", ""))
                     if uid:
-                        split_map[uid] = split
+                        file_map[uid] = orig
                 except json.JSONDecodeError:
                     continue
 
     df = pd.read_parquet(parquet)
+
+    # Get labels per user
+    user_labels = df.groupby("user_id")["label"].first()
+
+    # Pool users → stratified 80/20
+    pool_uids = [u for u, s in file_map.items() if s == "pool" and u in user_labels.index]
+    pool_labels = [user_labels[u] for u in pool_uids]
+
+    train_uids, val_uids = train_test_split(
+        pool_uids, test_size=0.2, stratify=pool_labels, random_state=SEED)
+
+    split_map = {}
+    for u in train_uids:
+        split_map[u] = "train"
+    for u in val_uids:
+        split_map[u] = "val"
+    for u, s in file_map.items():
+        if s == "test":
+            split_map[u] = "test"
+
     df["split"] = df["user_id"].map(split_map).fillna("unknown")
-    counts = df.groupby("split")["user_id"].nunique()
-    print(f"RSDD splits: {dict(counts)}")
+    for split in ["train", "val", "test"]:
+        sub = df[df["split"] == split]
+        n_dep = sub[sub["label"] == "depression"]["user_id"].nunique()
+        n_ctrl = sub[sub["label"] == "control"]["user_id"].nunique()
+        print(f"  {split:>5}: {n_dep} dep + {n_ctrl} ctrl = {n_dep + n_ctrl} users")
     df.to_parquet(parquet, index=False)
     print(f"  Updated {parquet}")
 
@@ -118,9 +162,8 @@ def add_rsdd_splits():
 def add_clpsych_splits():
     """Add split column to CLPsych embeddings.
 
-    The JSONL was built from tgz archives: chunks 0-50 = train, 60-89 = test.
-    Since all users appear in all chunks, we use the chunk index metadata.
-    For CLPsych we split by time: first 70% of each user's posts = train, last 30% = test.
+    User-level stratified 70/15/15 split (NOT temporal).
+    All posts from a user go into the same split.
     """
     parquet = Path("data/embeddings/clpsych_embeddings.parquet")
     if not parquet.exists():
@@ -129,24 +172,74 @@ def add_clpsych_splits():
 
     df = pd.read_parquet(parquet)
 
-    # Temporal split per user: 70% train, 15% val, 15% test
-    splits = []
-    for uid, group in df.groupby("user_id"):
-        n = len(group)
-        group_sorted = group.sort_values("timestamp")
-        s = ["train"] * int(n * 0.7) + ["val"] * int(n * 0.15) + ["test"] * (n - int(n * 0.7) - int(n * 0.15))
-        splits.extend(s)
+    # Get unique users and their labels
+    user_labels = df.groupby("user_id")["label"].first()
+    uids = user_labels.index.tolist()
+    labels = user_labels.values.tolist()
 
-    df = df.sort_values(["user_id", "timestamp"]).reset_index(drop=True)
-    df["split"] = splits
-    counts = df.groupby("split")["user_id"].nunique()
-    print(f"CLPsych splits: {dict(counts)}")
+    # Stratified split: 70% train, 15% val, 15% test
+    train_uids, temp_uids, _, temp_labels = train_test_split(
+        uids, labels, test_size=0.30, stratify=labels, random_state=SEED)
+    val_uids, test_uids = train_test_split(
+        temp_uids, test_size=0.50, stratify=temp_labels, random_state=SEED)
+
+    split_map = {}
+    for u in train_uids:
+        split_map[u] = "train"
+    for u in val_uids:
+        split_map[u] = "val"
+    for u in test_uids:
+        split_map[u] = "test"
+
+    df["split"] = df["user_id"].map(split_map).fillna("unknown")
+    for split in ["train", "val", "test"]:
+        sub = df[df["split"] == split]
+        n_dep = sub[sub["label"] == "depression"]["user_id"].nunique()
+        n_ctrl = sub[sub["label"] == "control"]["user_id"].nunique()
+        print(f"  {split:>5}: {n_dep} dep + {n_ctrl} ctrl = {n_dep + n_ctrl} users")
     df.to_parquet(parquet, index=False)
     print(f"  Updated {parquet}")
 
 
+def add_splits_to_parquet(parquet_path: Path, split_map: dict[str, str]):
+    """Apply a split map to any parquet file."""
+    if not parquet_path.exists():
+        return
+    df = pd.read_parquet(parquet_path)
+    df["split"] = df["user_id"].map(split_map).fillna("unknown")
+    for split in ["train", "val", "test"]:
+        sub = df[df["split"] == split]
+        n_dep = sub[sub["label"] == "depression"]["user_id"].nunique()
+        n_ctrl = sub[sub["label"] == "control"]["user_id"].nunique()
+        print(f"  {split:>5}: {n_dep} dep + {n_ctrl} ctrl = {n_dep + n_ctrl} users")
+    df.to_parquet(parquet_path, index=False)
+    print(f"  Updated {parquet_path}")
+
+
 if __name__ == "__main__":
+    # Process both original and mental_ parquets
+    print("eRisk (pool 2017+2018, 80/20 train/val, 2022 test):")
     add_erisk_splits()
+    # Also apply to mental_ version if it exists
+    mental = Path("data/embeddings/erisk_mental_embeddings.parquet")
+    if mental.exists():
+        print(f"\n  Also applying to {mental}...")
+        split_map = build_erisk_split_map(Path("data/eRisk"))
+        add_splits_to_parquet(mental, split_map)
+
+    print("\nRSDD (pool train+val files, 80/20, testing file = test):")
     add_rsdd_splits()
+
+    print("\nCLPsych (user-level stratified 70/15/15):")
     add_clpsych_splits()
+
+    # Apply to mental_ versions
+    for ds in ["clpsych", "rsdd"]:
+        mental = Path(f"data/embeddings/{ds}_mental_embeddings.parquet")
+        if mental.exists():
+            print(f"\n  Also applying splits to {mental}...")
+            df_orig = pd.read_parquet(f"data/embeddings/{ds}_embeddings.parquet")
+            split_map_ds = dict(zip(df_orig["user_id"],df_orig["split"]))
+            add_splits_to_parquet(mental, split_map_ds)
+
     print("\nDone.")
