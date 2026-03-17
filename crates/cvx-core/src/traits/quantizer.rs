@@ -25,11 +25,10 @@
 //! # Example
 //!
 //! ```
-//! use cvx_core::traits::quantizer::{Quantizer, NoQuantizer};
-//! use cvx_core::DistanceMetric;
+//! use cvx_core::traits::quantizer::{Quantizer, NoQuantizer, L2Fn};
 //!
 //! // No acceleration (default, exact distances)
-//! let q = NoQuantizer::new(cvx_core::traits::L2Fn);
+//! let q = NoQuantizer::new(L2Fn);
 //! let code = q.encode(&[1.0, 2.0, 3.0]);
 //! ```
 
