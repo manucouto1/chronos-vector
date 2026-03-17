@@ -455,6 +455,66 @@ fn predict(trajectory: Vec<(i64, Vec<f32>)>, target_timestamp: i64) -> PyResult<
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
+/// Compute the truncated path signature of a trajectory.
+///
+/// The signature is a universal, order-aware feature of sequential data from
+/// rough path theory. It captures the shape of the trajectory — not just where
+/// it ends, but how it gets there.
+///
+/// Args:
+///     trajectory: List of (timestamp, vector) tuples.
+///     depth: Truncation depth (1-3). Depth 2 captures signed areas. Default 2.
+///     time_augmentation: Add time as extra dimension (captures speed). Default false.
+///
+/// Returns:
+///     Signature vector. Size depends on dim K and depth:
+///     - Depth 1: K features
+///     - Depth 2: K + K² features
+///     - Depth 3: K + K² + K³ features
+#[pyfunction]
+#[pyo3(signature = (trajectory, depth=2, time_augmentation=false))]
+fn path_signature(
+    trajectory: Vec<(i64, Vec<f32>)>,
+    depth: usize,
+    time_augmentation: bool,
+) -> PyResult<Vec<f64>> {
+    let traj: Vec<(i64, &[f32])> = trajectory.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+    let config = cvx_analytics::signatures::SignatureConfig { depth, time_augmentation };
+    cvx_analytics::signatures::compute_signature(&traj, &config)
+        .map(|r| r.signature)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
+/// Compute the log-signature (compact version of path signature).
+///
+/// Removes redundant symmetric components at depth 2. Same information,
+/// fewer dimensions: K + K(K-1)/2 instead of K + K².
+#[pyfunction]
+#[pyo3(signature = (trajectory, depth=2, time_augmentation=false))]
+fn log_signature(
+    trajectory: Vec<(i64, Vec<f32>)>,
+    depth: usize,
+    time_augmentation: bool,
+) -> PyResult<Vec<f64>> {
+    let traj: Vec<(i64, &[f32])> = trajectory.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+    let config = cvx_analytics::signatures::SignatureConfig { depth, time_augmentation };
+    cvx_analytics::signatures::compute_log_signature(&traj, &config)
+        .map(|r| r.signature)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
+/// Compute distance between two path signatures.
+///
+/// Fast trajectory similarity: O(output_dim) per comparison.
+/// Captures all order-dependent temporal dynamics.
+#[pyfunction]
+fn signature_distance(sig_a: Vec<f64>, sig_b: Vec<f64>) -> f64 {
+    sig_a.iter().zip(sig_b.iter())
+        .map(|(a, b)| (a - b) * (a - b))
+        .sum::<f64>()
+        .sqrt()
+}
+
 /// ChronosVector Python module.
 #[pymodule]
 fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -465,5 +525,8 @@ fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(temporal_features, m)?)?;
     m.add_function(wrap_pyfunction!(hurst_exponent, m)?)?;
     m.add_function(wrap_pyfunction!(predict, m)?)?;
+    m.add_function(wrap_pyfunction!(path_signature, m)?)?;
+    m.add_function(wrap_pyfunction!(log_signature, m)?)?;
+    m.add_function(wrap_pyfunction!(signature_distance, m)?)?;
     Ok(())
 }
