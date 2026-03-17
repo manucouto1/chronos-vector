@@ -139,7 +139,14 @@ impl TemporalIndex {
 
         for i in 0..n {
             let row = vecs.row(i);
-            self.inner.insert(ids[i], ts[i], row.as_slice().unwrap());
+            // as_slice() can fail if the array isn't C-contiguous
+            match row.as_slice() {
+                Some(slice) => { self.inner.insert(ids[i], ts[i], slice); }
+                None => {
+                    let vec: Vec<f32> = row.iter().copied().collect();
+                    self.inner.insert(ids[i], ts[i], &vec);
+                }
+            }
         }
 
         // Restore original ef_construction
