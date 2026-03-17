@@ -1,304 +1,328 @@
 # Research Protocol 001: Temporal Trajectory Analysis for Mental Health Detection
 
-**Status**: Draft
+**Status**: v2 — Major revision after Phase 1–4 results
 **Created**: 2026-03-16
+**Revised**: 2026-03-17
 **Authors**: Manuel Couto Pintos
 **Related**: RFC-004 (Semantic Regions), Tutorial B1
 
 ---
 
-## 1. Objective
+## 0. Lessons from v1 (Phase 1–4 Results)
 
-Evaluate ChronosVector's graph-based semantic region trajectory analysis as a method for early detection of psychological distress from social media, across multiple benchmark datasets, with rigorous experimental design and interpretable post-hoc analysis.
+The first iteration (v1) revealed fundamental issues:
+
+| Issue | Evidence | Root Cause |
+|-------|----------|------------|
+| Static baseline surprisingly strong (AUC 0.90) | Mean embedding already captures "what topics" a user discusses | The *distributional* signal is strong; temporal dynamics add little with generic embeddings |
+| Region trajectory F1 low (0.45 vs 0.62 baseline) | High-dimensional feature space (2K+5 ≈ 2,600) with few depression samples | Overfitting + wrong granularity (1,300 regions for 93 train dep users) |
+| Velocity/Hurst not discriminative (p > 0.1) | Velocity measures topic change speed; depression ≠ faster topic switching | Wrong temporal encoding + wrong signal (topic ≠ emotion) |
+| RSDD completely fails (F1 = 0) | 8% depression rate + noisy self-reported labels | Extreme imbalance + label noise |
+| Change points always 0 | PELT penalty too high for smooth EMA distributions | EMA smoothing removes the very discontinuities CPD is designed to detect |
+
+### Key Insights for v2
+
+1. **Temporal encoding is wrong.** Using absolute calendar dates. In early detection, what matters is:
+   - *Time since first observation* — track evolution from onset
+   - *Time since previous post* (inter-post gap) — behavioral signal
+   These are the two variants validated in DCWE (Couto et al., 2025).
+
+2. **Embeddings are wrong.** MiniLM-L6-v2 is a general-purpose semantic model. It captures *topic* (sports, food, politics) but NOT *emotional valence*. **MentalRoBERTa** (Ji et al., 2022) is pre-trained on Reddit mental health forums and captures domain-specific emotional language.
+
+3. **Hierarchy should be top-down.** Start from the coarsest level (level 3: ~60–80 regions) to find *which broad topic areas* differ. Then drill into finer levels only within discriminative coarse regions.
+
+4. **Posts are events, not a continuous signal.** The "trajectory" metaphor breaks down for irregularly-spaced discrete posts. Instead:
+   - Model posts as *events in a sequence* with inter-event intervals
+   - Use *attention-weighted aggregation* (not EMA smoothing)
+   - Weight by recency + content relevance (as in eRisk 2025 best systems)
+
+5. **Need pattern-based approach.** Instead of computing global features, learn *characteristic temporal patterns* of the positive class during training, then detect those patterns in test users.
+
+---
+
+## 1. Objective (Revised)
+
+Evaluate ChronosVector as a platform for **early sequential detection** of psychological distress from social media, using:
+- Domain-adapted embeddings (MentalRoBERTa)
+- Relative temporal encoding (time since first post, inter-post gaps)
+- Hierarchical top-down region analysis
+- Pattern-based classification with temporal attention
 
 ### Primary Hypotheses
 
-**H1**: Users with depression exhibit statistically different region trajectory dynamics (velocity, Hurst exponent, change point frequency) compared to control users.
+**H1**: MentalRoBERTa embeddings + graph regions produce significantly more discriminative features than generic MiniLM embeddings.
 
-**H2**: Temporal features extracted from smoothed region trajectories discriminate depression from control with F1 > 0.75 on held-out test data with proper temporal splits.
+**H2**: Relative temporal encoding (time since first post + inter-post gap features) improves classification over absolute timestamps.
 
-**H3**: The graph-based region approach (RFC-004) outperforms raw embedding trajectory analysis in all metrics.
+**H3**: Top-down hierarchical analysis (coarse → fine) identifies interpretable depression-associated topic shifts.
+
+**H4**: Sequential classification with ERDE metrics demonstrates early detection capability — achieving AUC > 0.80 with only 50% of a user's post history.
 
 ### Secondary Hypotheses
 
-**H4**: Change point detection on region trajectories identifies clinically meaningful regime transitions in depression users.
+**H5**: Inter-post gap patterns (posting frequency, circadian shifts, gap variance) are independently discriminative behavioral biomarkers.
 
-**H5**: Discriminative features generalize across datasets (eRisk, CLPsych, RSDD) — the same types of region dynamics are predictive in all three.
+**H6**: Depression users concentrate their activity in fewer semantic regions at the coarsest level, with higher volatility at finer levels.
 
-**H6**: Early detection is feasible — classification using only the first N% of a user's trajectory still achieves significant AUC.
+**H7**: The approach generalizes across datasets (eRisk, CLPsych) — same types of patterns are predictive.
 
 ---
 
 ## 2. Datasets
 
-### 2.1 eRisk (Reddit)
+### 2.1 eRisk (Reddit) — Primary
 
-| Split | Year | Users | Purpose |
-|-------|------|-------|---------|
-| **Train** | 2017 train | 486 (83 dep, 403 ctrl) | Model training + hyperparameter search |
-| **Validation** | 2017 test / 2018 | ~400-820 | Hyperparameter selection |
-| **Test** | 2022 | 1,400 (98 dep, 1,302 ctrl) | Final evaluation (touch once) |
-
-Source: CLEF eRisk Lab. Labels from `risk_golden_truth.txt`.
+| Split | Source | Users | Dep | Ctrl |
+|-------|--------|------:|----:|-----:|
+| **Train** | 2017+2018 pooled (80%) | 672 | 93 | 579 |
+| **Val** | 2017+2018 pooled (20%) | 163 | 28 | 135 |
+| **Test** | 2022 | 1,298 | 92 | 1,206 |
 
 ### 2.2 CLPsych 2015 (Twitter)
 
-| Split | Chunks | Users | Notes |
-|-------|--------|-------|-------|
-| **Train** | 0-50 | ~1,554 (477 dep, 872 ctrl) | Official training set |
-| **Test** | 60-89 | Same users, later tweets | Temporal split |
+| Split | Source | Users | Dep | Ctrl |
+|-------|--------|------:|----:|-----:|
+| **Train** | User-level stratified 70% | 939 | 329 | 610 |
+| **Val** | User-level stratified 15% | 201 | 70 | 131 |
+| **Test** | User-level stratified 15% | 202 | 71 | 131 |
 
-Three conditions available: depression, PTSD, control. Protocol uses depression vs control (binary).
+### 2.3 RSDD (Reddit) — Exploratory only
 
-### 2.3 RSDD (Reddit)
+RSDD has extreme imbalance (~8% depression rate) and noisy self-reported labels. Include for completeness but do NOT use for primary hypothesis testing.
 
-| Split | File | Users | Notes |
-|-------|------|-------|-------|
-| **Train** | training-002 | ~39K | Large, imbalanced (~8% depression) |
-| **Validation** | validation-001 | ~39K | Hyperparameter tuning |
-| **Test** | testing-003 | ~39K | Final evaluation |
+### 2.4 Pre-processing (Revised)
 
-### 2.4 Pre-processing
+**Embedding models** (ablation):
 
-All datasets are converted to unified JSONL format and embedded with `sentence-transformers/all-MiniLM-L6-v2` (D=384). Embeddings are stored as Parquet files. Original texts are retained for c-TF-IDF analysis.
+| Model | Dimension | Domain | Purpose |
+|-------|-----------|--------|---------|
+| `mental/mental-roberta-base` | 768 | Mental health (Reddit) | **Primary** — emotion-aware |
+| `sentence-transformers/all-MiniLM-L6-v2` | 384 | General purpose | Comparison baseline |
 
-**Temporal integrity**: Train/val/test splits respect the original dataset partitions. No user appears in multiple splits. No future data leaks into training.
+**Temporal encoding** (two features per post, added as metadata):
 
----
+| Feature | Formula | Rationale |
+|---------|---------|-----------|
+| `t_rel` | `(timestamp - user_first_post) / total_span` | Normalized position in user's history [0, 1] |
+| `gap` | `timestamp - previous_timestamp` (seconds) | Inter-post interval; behavioral signal |
 
-## 3. Independent Variables (Hyperparameters)
+**Post-level features** (computed during preprocessing):
 
-### 3.1 Graph Regions
-
-| Parameter | Search Space | Default |
-|-----------|-------------|---------|
-| HNSW level | {1, 2, 3} | 2 |
-| K (resulting regions) | ~N/16^L | Determined by level |
-
-### 3.2 Trajectory Smoothing
-
-| Parameter | Search Space | Default |
-|-----------|-------------|---------|
-| Window size (days) | {7, 14, 21, 30} | 14 |
-| EMA alpha | {0.1, 0.2, 0.3, 0.5} | 0.3 |
-
-### 3.3 Change Point Detection (PELT)
-
-| Parameter | Search Space | Default |
-|-----------|-------------|---------|
-| Penalty | {1.0, 2.0, 3.0, 5.0} × ln(n) | 3.0 × ln(n) |
-| Min segment length | {2, 3, 5} | 2 |
-
-### 3.4 Classifier
-
-| Parameter | Search Space | Default |
-|-----------|-------------|---------|
-| n_estimators | {100, 200, 500} | 200 |
-| max_depth | {5, 10, 20, None} | 10 |
-| class_weight | {balanced, None} | balanced |
-
-### 3.5 Search Strategy
-
-Grid search on validation set. Best configuration evaluated once on test set. Reported with 95% confidence intervals via bootstrap (1000 iterations).
+| Feature | Type | Source |
+|---------|------|--------|
+| `embedding` | float[768] | MentalRoBERTa |
+| `t_rel` | float | Relative time [0, 1] |
+| `gap_seconds` | float | Gap since previous post |
+| `gap_log` | float | log(1 + gap_seconds) — normalized |
+| `post_index` | int | Sequential index within user |
+| `hour_of_day` | int | Circadian signal |
+| `text_length` | int | Post length |
 
 ---
 
-## 4. Dependent Variables (Metrics)
+## 3. Feature Engineering (Revised)
 
-### 4.1 Classification (Primary)
+### 3.1 Multi-Level Region Features (Top-Down)
 
-| Metric | Computation | Threshold |
-|--------|-------------|-----------|
-| **ROC-AUC** | Area under ROC curve | Primary metric |
-| **F1** | Harmonic mean of precision/recall | ≥ 0.75 for H2 |
-| **Precision** | TP / (TP + FP) | Reported |
-| **Recall** | TP / (TP + FN) | Reported |
+For each HNSW hierarchy level L ∈ {3, 2, 1} (coarsest to finest):
 
-All metrics on **test set only**, computed per fold in 5-fold stratified CV on train, and once on held-out test.
+| Feature Group | Description | Dim |
+|--------------|-------------|-----|
+| **Region distribution** | Proportion of posts per region | K_L |
+| **Region entropy** | -Σ p·log(p) over regions | 1 |
+| **Top-region concentration** | Fraction of posts in top-3 regions | 1 |
+| **Region transition entropy** | Entropy of bigram transition matrix | 1 |
 
-### 4.2 Trajectory Analytics (Secondary)
+At the coarsest level (L=3, K≈60–80), these features are low-dimensional and interpretable.
 
-| Metric | Test | Significance |
-|--------|------|-------------|
-| Velocity (depression vs control) | Mann-Whitney U | p < 0.05 |
-| Hurst exponent (depression vs control) | Mann-Whitney U | p < 0.05 |
-| Change point frequency | Mann-Whitney U | p < 0.05 |
-| Change point severity | Mann-Whitney U | p < 0.05 |
-| Region distribution | Chi-squared | p < 0.05 |
+### 3.2 Behavioral Temporal Features
 
-Effect sizes reported as Cohen's d for continuous metrics, Cramér's V for categorical.
+| Feature | Description | Rationale |
+|---------|-------------|-----------|
+| `mean_gap` | Mean inter-post interval | Posting frequency |
+| `std_gap` | Std of inter-post intervals | Regularity |
+| `max_gap` | Longest silence | Withdrawal periods |
+| `gap_trend` | Slope of gap over time | Increasing → withdrawal |
+| `n_posts` | Total number of posts | Activity level |
+| `night_ratio` | Fraction of posts 00:00–06:00 | Circadian disruption |
+| `burst_count` | Number of posting bursts (>5 posts in 1h) | Manic/crisis episodes |
+| `gap_cv` | Coefficient of variation of gaps | Posting pattern stability |
 
-### 4.3 Comparison Metrics
+### 3.3 Sequential Embedding Features (with Temporal Attention)
 
-| Comparison | Method |
-|-----------|--------|
-| Region trajectories vs raw embeddings | Paired test on same users |
-| Across datasets | Report per-dataset + pooled |
-| H3 (region > raw) | McNemar test on classification |
+Instead of mean-pooling or EMA, aggregate post embeddings with **recency-weighted attention**:
+
+$$\mathbf{u} = \sum_i \alpha_i \cdot \mathbf{e}_i, \quad \alpha_i = \text{softmax}(w \cdot t_{\text{rel},i})$$
+
+Where $w$ is a learnable weight (or fixed linear ramp). This gives more weight to recent posts while preserving the full trajectory information. Implemented in Python using the embedding vectors from the CVX index.
+
+### 3.4 Feature Hierarchy
+
+**Level 0 (Simplest — Behavioral only):**
+- Gap features (§3.2) — no embeddings needed
+
+**Level 1 (Static Embedding):**
+- Mean embedding per user (baseline)
+
+**Level 2 (Temporal Embedding):**
+- Recency-weighted embedding aggregation (§3.3)
+
+**Level 3 (Region + Behavioral):**
+- Coarse region distribution (L=3) + behavioral features
+
+**Level 4 (Full Model):**
+- All of the above + finer region levels
 
 ---
 
-## 5. Experimental Plan
+## 4. Metrics (Revised)
 
-### Phase 1: Baseline Establishment
+### 4.1 Classification
 
-1. **Raw embedding baseline**: Reproduce current B1 results with proper train/test splits per dataset
-2. **Static baseline**: Classify using mean embedding per user (no temporal features) as sanity check
-3. Metrics: AUC, F1, precision, recall on test sets
+| Metric | Purpose |
+|--------|---------|
+| **ROC-AUC** | Ranking quality (primary) |
+| **F1** | Classification quality (primary) |
+| **Precision / Recall** | Operating point analysis |
+| **Precision@k** | Top-k screening scenario |
 
-### Phase 2: Region Trajectory Analysis
+### 4.2 Early Detection (NEW)
 
-1. **Region extraction**: For each dataset, extract regions at levels 1, 2, 3
-2. **c-TF-IDF labeling**: Label all regions, identify depression-related regions
-3. **Trajectory computation**: Compute smoothed trajectories with default hyperparameters
-4. **Analytics**: Velocity, Hurst, CPD on region trajectories for all users
-5. **Statistical tests**: All secondary metrics (§4.2)
+| Metric | Definition | Purpose |
+|--------|-----------|---------|
+| **ERDE₅** | Error penalized after 5 posts | Very early detection |
+| **ERDE₅₀** | Error penalized after 50 posts | Moderate early detection |
+| **AUC@k%** | AUC using only first k% of posts | Detection speed curve |
+| **latency** | Number of posts needed for AUC > 0.80 | Minimum observation window |
 
-### Phase 3: Hyperparameter Optimization
+### 4.3 Statistical Tests
 
-1. **Grid search on validation set** (eRisk 2017 test / 2018):
-   - HNSW level × window × alpha × penalty × classifier params
-   - Optimize for F1 (primary) and AUC (secondary)
-2. **Best config selection**: Choose config that maximizes F1 on validation
-3. **Sensitivity analysis**: How much do results vary across the grid?
+| Test | Variables | Significance |
+|------|-----------|-------------|
+| Mann-Whitney U | Each feature (dep vs ctrl) | p < 0.05, Bonferroni-corrected |
+| Effect size | Cohen's d | Report alongside p-values |
+| McNemar | Method A vs Method B | Classification comparison |
+| Ablation ΔAUC | Feature group removal | Contribution of each group |
 
-### Phase 4: Test Set Evaluation
+---
 
-1. **Apply best config** to all three test sets (eRisk 2022, CLPsych test chunks, RSDD test)
-2. **Report all metrics** with 95% CI via bootstrap
-3. **Compare region vs raw embedding** (H3) via McNemar test
-4. **Cross-dataset comparison** (H5): Are the same features discriminative?
+## 5. Experimental Plan (Revised)
 
-### Phase 5: Technique Exploration
+### Phase 0: Re-Embedding with MentalRoBERTa
 
-Apply additional CVX analytics on region trajectories:
+1. Generate MentalRoBERTa embeddings (D=768) for all 3 datasets
+2. Compute relative temporal features (t_rel, gap) per post
+3. Store as updated Parquet files alongside existing MiniLM embeddings
 
-| Technique | CVX Function | What it Tests |
-|-----------|-------------|---------------|
-| Multi-scale analysis | Resample trajectories at 7d, 14d, 30d, 90d windows | Scale-dependent dynamics |
-| Volatility (per-region) | Variance of region proportions over time | Stability of topical focus |
-| Drift attribution | `cvx.drift()` on region distributions | Which regions changed most |
-| Cohort divergence | Pairwise distance between dep/ctrl groups over time | When groups separate |
-| Path signatures | Compute on region trajectories | Higher-order trajectory patterns |
-| Temporal features fusion | Combine region features + raw embedding features | Complementarity |
+**Location**: Run on HPC (hpc.glaciar.lab) with GPU.
 
-### Phase 6: Early Detection Analysis
+### Phase 1: Feature-Level Analysis
 
-Test H6: classification using trajectory prefixes.
+Before any classification, analyze discriminative power of each feature group independently:
 
-1. For each user, take first {25%, 50%, 75%, 100%} of their posts
-2. Compute region trajectories on the prefix
-3. Classify and report AUC at each prefix length
-4. Plot AUC vs % trajectory observed (ERDE-style curve)
-5. Determine minimum observation window for AUC > 0.80
+1. **Behavioral features only** — Are gap/frequency patterns discriminative?
+2. **Region distribution at each level** — Which level is most discriminative?
+3. **Effect of embedding model** — MentalRoBERTa vs MiniLM on same features
+4. **Visualize**: Feature distributions (dep vs ctrl), effect sizes, p-values
+
+This phase answers: *what types of signal exist in the data?*
+
+### Phase 2: Hierarchical Region Analysis (Top-Down)
+
+1. **Level 3** (60–80 regions): Identify coarse topic areas. c-TF-IDF label each. Which regions are over/under-represented in depression?
+2. **Level 2** (~1,000 regions): Within discriminative L3 regions, drill down. Which sub-topics differ?
+3. **Level 1** (~6,000+ regions): Fine-grained analysis only for the most discriminative L2 sub-regions.
+4. **Transition analysis**: Build bigram transition matrices at L3. Are depression users "trapped" in certain regions or oscillating differently?
+
+### Phase 3: Classification with Feature Ablation
+
+Build classifiers with progressive feature sets:
+
+| Experiment | Features | Expected AUC |
+|-----------|---------|-------------|
+| Behavioral only | §3.2 | 0.55–0.65 |
+| Static embedding | Mean MentalRoBERTa per user | 0.85–0.92 |
+| Temporal embedding | Recency-weighted aggregation | 0.88–0.94 |
+| Region (L3) + behavioral | §3.1 + §3.2 | 0.80–0.90 |
+| Full model | All §3.1–3.4 | 0.90–0.95 |
+
+Each experiment: train on train split, tune threshold on val, evaluate on test with bootstrap CI.
+
+### Phase 4: Early Detection (ERDE)
+
+1. For each user, process posts sequentially in order
+2. At each chunk boundary (10%, 20%, ..., 100%), extract features from posts seen so far
+3. Classify and record decision + confidence
+4. Compute ERDE₅, ERDE₅₀, and AUC@k% curves
+5. Compare: how early can we detect with behavioral-only vs full model?
+
+### Phase 5: Pattern Analysis & Interpretability
+
+1. **Depression prototypes**: For train depression users, compute centroid trajectories at L3. What does a "typical depression pattern" look like?
+2. **Discriminative regions**: Rank regions by mutual information with label. Map to topics via c-TF-IDF.
+3. **Temporal pattern mining**: At what relative time (t_rel) does the depression signal become strongest? Is there a "critical window"?
+4. **Case studies**: 5 users with detailed timeline analysis (TP, FP, FN)
 
 ---
 
 ## 6. Post-hoc Analysis
 
-### 6.1 Error Analysis
+### 6.1 Ablation Study
 
-- **False negatives**: Depression users classified as control
-  - Do they have fewer posts? Shorter observation windows?
-  - Are their trajectories more similar to control group?
-  - Do they lack change points or show stable region distributions?
-- **False positives**: Control users classified as depression
-  - Do they discuss negative topics more than average controls?
-  - Are they in specific life circumstances (grief, stress) that mimic depression?
-- **Confusion matrix** per dataset, annotated with user characteristics
+| Ablation | Remove | Measures |
+|----------|--------|---------|
+| No behavioral features | Gap, frequency, circadian | Importance of posting patterns |
+| No region features | All region distributions | Importance of topical structure |
+| No temporal weighting | Use mean instead of recency attention | Importance of temporal attention |
+| MiniLM instead of MentalRoBERTa | Swap embeddings | Importance of domain adaptation |
+| Absolute timestamps | Replace relative time | Importance of relative encoding |
+| Only L3 regions | Remove L2, L1 | Is coarse enough? |
 
-### 6.2 Ablation Study
+### 6.2 Cross-Dataset Analysis
 
-Systematically remove feature groups and measure impact:
+- Feature importance correlation (Spearman) across eRisk and CLPsych
+- Transfer: train on eRisk, test on CLPsych (zero-shot)
+- Do the same coarse regions emerge with similar c-TF-IDF labels?
 
-| Ablation | Features Removed | Expected Impact |
-|----------|-----------------|----------------|
-| No velocity features | Mean velocity, std velocity, max velocity | Moderate |
-| No Hurst | Hurst exponent | Low-moderate |
-| No CPD features | n_changepoints, max_severity, cp_rate | Low (currently 0) |
-| No region distribution | Mean proportion per region | High |
-| No drift features | L2 drift, cosine drift | Moderate |
-| No volatility | Per-dimension volatility | Low-moderate |
-| Only region distribution (no temporal) | Remove all temporal dynamics | Benchmark: is temporal info needed? |
+### 6.3 Error Analysis
 
-### 6.3 Discriminative Region Analysis
-
-- **Top discriminative regions**: Rank regions by chi-squared between dep/ctrl
-- **c-TF-IDF of discriminative regions**: What topics separate the groups?
-- **Region transition patterns**: Which region→region transitions are predictive?
-  - Construct transition matrix per user, compare dep vs ctrl
-- **Temporal region heatmap**: For top discriminative regions, plot proportion over time for dep vs ctrl (aggregate)
-
-### 6.4 Temporal Signal Analysis
-
-- **When does the signal emerge?** Plot per-feature discriminability (AUC) as function of time
-- **Is there a "critical window"?** Identify the time period where features become most discriminative
-- **Pre-transition features**: For users with detected change points, analyze features in the N days *before* the change point
-
-### 6.5 Case Studies
-
-Select 3-5 users for detailed qualitative analysis:
-
-1. **True positive with clear trajectory**: Depression user with visible region shift + change point
-2. **True positive subtle case**: Depression user with gradual drift, no obvious change point
-3. **False negative**: Depression user that the model misses — why?
-4. **False positive**: Control user flagged as depression — explain
-5. **Early detection success**: User where prefix analysis detects signal early
-
-For each case: region trajectory plot, c-TF-IDF of dominant regions, sample posts from key periods, timeline of velocity/CPD events.
-
-### 6.6 Cross-Dataset Robustness
-
-- **Feature correlation across datasets**: Do the same features rank high in importance for eRisk, CLPsych, RSDD?
-  - Spearman correlation of feature importance rankings
-- **Transfer learning**: Train on eRisk, test on CLPsych and RSDD (zero-shot cross-dataset)
-- **Region topology comparison**: Do the same types of regions emerge across datasets?
-  - Compare c-TF-IDF labels across datasets for similar-sized regions
-
-### 6.7 Hyperparameter Robustness
-
-- **Sensitivity heatmap**: AUC as function of (window_days × alpha) on validation set
-- **Level sensitivity**: How much does performance change between level 1, 2, 3?
-- **Penalty sensitivity for CPD**: At what penalty does PELT start detecting changes? Quality of detections at different penalty levels
+- False negatives: Do they have fewer posts? More "normal" posting patterns?
+- False positives: Are they in grief/stress that mimics depression language?
+- Confusion matrix per dataset with user characteristics
 
 ---
 
 ## 7. Deliverables
 
-### Notebooks
+### Notebooks (Per Dataset)
 
 | Notebook | Content |
 |----------|---------|
-| `B1_main_analysis.ipynb` | Full pipeline: ingestion → regions → trajectories → classification → all three datasets |
-| `B1_hyperparameter_search.ipynb` | Grid search on validation sets, sensitivity analysis |
-| `B1_posthoc_analysis.ipynb` | Error analysis, ablation, case studies, cross-dataset |
-| `B1_early_detection.ipynb` | Prefix analysis, ERDE curves, minimum observation window |
+| `B1_eRisk.ipynb` | Full pipeline for eRisk (primary) |
+| `B1_CLPsych.ipynb` | CLPsych replication |
+| `B1_RSDD.ipynb` | RSDD exploratory (expected to be weak) |
+| `B1_ablation.ipynb` | Feature ablation study |
+| `B1_early_detection.ipynb` | ERDE analysis + AUC@k% curves |
 
-### Documentation
+### Key Figures
 
-- Results integrated into docs site with key figures and tables
-- Methodology section explaining graph semantic regions
-- Comparison table across datasets and methods
-
-### Figures
-
-- Stacked area trajectories (case studies)
-- Region distribution barplots (dep vs ctrl)
-- AUC vs observation window (early detection curve)
-- Sensitivity heatmaps (hyperparameters)
-- Feature importance with ablation
-- Discriminative region word clouds
-- Cross-dataset feature correlation
+- Feature discriminability heatmap (all features × datasets)
+- Top-down region analysis visualization
+- ERDE curves (AUC vs % posts observed)
+- c-TF-IDF word clouds for discriminative regions
+- Temporal signal emergence plot (discriminability vs relative time)
+- Case study timelines
 
 ---
 
 ## 8. Statistical Rigor
 
-- All p-values reported with Bonferroni correction for multiple comparisons
-- Effect sizes (Cohen's d, Cramér's V) alongside p-values
-- 95% confidence intervals via bootstrap (n=1000) for all test-set metrics
-- McNemar test for method comparisons (region vs raw)
-- No results reported on test set until hyperparameters are frozen on validation set
+- All p-values Bonferroni-corrected
+- Effect sizes (Cohen's d) alongside p-values
+- 95% bootstrap CI (n=1000) for all test-set metrics
+- McNemar test for method comparisons
+- No test-set results reported until hyperparameters frozen on validation
+- ERDE metrics computed with official eRisk evaluation code
 
 ---
 
@@ -313,28 +337,33 @@ For each case: region trajectory plot, c-TF-IDF of dominant regions, sample post
 
 ---
 
-## 10. Timeline
+## 10. Implementation Priority
 
-| Phase | Scope | Depends On |
-|-------|-------|-----------|
-| 1 | Baselines (3 datasets, proper splits) | Embeddings ready |
-| 2 | Region analysis (3 datasets) | Phase 1 |
-| 3 | Hyperparameter search (validation sets) | Phase 2 |
-| 4 | Test set evaluation | Phase 3 (frozen config) |
-| 5 | Technique exploration | Phase 4 |
-| 6 | Early detection analysis | Phase 4 |
-| Post-hoc | Error analysis, ablation, case studies | Phase 4 |
+| Priority | Action | Impact | Effort |
+|----------|--------|--------|--------|
+| **P0** | Re-embed with MentalRoBERTa | High — domain-specific emotional signal | Medium (GPU, ~2h) |
+| **P0** | Add relative time + gap features | High — correct temporal encoding | Low (preprocessing) |
+| **P1** | Behavioral features (gap analysis) | Medium — new signal type | Low |
+| **P1** | Top-down hierarchy (L3 first) | Medium — reduces dimensionality | Low |
+| **P2** | Recency-weighted attention | Medium — better aggregation | Medium |
+| **P2** | ERDE early detection evaluation | Medium — validates core use case | Medium |
+| **P3** | Cross-dataset transfer | Low — validation | Low |
 
 ---
 
 ## References
 
 1. Couto, M. et al. (2025). Temporal word embeddings for psychological disorder early detection. *JHIR*.
-2. Coppersmith, G. et al. (2018). NLP of social media as screening for suicide risk. *BMI Insights*.
-3. De Choudhury, M. et al. (2013). Predicting depression via social media. *ICWSM*.
-4. Losada, D. et al. (2019). eRisk: early risk prediction on the internet. *CLEF Working Notes*.
-5. Yates, A. et al. (2017). Depression and self-harm risk assessment in online forums. *EMNLP*.
-6. Killick, R. et al. (2012). Optimal detection of changepoints. *JASA*.
-7. Malkov, Y.A. & Yashunin, D.A. (2018). Efficient and robust ANN using HNSW graphs. *IEEE TPAMI*.
-8. Bamler, R. & Mandt, S. (2017). Dynamic word embeddings. *ICML*.
-9. Grootendorst, M. (2022). BERTopic: neural topic modeling with c-TF-IDF. *arXiv:2203.05794*.
+2. Ji, S. et al. (2022). MentalBERT: Publicly available pretrained language models for mental healthcare. *LREC*.
+3. Coppersmith, G. et al. (2018). NLP of social media as screening for suicide risk. *BMI Insights*.
+4. De Choudhury, M. et al. (2013). Predicting depression via social media. *ICWSM*.
+5. Losada, D. et al. (2019). eRisk: early risk prediction on the internet. *CLEF Working Notes*.
+6. Yates, A. et al. (2017). Depression and self-harm risk assessment in online forums. *EMNLP*.
+7. Killick, R. et al. (2012). Optimal detection of changepoints. *JASA*.
+8. Malkov, Y.A. & Yashunin, D.A. (2018). Efficient and robust ANN using HNSW graphs. *IEEE TPAMI*.
+9. Bamler, R. & Mandt, S. (2017). Dynamic word embeddings. *ICML*.
+10. Grootendorst, M. (2022). BERTopic: neural topic modeling with c-TF-IDF. *arXiv:2203.05794*.
+11. Hofmann, V. et al. (2021). Dynamic Contextualized Word Embeddings. *ACL*.
+12. DS@GT (2025). From prompts to predictions: temporal attention models for eRisk 2025. *CLEF Working Notes*.
+13. MDHAN (2022). Hierarchical Attention Network for Explainable Depression Detection. *COLING*.
+14. Bucur, A.M. (2024). Computational Approaches to Mental Health. *PhD Thesis, UPV*.
