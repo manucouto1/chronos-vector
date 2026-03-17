@@ -303,6 +303,35 @@ impl TemporalIndex {
         self.inner.regions(level)
     }
 
+    /// Get all points in a specific region, optionally time-filtered (RFC-005).
+    ///
+    /// Args:
+    ///     region_id: The hub node_id of the region (from regions()).
+    ///     level: HNSW level (default 3 for coarsest).
+    ///     start: Optional start timestamp filter.
+    ///     end: Optional end timestamp filter.
+    ///
+    /// Returns:
+    ///     List of (entity_id, timestamp) for each point in the region.
+    #[pyo3(signature = (region_id, level=3, start=None, end=None))]
+    fn region_members(
+        &self,
+        region_id: u32,
+        level: usize,
+        start: Option<i64>,
+        end: Option<i64>,
+    ) -> Vec<(u64, i64)> {
+        let filter = match (start, end) {
+            (Some(s), Some(e)) => TemporalFilter::Range(s, e),
+            _ => TemporalFilter::All,
+        };
+        self.inner
+            .region_members(region_id, level, filter)
+            .into_iter()
+            .map(|(_node_id, entity_id, timestamp)| (entity_id, timestamp))
+            .collect()
+    }
+
     /// Compute smoothed region-distribution trajectory for an entity.
     ///
     /// Tracks how the user's posts distribute across semantic regions
