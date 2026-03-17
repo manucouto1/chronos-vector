@@ -119,6 +119,17 @@ pub trait TemporalIndexAccess: Send + Sync {
         Vec::new()
     }
 
+    /// Get points belonging to a specific region, optionally time-filtered (RFC-005).
+    /// Returns `(node_id, entity_id, timestamp)` per member.
+    fn region_members(
+        &self,
+        _region_hub: u32,
+        _level: usize,
+        _filter: TemporalFilter,
+    ) -> Vec<(u32, u64, i64)> {
+        Vec::new()
+    }
+
     /// Smoothed region-distribution trajectory for an entity (RFC-004).
     fn region_trajectory(
         &self,
