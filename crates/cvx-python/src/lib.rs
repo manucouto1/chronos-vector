@@ -568,6 +568,46 @@ fn event_features(timestamps: Vec<i64>) -> PyResult<std::collections::HashMap<St
     Ok(map)
 }
 
+/// Compute topological features of a point cloud via persistent homology.
+///
+/// Tracks connected components (β₀) as filtration radius grows.
+/// Detects cluster structure: fragmentation, convergence, prominent gaps.
+///
+/// Best applied on region centroids (from index.regions()), NOT raw points.
+///
+/// Args:
+///     points: List of vectors (the point cloud).
+///     n_radii: Number of radii for Betti curve sampling (default 20).
+///     persistence_threshold: Min persistence to count as significant (default 0.1).
+///
+/// Returns:
+///     Dict with: n_components, total_persistence, max_persistence,
+///     mean_persistence, persistence_entropy, betti_curve, radii.
+#[pyfunction]
+#[pyo3(signature = (points, n_radii=20, persistence_threshold=0.1))]
+fn topological_features(
+    points: Vec<Vec<f32>>,
+    n_radii: usize,
+    persistence_threshold: f64,
+) -> std::collections::HashMap<String, PyObject> {
+    use pyo3::IntoPyObject;
+
+    let point_refs: Vec<&[f32]> = points.iter().map(|p| p.as_slice()).collect();
+    let feat = cvx_analytics::topology::topological_summary(&point_refs, n_radii, persistence_threshold);
+
+    Python::with_gil(|py| {
+        let mut map = std::collections::HashMap::new();
+        map.insert("n_components".into(), feat.n_components.into_pyobject(py).unwrap().into_any().unbind());
+        map.insert("total_persistence".into(), feat.total_persistence_h0.into_pyobject(py).unwrap().into_any().unbind());
+        map.insert("max_persistence".into(), feat.max_persistence.into_pyobject(py).unwrap().into_any().unbind());
+        map.insert("mean_persistence".into(), feat.mean_persistence.into_pyobject(py).unwrap().into_any().unbind());
+        map.insert("persistence_entropy".into(), feat.persistence_entropy.into_pyobject(py).unwrap().into_any().unbind());
+        map.insert("betti_curve".into(), feat.betti_curve.into_pyobject(py).unwrap().into_any().unbind());
+        map.insert("radii".into(), feat.radii.into_pyobject(py).unwrap().into_any().unbind());
+        map
+    })
+}
+
 /// Wasserstein (optimal transport) drift between two region distributions.
 ///
 /// Unlike L2, Wasserstein respects the geometry: shifting mass between
@@ -609,5 +649,6 @@ fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(frechet_distance, m)?)?;
     m.add_function(wrap_pyfunction!(wasserstein_drift, m)?)?;
     m.add_function(wrap_pyfunction!(event_features, m)?)?;
+    m.add_function(wrap_pyfunction!(topological_features, m)?)?;
     Ok(())
 }
