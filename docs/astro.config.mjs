@@ -102,6 +102,7 @@ export default defineConfig({
 						{ label: 'RFC-002: Correctness & Performance', slug: 'rfc/rfc-002' },
 						{ label: 'RFC-003: Neural ODE (TorchScript)', slug: 'rfc/rfc-003' },
 						{ label: 'RFC-004: Semantic Regions', slug: 'rfc/rfc-004' },
+						{ label: 'RFC-005: Query Capabilities', slug: 'rfc/rfc-005' },
 					],
 				},
 				{
@@ -115,7 +116,7 @@ export default defineConfig({
 					badge: { text: 'NEW', variant: 'tip' },
 					items: [
 						{ label: 'Overview', slug: 'tutorials/overview' },
-						{ label: 'B1: Mental Health Trajectories', slug: 'tutorials/b1-mental-health' },
+						{ label: 'B1: Mental Health Trajectories', slug: 'tutorials/b1-mental-health', badge: { text: 'Results', variant: 'success' } },
 					],
 				},
 				{
