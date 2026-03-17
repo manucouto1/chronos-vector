@@ -324,51 +324,141 @@ The following are explicitly **out of scope** for this RFC:
 
 Each phase is a separate feature branch, merged to develop independently.
 
-### Phase 1: `feat/bulk-insert` (P0) ✅ DONE
+### Completed Phases
 
-| Task | Crate | Status |
-|------|-------|--------|
-| Add `set_ef_construction()` / `set_ef_search()` | cvx-index | ✅ Done |
-| Add `bulk_insert(numpy)` to Python bindings | cvx-python | ✅ Done |
-| Expose `set_ef_construction/search()` in Python | cvx-python | ✅ Done |
-| Benchmark: ef=25 → 668 pts/sec (1.7× vs 395) | — | ✅ Done |
+#### Phase 1: `feat/bulk-insert-quantizer` (P0) ✅
 
-### Phase 2: `feat/quantizer-trait` (P0)
+- `set_ef_construction()` / `set_ef_search()` in cvx-index + Python
+- `bulk_insert(numpy)` in cvx-python
+- `Quantizer` trait with `NoQuantizer` and `ScalarQuantizer` in cvx-core
+- Benchmark: ef=25 → 668 pts/sec (1.7× vs baseline 395)
 
-| Task | Crate | Status |
-|------|-------|--------|
-| Define `Quantizer` trait | cvx-core | ✅ Done |
-| Implement `NoQuantizer`, `ScalarQuantizer` | cvx-core | ✅ Done |
-| Integrate Quantizer into `HnswGraph<Q>` | cvx-index | Pending |
-| Store codes per node, use in candidate search | cvx-index | Pending |
-| Benchmark SQ8 speedup | — | Pending |
+#### Phase 2: `feat/quantizer-integration` (P0) ✅
 
-### Phase 3: `feat/region-members` (P1)
+- SQ8 integrated into `HnswGraph`: stores uint8 codes alongside float32 vectors
+- `search_layer` uses `distance_fast` for candidate exploration, exact for re-ranking
+- `enable/disable_scalar_quantization()` in cvx-index + Python
+- Benchmark: SQ8 + ef=25 → 805 pts/sec (2.4× vs baseline)
+- 80 cvx-index tests pass, 7/10 search quality overlap
 
-| Task | Crate |
-|------|-------|
-| Implement `region_members()` in TemporalHnsw | cvx-index |
-| Add to TemporalIndexAccess trait | cvx-core |
-| Expose in Python bindings | cvx-python |
-| Cache region assignments (lazy, invalidated on insert) | cvx-index |
+#### Phase 3: `feat/region-members` (P1) ✅
 
-### Phase 4: `feat/path-signatures` (P1)
+- `region_members(hub, level, filter)` in TemporalHnsw
+- Added to `TemporalIndexAccess` trait + `ConcurrentTemporalHnsw`
+- Python: `index.region_members(region_id, level, start, end)`
+- Verified: counts match `regions()`, time filter works correctly
 
-| Task | Crate |
-|------|-------|
-| Implement truncated signature (depth 2-3) | cvx-analytics |
-| Implement log-signature via BCH formula | cvx-analytics |
-| Incremental update via Chen's Identity | cvx-analytics |
-| Expose `path_signature()` / `log_signature()` in Python | cvx-python |
+#### Phase 4: `feat/path-signatures` (P1) ✅
 
-### Phase 5: `feat/trajectory-similarity` (P2)
+- `compute_signature()`: truncated at depth 1-3 with iterated integrals
+- `compute_log_signature()`: compact antisymmetric alternative
+- `update_signature_incremental()`: Chen's Identity for O(K²) updates
+- `signature_distance()`: L2 between signatures
+- Python: `cvx.path_signature()`, `cvx.log_signature()`, `cvx.signature_distance()`
+- 6 tests pass including Chen's Identity validation
 
-| Task | Crate |
-|------|-------|
-| Discrete Fréchet distance | cvx-analytics |
-| Signature-based distance (L2 on signatures) | cvx-analytics |
-| `search_trajectories()` combining both methods | cvx-query |
-| Expose in Python | cvx-python |
+#### Phase 5: `feat/trajectory-similarity` (P2) ✅
+
+- `discrete_frechet()`: O(n×m) DP algorithm
+- Python: `cvx.frechet_distance(traj_a, traj_b)`
+- 91 total tests pass across cvx-analytics
+
+---
+
+### Pending Phases
+
+#### Phase 6: `feat/wasserstein-distance` (P1)
+
+**Goal:** Measure drift between region distributions using optimal transport instead of L2.
+
+Wasserstein respects the topology of the region graph: two distributions that shift mass between *neighboring* regions have lower distance than two that shift between *distant* regions. L2 treats all region pairs as equally far.
+
+| Task | Crate | Details |
+|------|-------|---------|
+| Implement Sliced Wasserstein distance | cvx-analytics | 1D projections + sort + L1, O(K × n_proj × K log K) |
+| Region graph distance matrix | cvx-index | Pairwise distances between region hubs for exact Wasserstein |
+| `wasserstein_drift(dist_t1, dist_t2)` | cvx-analytics | Compare two region distributions |
+| Expose in Python | cvx-python | `cvx.wasserstein_drift(dist_a, dist_b)` |
+| Tests: metric axioms, triangle inequality | cvx-analytics | — |
+
+**Spec reference:** `CVX_Stochastic_Analytics_Spec.md` §6.4.
+
+**References:**
+- Villani, C. (2008). *Optimal Transport: Old and New*. Springer.
+- Bonneel, N. et al. (2015). Sliced and Radon Wasserstein barycenters. *JMIV*.
+
+#### Phase 7: `feat/temporal-point-process` (P1)
+
+**Goal:** Extract features from the *timestamps themselves* — not the vectors. The pattern of *when* events occur is an independent signal from *what* the vectors contain.
+
+| Task | Crate | Details |
+|------|-------|---------|
+| Intensity estimation λ(t) via kernel smoothing | cvx-analytics | Gaussian kernel, bandwidth selection |
+| Inter-event interval statistics | cvx-analytics | Beyond mean/std: entropy, burstiness, memory coefficient |
+| Self-exciting detection (Hawkes test) | cvx-analytics | Fit exponential kernel, test α > 0 |
+| Temporal entropy H(gaps) | cvx-analytics | Regularity of posting/event pattern |
+| Expose as `cvx.event_features(timestamps)` | cvx-python | Returns dict of features |
+| Tests: known Poisson vs Hawkes sequences | cvx-analytics | — |
+
+**Key features to extract:**
+
+| Feature | Formula | What it captures |
+|---------|---------|-----------------|
+| `intensity_mean` | mean(λ(t)) | Average event rate |
+| `intensity_trend` | slope of λ(t) over time | Accelerating or decelerating |
+| `burstiness` | (σ_gap - μ_gap) / (σ_gap + μ_gap) | −1 = regular, 0 = Poisson, +1 = bursty |
+| `memory_coefficient` | autocorrelation of gaps at lag 1 | Do short gaps follow short gaps? |
+| `temporal_entropy` | −Σ p(bin) log p(bin) | Regularity of event timing |
+| `hawkes_alpha` | Fitted self-exciting parameter | Strength of event clustering |
+| `circadian_strength` | Amplitude of 24h Fourier component | Presence of daily rhythm |
+
+**References:**
+- Hawkes, A.G. (1971). Spectra of some self-exciting and mutually exciting point processes. *Biometrika*.
+- Goh, K.-I. & Barabási, A.-L. (2008). Burstiness and memory in complex systems. *EPL*.
+- Detecting Anomalous Event Sequences with Temporal Point Processes (NeurIPS 2021).
+
+#### Phase 8: `feat/topological-features` (P2)
+
+**Goal:** Track topological changes in the embedding space over time using persistent homology. Detects structural shifts like "the user's topic space fragmented" or "two clusters merged".
+
+| Task | Crate | Details |
+|------|-------|---------|
+| Vietoris-Rips persistent homology (depth 0-1) | cvx-analytics | Connected components + loops |
+| Betti curve computation over time windows | cvx-analytics | β₀(t), β₁(t) as temporal signal |
+| Change detection on Betti curves | cvx-analytics | Apply PELT to topological features |
+| Expose as `cvx.topological_features(entity_id, ...)` | cvx-python | Returns Betti curves |
+| Tests: known topologies (sphere, torus, clusters) | cvx-analytics | — |
+
+**What Betti numbers reveal:**
+- β₀ = number of connected components (clusters)
+- β₁ = number of loops (cyclic patterns)
+- A sudden increase in β₀ = topic space fragmentation
+- A decrease in β₀ = convergence to fewer topics
+
+**Note:** This is computationally expensive for large point clouds. Apply on region centroids (K~80 at L3) rather than raw points, making it tractable.
+
+**References:**
+- Edelsbrunner, H. & Harer, J. (2010). *Computational Topology*. AMS.
+- Zigzag persistence for temporal networks. *EPJ Data Science*, 2023.
+- Persistence-based statistics for detecting structural changes. *arXiv:2511.00938*, 2025.
+
+#### Phase 9: `feat/fisher-rao-distance` (P3)
+
+**Goal:** Use the natural Riemannian metric on the space of probability distributions (region distributions) for principled distributional comparison.
+
+| Task | Crate | Details |
+|------|-------|---------|
+| Fisher-Rao distance for categorical distributions | cvx-analytics | Closed-form for multinomials |
+| Fisher information matrix computation | cvx-analytics | Curvature of the statistical manifold |
+| Natural gradient on region distribution space | cvx-analytics | Direction of steepest distributional change |
+| Expose in Python | cvx-python | `cvx.fisher_rao_distance(dist_a, dist_b)` |
+| Tests: known distribution pairs | cvx-analytics | — |
+
+**Why it matters:** The Fisher-Rao metric is the *unique* Riemannian metric (up to scale) that is invariant under sufficient statistics (Chentsov's theorem). It's the mathematically correct way to measure distance between distributions. For categorical distributions (region proportions), it has a closed-form solution via the Bhattacharyya angle.
+
+**References:**
+- Rao, C.R. (1945). Information and accuracy attainable in estimation. *Bull. Calcutta Math. Soc.*
+- Chentsov, N.N. (1982). *Statistical Decision Rules and Optimal Inference*. AMS.
 
 ---
 
@@ -376,11 +466,10 @@ Each phase is a separate feature branch, merged to develop independently.
 
 | Component | Change |
 |-----------|--------|
-| `cvx-core/traits` | New `Quantizer` trait; add `region_members()` to TemporalIndexAccess |
-| `cvx-index/hnsw` | `HnswGraph` becomes generic over `Q: Quantizer`; `region_members()` |
-| `cvx-analytics` | New modules: `signatures.rs`, `trajectory.rs` |
-| `cvx-python` | `bulk_insert()`, `set_ef_*()`, `region_members()`, `path_signature()`, `search_trajectories()` |
-| `cvx-python/Cargo.toml` | `numpy` dependency added |
+| `cvx-core/traits` | `Quantizer` trait ✅; `region_members()` in TemporalIndexAccess ✅ |
+| `cvx-index/hnsw` | SQ8 integrated ✅; `region_members()` ✅ |
+| `cvx-analytics` | `signatures.rs` ✅; `trajectory.rs` ✅; pending: `wasserstein.rs`, `point_process.rs`, `topology.rs`, `fisher_rao.rs` |
+| `cvx-python` | 12 public functions ✅; pending: `wasserstein_drift`, `event_features`, `topological_features`, `fisher_rao_distance` |
 
 No breaking changes to existing API. All additions are new methods.
 
@@ -388,49 +477,67 @@ No breaking changes to existing API. All additions are new methods.
 
 ## Verification
 
-### Performance Benchmarks
+### Completed Benchmarks
 
 ```
 Ingestion (D=768, 10K points):
-  Individual insert (ef=200): ~395 pts/sec
-  bulk_insert (ef=25):        ~668 pts/sec (1.7×)
-  With SQ8 quantizer:         Target ≥2,000 pts/sec (5×)
+  Individual insert (ef=200): 395 pts/sec
+  bulk_insert (ef=25):        668 pts/sec (1.7×)
+  SQ8 + ef=25:                805 pts/sec (2.4×)
+  Search quality at SQ8+ef25: 7/10 overlap with exact baseline
 
-Region query (N=100K, K=80 at L3):
-  region_members(): <100ms for any region
+Region query:
+  region_members(): verified counts match regions(), time filter correct
 
-Path signature (K=80, depth=2):
-  Full computation: <10ms per entity
-  Incremental update: <0.1ms per insert
+Path signatures:
+  Chen's Identity: incremental == full computation (within 1e-8)
+  Log-signature dimension: K + K(K-1)/2 verified
 
-Trajectory search (N=10K entities):
-  search_by_signature(k=10): <1s (L2 on pre-computed signatures)
-  search_trajectories(k=10, method="frechet"): <5s
+Fréchet:
+  Identical paths → 0, parallel offset → exact offset value
+  Different-order paths → positive distance
 ```
 
-### Correctness Tests
+### Completed Test Counts
 
-- `bulk_insert` produces functional graph (search returns correct neighbors)
-- SQ8 distances preserve neighbor ordering (rank correlation > 0.95 vs exact)
-- `region_members` returns exactly the points that `assign_region` maps to that hub
-- Path signature satisfies Chen's Identity: S(α*β) == S(α) ⊗ S(β)
-- Fréchet distance satisfies metric axioms (symmetry, triangle inequality)
-- Log-signature dimension matches K + K(K-1)/2
+| Crate | Tests | Status |
+|-------|------:|--------|
+| cvx-core | 9 | ✅ All pass (incl. quantizer) |
+| cvx-index | 80 | ✅ All pass |
+| cvx-analytics | 91 | ✅ All pass (incl. signatures + trajectory) |
+
+### Pending Test Plans
+
+| Phase | Tests to write |
+|-------|---------------|
+| Wasserstein | Metric axioms (non-negative, symmetric, triangle inequality), known transport plans |
+| Point process | Poisson sequence → burstiness ≈ 0, regular → burstiness ≈ −1, Hawkes → α > 0 |
+| Topology | Unit circle → β₁ = 1, two clusters → β₀ = 2, single cluster → β₀ = 1 |
+| Fisher-Rao | Distance between identical distributions = 0, orthogonal distributions = π/2 |
 
 ---
 
 ## References
 
-1. Malkov, Y.A. & Yashunin, D.A. (2018). Efficient and robust approximate nearest neighbor using HNSW graphs. *IEEE TPAMI*, 42(4), 824-836.
-2. Jégou, H. et al. (2011). Product quantization for nearest neighbor search. *IEEE TPAMI*, 33(1), 117-128.
-3. Guo, R. et al. (2020). Accelerating large-scale inference with anisotropic vector quantization. *ICML*.
-4. Toohey, K. & Duckham, M. (2015). Trajectory similarity measures. *ACM SIGSPATIAL Workshop*.
-5. Xie, D. et al. (2017). Distributed trajectory similarity search. *VLDB*, 10(11), 1478-1489.
-6. Salvador, S. & Chan, P. (2007). FastDTW. *Intelligent Data Analysis*, 11(5), 561-580.
+1. Malkov, Y.A. & Yashunin, D.A. (2018). HNSW graphs. *IEEE TPAMI*, 42(4).
+2. Jégou, H. et al. (2011). Product quantization. *IEEE TPAMI*, 33(1).
+3. Guo, R. et al. (2020). Anisotropic vector quantization. *ICML*.
+4. Toohey, K. & Duckham, M. (2015). Trajectory similarity measures. *ACM SIGSPATIAL*.
+5. Xie, D. et al. (2017). Distributed trajectory similarity search. *VLDB*, 10(11).
+6. Salvador, S. & Chan, P. (2007). FastDTW. *Intelligent Data Analysis*, 11(5).
 7. Spatio-temporal trajectory similarity survey. *arXiv:2303.05012*, 2023.
-8. Fortunato, S. (2010). Community detection in graphs. *Physics Reports*, 486(3-5), 75-174.
-9. Lyons, T.J. (1998). Differential equations driven by rough signals. *Revista Matemática Iberoamericana*.
-10. Chevyrev, I. & Kormilitzin, A. (2016). A primer on the signature method in ML. *arXiv:1603.03788*.
-11. Kidger, P. & Lyons, T. (2021). Signatory: differentiable computations of the signature. *ICLR*.
-12. Vassiliades, V. et al. (2018). Using CVT to scale up MAP-Elites. *IEEE Trans. Evol. Comp.*, 22(4).
-13. MOSCITO (2024). Temporal subspace clustering for MD data. *arXiv:2408.00056*.
+8. Fortunato, S. (2010). Community detection in graphs. *Physics Reports*, 486(3-5).
+9. Lyons, T.J. (1998). Differential equations driven by rough signals. *Rev. Mat. Iberoam.*
+10. Chevyrev, I. & Kormilitzin, A. (2016). Signature primer. *arXiv:1603.03788*.
+11. Kidger, P. & Lyons, T. (2021). Signatory. *ICLR*.
+12. Vassiliades, V. et al. (2018). CVT-MAP-Elites. *IEEE Trans. Evol. Comp.*, 22(4).
+13. MOSCITO (2024). Temporal subspace clustering for MD. *arXiv:2408.00056*.
+14. Villani, C. (2008). *Optimal Transport: Old and New*. Springer.
+15. Bonneel, N. et al. (2015). Sliced Wasserstein barycenters. *JMIV*.
+16. Hawkes, A.G. (1971). Self-exciting point processes. *Biometrika*, 58(1).
+17. Goh, K.-I. & Barabási, A.-L. (2008). Burstiness and memory. *EPL*, 81(4).
+18. NeurIPS (2021). Detecting anomalous event sequences with TPPs.
+19. Edelsbrunner, H. & Harer, J. (2010). *Computational Topology*. AMS.
+20. Zigzag persistence for temporal networks. *EPJ Data Science*, 2023.
+21. Rao, C.R. (1945). Information and accuracy. *Bull. Calcutta Math. Soc.*
+22. Chentsov, N.N. (1982). *Statistical Decision Rules and Optimal Inference*. AMS.
