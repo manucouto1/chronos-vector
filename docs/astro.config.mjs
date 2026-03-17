@@ -113,8 +113,20 @@ export default defineConfig({
 					],
 				},
 				{
-					label: 'Tutorials',
+					label: 'Examples',
 					badge: { text: 'NEW', variant: 'tip' },
+					items: [
+						{ label: 'Overview', slug: 'examples/overview' },
+						{ label: 'Mental Health Detection', slug: 'examples/mental-health', badge: { text: 'Live', variant: 'success' } },
+						{ label: 'Quality-Diversity (MAP-Elites)', slug: 'examples/map-elites' },
+						{ label: 'Molecular Dynamics', slug: 'examples/molecular-dynamics' },
+						{ label: 'Drug Discovery', slug: 'examples/drug-discovery' },
+						{ label: 'MLOps Drift Detection', slug: 'examples/mlops-drift' },
+						{ label: 'Quantitative Finance', slug: 'examples/finance' },
+					],
+				},
+				{
+					label: 'Tutorials',
 					items: [
 						{ label: 'Overview', slug: 'tutorials/overview' },
 						{ label: 'B1: Mental Health Trajectories', slug: 'tutorials/b1-mental-health', badge: { text: 'Results', variant: 'success' } },
