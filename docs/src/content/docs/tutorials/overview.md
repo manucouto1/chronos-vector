@@ -27,7 +27,8 @@ Each tutorial applies this framework to a different domain, demonstrating that t
 
 | Tutorial | Domain | Data | Key Insight | Status |
 |----------|--------|------|-------------|--------|
-| [Mental Health Explorer](/tutorials/b1-explorer) | Clinical NLP | eRisk (D=768) | Depression shows anti-persistent linguistic dynamics (H<0.5) and circadian disruption | Available |
+| [Mental Health Explorer](/tutorials/b1-explorer) | Clinical NLP | eRisk (D=768) | 13 CVX temporal features → F1=0.60 (AUC=0.64); early detection at 10% of posts | Available |
+| [Clinical Anchoring](/tutorials/b2-clinical-anchoring) | Clinical NLP | eRisk (D=768) | Anchor-based drift, topic polarization, semantic velocity for symptom tracking | In Progress |
 | [MAP-Elites Archive](/tutorials/map-elites) | Quality-Diversity | Synthetic (D=20) | HNSW replaces CVT with adaptive niches; archive topology reveals exploration structure | Available |
 | [MLOps Drift Detection](/tutorials/mlops-drift) | Production ML | Synthetic (D=64) | 5 independent drift signals detect gradual and sudden distribution shifts | Available |
 
