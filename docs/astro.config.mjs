@@ -90,6 +90,7 @@ export default defineConfig({
 						{ label: 'Rust API Docs', slug: 'specs/rust-api-docs' },
 						{ label: 'Benchmark Strategy', slug: 'specs/benchmark-plan' },
 						{ label: 'Performance Benchmarks', slug: 'specs/benchmarks', badge: { text: 'Results', variant: 'success' } },
+						{ label: 'Temporal Analytics Toolkit', slug: 'specs/temporal-analytics', badge: { text: '17 fns', variant: 'success' } },
 						{ label: 'Implementation Decisions', slug: 'specs/implementation-guide' },
 						{ label: 'Git Workflow & Versioning', slug: 'specs/git-workflow' },
 					],
