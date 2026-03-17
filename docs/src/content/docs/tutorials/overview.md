@@ -1,75 +1,69 @@
 ---
-title: "Tutorials Overview"
-description: "Interactive Jupyter notebooks demonstrating ChronosVector's analytical capabilities"
+title: "Tutorials"
+description: "Interactive notebooks demonstrating how ChronosVector captures, analyzes, and quantifies transformation in high-dimensional spaces"
 ---
 
-The ChronosVector tutorial series consists of interactive Jupyter notebooks that demonstrate practical applications of temporal vector analytics. Each tutorial is structured as a scientific paper with executable code, rich visualizations, and measurable metrics.
+## The Dimension of Change
 
-## Tutorial Families
+Every domain has entities that **transform over time** — a patient's language evolves, a market regime shifts, a molecule folds, an ML model drifts. Traditional vector databases store snapshots. ChronosVector stores *trajectories* and provides the mathematical tools to understand their shape.
 
-### Family B: Early Risk Detection in Social Media
+The temporal dimension is not just "when" — it is the **dimension of change, evolution, and transformation**. CVX's 17 analytical functions form a layered framework for understanding how entities move through embedding spaces:
 
-| # | Tutorial | Key Methods | Status |
-|---|---------|-------------|--------|
-| **B1** | [Semantic Region Trajectory Analysis for Mental Health](/tutorials/b1-mental-health) | Graph regions, EMA trajectories, temporal features | Available |
-| B2 | Early Warning Signals: Change Point Detection in User Behavior | PELT, BOCPD, prefix features | Planned |
-| B3 | Drift Attribution: Explaining What Changed and When | Per-dimension analysis, Pareto | Planned |
-| B4 | Stochastic Characterization of User Trajectories | Hurst, ADF/KPSS, OU process | Planned |
-| B5 | Predictive Modeling: Neural ODE for Crisis Anticipation | Neural ODE, TorchScript | Planned |
-| B6 | Cohort Divergence: When At-Risk Groups Separate | Pairwise distance, CPD | Planned |
-| B7 | Multi-Scale Temporal Analysis | Multi-scale resampling | Planned |
+| Level | Question | CVX Functions | What It Reveals |
+|-------|----------|---------------|-----------------|
+| 1 | Where has the entity been? | `trajectory`, `search` | The raw path through embedding space |
+| 2 | How fast is it changing? | `velocity`, `drift` | Rate and direction of transformation |
+| 3 | Is change persistent or erratic? | `hurst_exponent` | Long-range dependence: trending vs oscillating |
+| 4 | When did regime transitions happen? | `detect_changepoints` | Structural breaks in behavior |
+| 5 | How does the distribution transform? | `region_trajectory`, `wasserstein_drift`, `fisher_rao_distance` | Semantic migration between topics/clusters |
+| 6 | What is the *shape* of the transformation? | `path_signature`, `signature_distance` | Universal nonlinear trajectory fingerprint |
+| 7 | How does the topology evolve? | `topological_features` | Fragmentation, convergence, structural change |
 
-### Family A: Quantitative Finance
+Each tutorial applies this framework to a different domain, demonstrating that the **same mathematical tools** reveal transformation across fundamentally different data.
 
-| # | Tutorial | Key Methods | Status |
-|---|---------|-------------|--------|
-| A1 | Market Regime Detection via Temporal kNN | GARCH, temporal features | Planned |
-| A2 | Factor Decay & Mean Reversion Analysis | ADF/KPSS, Ornstein-Uhlenbeck | Planned |
-| A3 | Volatility Clustering in Embedding Space | GARCH(1,1), rough volatility | Planned |
-| A4 | Path Signatures for Portfolio Classification | Rough path theory | Planned |
-| A5 | Change Point Detection for Regime Shifts | PELT, BOCPD | Planned |
-| A6 | Temporal Analogy Queries | Diachronic semantics | Planned |
+---
 
-### Transversal
+## Available Tutorials
 
-| # | Tutorial | Key Methods | Status |
-|---|---------|-------------|--------|
-| T1 | Model Monitoring: Detecting Embedding Drift | MLOps, BOCPD | Planned |
-| T2 | Interpretability: From Vectors to Narratives | Attribution, PCA, heatmaps | Planned |
+| Tutorial | Domain | Data | Key Insight | Status |
+|----------|--------|------|-------------|--------|
+| [Mental Health Explorer](/tutorials/b1-explorer) | Clinical NLP | eRisk (D=768) | Depression shows anti-persistent linguistic dynamics (H<0.5) and circadian disruption | Available |
+| [MAP-Elites Archive](/tutorials/map-elites) | Quality-Diversity | Synthetic (D=20) | HNSW replaces CVT with adaptive niches; archive topology reveals exploration structure | Available |
+| [MLOps Drift Detection](/tutorials/mlops-drift) | Production ML | Synthetic (D=64) | 5 independent drift signals detect gradual and sudden distribution shifts | Available |
 
-## Current Results (B1)
+### Planned
 
-| Dataset | Method | ROC-AUC | F1 | Precision | Recall | Dims |
-|---------|--------|--------:|---:|----------:|-------:|-----:|
-| **eRisk** | Static MentalRoBERTa | 0.901 | 0.457 | 0.762 | 0.327 | 768 |
-| **eRisk** | **Full (Temp+Region+Behav)** | **0.911** | **0.458** | 0.717 | 0.337 | 878 |
-| **eRisk** | Region L3 only | 0.890 | 0.418 | 0.582 | 0.327 | 99 |
-| CLPsych | Static MentalRoBERTa | 0.787 | **0.579** | 0.714 | **0.486** | 768 |
-| CLPsych | Temporal + Behavioral | **0.804** | 0.571 | 0.723 | 0.472 | 779 |
+| Tutorial | Domain | Focus |
+|----------|--------|-------|
+| Molecular Dynamics | Computational Chemistry | Conformational clustering via graph regions, trajectory comparison |
+| Drug Discovery | Medicinal Chemistry | Campaign navigation through chemical space |
+| Quantitative Finance | Trading | Market regime detection, path-dependent analysis |
 
-**Early detection:** eRisk AUC = 0.849 with only 10% of posts. CLPsych AUC = 0.813 with 20%.
+---
 
-See [B1: Mental Health Trajectories](/tutorials/b1-mental-health) for full results with bootstrap CIs.
+## Running the Tutorials
 
-## Running the Notebooks
+Each tutorial is a self-contained Jupyter notebook in the `notebooks/` directory.
 
 ```bash
-# Setup conda environment
+# Setup
 conda activate cvx
 cd crates/cvx-python && maturin develop --release && cd ../..
 
 # Launch
-cd notebooks/
-jupyter notebook B1_eRisk.ipynb
+jupyter notebook notebooks/T_MAP_Elites.ipynb
 ```
 
-## Structure
+The Mental Health tutorial requires the eRisk dataset (see [Research Protocol 001](https://github.com/manucouto1/chronos-vector/blob/develop/design/CVX_Research_Protocol_001_Mental_Health.md)). The MAP-Elites and MLOps tutorials generate synthetic data and require no external files.
 
-Each notebook follows scientific paper structure:
-1. **Abstract** — Problem statement and key results
-2. **Introduction** — Scientific context and motivation
-3. **Setup** — Dependencies and data preparation
-4. **Methodology** — Step-by-step analysis with executable code
-5. **Results** — Visualizations, metrics, tables
-6. **Discussion** — Interpretation, limitations, clinical/financial implications
-7. **References** — Academic citations
+---
+
+## From Examples to Tutorials
+
+The [Examples](/examples/overview) section provides a **quick API reference** for each of CVX's 17 functions with concise code snippets. The tutorials below go deeper: each is a complete, executable analysis that follows the 7-level framework above, showing real outputs, interactive visualizations, and domain-specific interpretation.
+
+| Need | Go to |
+|------|-------|
+| "How do I call `path_signature()`?" | [Examples → API Reference](/examples/overview) |
+| "How does path signature analysis work on real data?" | [Tutorials](/tutorials/overview) |
+| "What functions does CVX have for distributional analysis?" | [Temporal Analytics Toolkit](/specs/temporal-analytics) |

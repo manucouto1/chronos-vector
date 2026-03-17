@@ -127,9 +127,13 @@ export default defineConfig({
 				},
 				{
 					label: 'Tutorials',
+					badge: { text: 'Interactive', variant: 'tip' },
 					items: [
 						{ label: 'Overview', slug: 'tutorials/overview' },
-						{ label: 'B1: Mental Health Trajectories', slug: 'tutorials/b1-mental-health', badge: { text: 'Results', variant: 'success' } },
+						{ label: 'Mental Health Explorer', slug: 'tutorials/b1-explorer', badge: { text: 'Live', variant: 'success' } },
+						{ label: 'MAP-Elites Archive', slug: 'tutorials/map-elites', badge: { text: 'Live', variant: 'success' } },
+						{ label: 'MLOps Drift Detection', slug: 'tutorials/mlops-drift', badge: { text: 'Live', variant: 'success' } },
+						{ label: 'B1: Classification Results', slug: 'tutorials/b1-mental-health' },
 					],
 				},
 				{
