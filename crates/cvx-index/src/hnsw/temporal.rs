@@ -79,6 +79,21 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         self.graph.is_empty()
     }
 
+    /// Set ef_construction at runtime (lower for bulk load, higher for quality).
+    pub fn set_ef_construction(&mut self, ef: usize) {
+        self.graph.set_ef_construction(ef);
+    }
+
+    /// Set ef_search at runtime.
+    pub fn set_ef_search(&mut self, ef: usize) {
+        self.graph.set_ef_search(ef);
+    }
+
+    /// Get the current configuration.
+    pub fn config(&self) -> &HnswConfig {
+        self.graph.config()
+    }
+
     /// Insert a temporal point into the index.
     ///
     /// Returns the internal node_id assigned to this point.
