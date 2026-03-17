@@ -16,6 +16,7 @@ pub mod explain;
 pub mod multiscale;
 pub mod ode;
 pub mod pelt;
+pub mod point_process;
 pub mod signatures;
 pub mod temporal_ml;
 pub mod trajectory;
