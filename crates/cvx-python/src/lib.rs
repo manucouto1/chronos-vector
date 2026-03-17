@@ -165,6 +165,24 @@ impl TemporalIndex {
         self.inner.set_ef_search(ef);
     }
 
+    /// Enable scalar quantization for ~4× faster distance computation.
+    ///
+    /// Encodes each vector dimension as uint8. Candidate distances use
+    /// fast integer arithmetic; final results use exact float32.
+    ///
+    /// Args:
+    ///     min_val: Expected minimum value per dimension (default -1.0 for normalized).
+    ///     max_val: Expected maximum value per dimension (default 1.0 for normalized).
+    #[pyo3(signature = (min_val=-1.0, max_val=1.0))]
+    fn enable_quantization(&mut self, min_val: f32, max_val: f32) {
+        self.inner.enable_scalar_quantization(min_val, max_val);
+    }
+
+    /// Disable scalar quantization.
+    fn disable_quantization(&mut self) {
+        self.inner.disable_scalar_quantization();
+    }
+
     /// Search for k nearest neighbors.
     #[pyo3(signature = (vector, k=10, alpha=1.0, query_timestamp=0, filter_start=None, filter_end=None))]
     fn search(
