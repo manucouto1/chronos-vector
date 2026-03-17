@@ -536,6 +536,38 @@ fn signature_distance(sig_a: Vec<f64>, sig_b: Vec<f64>) -> f64 {
         .sqrt()
 }
 
+/// Extract temporal point process features from event timestamps.
+///
+/// Analyzes the *when* of events as an independent signal from *what* the vectors
+/// contain. Returns features characterizing temporal patterns: regularity,
+/// burstiness, memory, and intensity trends.
+///
+/// Args:
+///     timestamps: Sorted list of event timestamps (at least 3).
+///
+/// Returns:
+///     Dict with keys: n_events, span, mean_gap, std_gap, burstiness, memory,
+///     temporal_entropy, intensity_trend, gap_cv, max_gap, circadian_strength.
+#[pyfunction]
+fn event_features(timestamps: Vec<i64>) -> PyResult<std::collections::HashMap<String, f64>> {
+    let f = cvx_analytics::point_process::extract_event_features(&timestamps)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+    let mut map = std::collections::HashMap::new();
+    map.insert("n_events".into(), f.n_events as f64);
+    map.insert("span".into(), f.span);
+    map.insert("mean_gap".into(), f.mean_gap);
+    map.insert("std_gap".into(), f.std_gap);
+    map.insert("burstiness".into(), f.burstiness);
+    map.insert("memory".into(), f.memory);
+    map.insert("temporal_entropy".into(), f.temporal_entropy);
+    map.insert("intensity_trend".into(), f.intensity_trend);
+    map.insert("gap_cv".into(), f.gap_cv);
+    map.insert("max_gap".into(), f.max_gap);
+    map.insert("circadian_strength".into(), f.circadian_strength);
+    Ok(map)
+}
+
 /// Wasserstein (optimal transport) drift between two region distributions.
 ///
 /// Unlike L2, Wasserstein respects the geometry: shifting mass between
@@ -576,5 +608,6 @@ fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(signature_distance, m)?)?;
     m.add_function(wrap_pyfunction!(frechet_distance, m)?)?;
     m.add_function(wrap_pyfunction!(wasserstein_drift, m)?)?;
+    m.add_function(wrap_pyfunction!(event_features, m)?)?;
     Ok(())
 }
