@@ -11,7 +11,7 @@ The ChronosVector tutorial series consists of interactive Jupyter notebooks that
 
 | # | Tutorial | Key Methods | Status |
 |---|---------|-------------|--------|
-| **B1** | [Linguistic Trajectory Analysis for Mental Health](/tutorials/b1-mental-health) | Velocity, CPD, drift attribution, Hurst | Available |
+| **B1** | [Semantic Region Trajectory Analysis for Mental Health](/tutorials/b1-mental-health) | Graph regions, EMA trajectories, temporal features | Available |
 | B2 | Early Warning Signals: Change Point Detection in User Behavior | PELT, BOCPD, prefix features | Planned |
 | B3 | Drift Attribution: Explaining What Changed and When | Per-dimension analysis, Pareto | Planned |
 | B4 | Stochastic Characterization of User Trajectories | Hurst, ADF/KPSS, OU process | Planned |
@@ -37,15 +37,30 @@ The ChronosVector tutorial series consists of interactive Jupyter notebooks that
 | T1 | Model Monitoring: Detecting Embedding Drift | MLOps, BOCPD | Planned |
 | T2 | Interpretability: From Vectors to Narratives | Attribution, PCA, heatmaps | Planned |
 
+## Current Results (B1)
+
+| Dataset | Method | ROC-AUC | F1 | Precision | Recall | Dims |
+|---------|--------|--------:|---:|----------:|-------:|-----:|
+| **eRisk** | Static MentalRoBERTa | 0.901 | 0.457 | 0.762 | 0.327 | 768 |
+| **eRisk** | **Full (Temp+Region+Behav)** | **0.911** | **0.458** | 0.717 | 0.337 | 878 |
+| **eRisk** | Region L3 only | 0.890 | 0.418 | 0.582 | 0.327 | 99 |
+| CLPsych | Static MentalRoBERTa | 0.787 | **0.579** | 0.714 | **0.486** | 768 |
+| CLPsych | Temporal + Behavioral | **0.804** | 0.571 | 0.723 | 0.472 | 779 |
+
+**Early detection:** eRisk AUC = 0.849 with only 10% of posts. CLPsych AUC = 0.813 with 20%.
+
+See [B1: Mental Health Trajectories](/tutorials/b1-mental-health) for full results with bootstrap CIs.
+
 ## Running the Notebooks
 
 ```bash
-# Install dependencies
-pip install chronos-vector matplotlib numpy seaborn plotly pandas scipy scikit-learn
+# Setup conda environment
+conda activate cvx
+cd crates/cvx-python && maturin develop --release && cd ../..
 
-# Launch Jupyter
+# Launch
 cd notebooks/
-jupyter notebook
+jupyter notebook B1_eRisk.ipynb
 ```
 
 ## Structure
