@@ -536,6 +536,31 @@ fn signature_distance(sig_a: Vec<f64>, sig_b: Vec<f64>) -> f64 {
         .sqrt()
 }
 
+/// Wasserstein (optimal transport) drift between two region distributions.
+///
+/// Unlike L2, Wasserstein respects the geometry: shifting mass between
+/// *neighboring* regions costs less than between *distant* ones.
+///
+/// Args:
+///     dist_a: Region distribution at time T₁ (list of floats summing to ~1.0).
+///     dist_b: Region distribution at time T₂.
+///     centroids: List of centroid vectors (one per region, from index.regions()).
+///     n_projections: Number of random projections for Sliced Wasserstein (default 50).
+///
+/// Returns:
+///     Sliced Wasserstein distance (float). Lower = more similar.
+#[pyfunction]
+#[pyo3(signature = (dist_a, dist_b, centroids, n_projections=50))]
+fn wasserstein_drift(
+    dist_a: Vec<f32>,
+    dist_b: Vec<f32>,
+    centroids: Vec<Vec<f32>>,
+    n_projections: usize,
+) -> f64 {
+    let centroid_refs: Vec<&[f32]> = centroids.iter().map(|c| c.as_slice()).collect();
+    cvx_analytics::wasserstein::wasserstein_drift(&dist_a, &dist_b, &centroid_refs, n_projections)
+}
+
 /// ChronosVector Python module.
 #[pymodule]
 fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -550,5 +575,6 @@ fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(log_signature, m)?)?;
     m.add_function(wrap_pyfunction!(signature_distance, m)?)?;
     m.add_function(wrap_pyfunction!(frechet_distance, m)?)?;
+    m.add_function(wrap_pyfunction!(wasserstein_drift, m)?)?;
     Ok(())
 }
