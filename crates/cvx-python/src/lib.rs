@@ -22,6 +22,7 @@
 //! features = cvx.temporal_features(trajectory)
 //! ```
 
+use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 
 use cvx_analytics::calculus;
@@ -93,6 +94,75 @@ impl TemporalIndex {
     /// Insert a temporal point.
     fn insert(&mut self, entity_id: u64, timestamp: i64, vector: Vec<f32>) -> u32 {
         self.inner.insert(entity_id, timestamp, &vector)
+    }
+
+    /// Bulk insert from numpy arrays.
+    ///
+    /// Significantly faster than individual insert() calls: avoids per-call
+    /// Python↔Rust overhead and optionally lowers ef_construction during load.
+    ///
+    /// Args:
+    ///     entity_ids: np.ndarray[uint64] of shape (N,)
+    ///     timestamps: np.ndarray[int64] of shape (N,)
+    ///     vectors: np.ndarray[float32] of shape (N, D)
+    ///     ef_construction: Optional reduced ef for faster ingestion (restored after).
+    ///
+    /// Returns:
+    ///     Number of points inserted.
+    #[pyo3(signature = (entity_ids, timestamps, vectors, ef_construction=None))]
+    fn bulk_insert(
+        &mut self,
+        entity_ids: PyReadonlyArray1<u64>,
+        timestamps: PyReadonlyArray1<i64>,
+        vectors: PyReadonlyArray2<f32>,
+        ef_construction: Option<usize>,
+    ) -> PyResult<usize> {
+        let ids = entity_ids.as_slice()
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("entity_ids: {e}")))?;
+        let ts = timestamps.as_slice()
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("timestamps: {e}")))?;
+        let vecs = vectors.as_array();
+        let n = ids.len();
+
+        if ts.len() != n || vecs.nrows() != n {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                format!("Length mismatch: entity_ids={n}, timestamps={}, vectors={}",
+                        ts.len(), vecs.nrows())
+            ));
+        }
+
+        // Optionally lower ef_construction for bulk load
+        let original_ef = self.inner.config().ef_construction;
+        if let Some(ef) = ef_construction {
+            self.inner.set_ef_construction(ef);
+        }
+
+        for i in 0..n {
+            let row = vecs.row(i);
+            self.inner.insert(ids[i], ts[i], row.as_slice().unwrap());
+        }
+
+        // Restore original ef_construction
+        if ef_construction.is_some() {
+            self.inner.set_ef_construction(original_ef);
+        }
+
+        Ok(n)
+    }
+
+    /// Set ef_construction at runtime.
+    ///
+    /// Lower values (50-100) speed up ingestion at slight recall cost.
+    /// Higher values (200+) improve construction quality.
+    fn set_ef_construction(&mut self, ef: usize) {
+        self.inner.set_ef_construction(ef);
+    }
+
+    /// Set ef_search at runtime.
+    ///
+    /// Trade search speed for accuracy per query.
+    fn set_ef_search(&mut self, ef: usize) {
+        self.inner.set_ef_search(ef);
     }
 
     /// Search for k nearest neighbors.

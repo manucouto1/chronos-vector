@@ -3,6 +3,8 @@
 //! These traits define the contracts between subsystems. Each crate implements
 //! the relevant traits, enabling loose coupling and testability via mock implementations.
 
+pub mod quantizer;
+
 use crate::error::{AnalyticsError, IndexError, QueryError, StorageError};
 use crate::types::{ChangePoint, CpdMethod, ScoredResult, TemporalFilter, TemporalPoint};
 

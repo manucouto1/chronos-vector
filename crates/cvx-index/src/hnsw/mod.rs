@@ -131,6 +131,16 @@ impl<D: DistanceMetric> HnswGraph<D> {
         self.nodes.is_empty()
     }
 
+    /// Set ef_construction at runtime (e.g., lower for bulk load, higher for incremental).
+    pub fn set_ef_construction(&mut self, ef: usize) {
+        self.config.ef_construction = ef;
+    }
+
+    /// Set ef_search at runtime.
+    pub fn set_ef_search(&mut self, ef: usize) {
+        self.config.ef_search = ef;
+    }
+
     /// Generate a random level for a new node.
     ///
     /// Capped at 32 (supports up to M^32 ≈ 10^38 nodes). See RFC-002-07.
