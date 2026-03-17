@@ -13,6 +13,7 @@ pub mod backend;
 pub mod bocpd;
 pub mod calculus;
 pub mod explain;
+pub mod fisher_rao;
 pub mod multiscale;
 pub mod ode;
 pub mod pelt;
