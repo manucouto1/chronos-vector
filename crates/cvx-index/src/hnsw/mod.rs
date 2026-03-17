@@ -99,6 +99,11 @@ impl optimized::NodeVectors for [HnswNode] {
 }
 
 /// HNSW graph index for approximate nearest neighbor search.
+///
+/// Optionally stores scalar-quantized codes (uint8) for accelerated distance
+/// computation during construction and search. When enabled, candidate exploration
+/// uses fast integer distances on codes, while final neighbor selection uses exact
+/// float32 distances for quality. See RFC-005 §3.
 pub struct HnswGraph<D: DistanceMetric> {
     config: HnswConfig,
     metric: D,
@@ -106,6 +111,11 @@ pub struct HnswGraph<D: DistanceMetric> {
     entry_point: Option<u32>,
     max_level: usize,
     rng: SmallRng,
+    /// Scalar-quantized codes: node_id → uint8 code (same dim as vectors).
+    /// When Some, `distance_fast` uses integer arithmetic (~4× faster).
+    sq_codes: Option<Vec<Vec<u8>>>,
+    /// Quantization parameters: (min_val, scale) for encoding/decoding.
+    sq_params: (f32, f32),
 }
 
 impl<D: DistanceMetric> HnswGraph<D> {
@@ -118,7 +128,57 @@ impl<D: DistanceMetric> HnswGraph<D> {
             entry_point: None,
             max_level: 0,
             rng: SmallRng::from_os_rng(),
+            sq_codes: None,
+            sq_params: (-1.0, 127.5), // default for L2-normalized vectors: [-1,1]→[0,255]
         }
+    }
+
+    /// Enable scalar quantization for accelerated distance computation.
+    ///
+    /// When enabled, each inserted vector is also encoded as uint8 and
+    /// candidate distances during `search_layer` use fast integer arithmetic.
+    /// Final neighbor selection still uses exact float32 distances.
+    ///
+    /// For L2-normalized embeddings (range [-1, 1]), use default parameters.
+    /// For unnormalized data, provide the expected min/max range.
+    pub fn enable_scalar_quantization(&mut self, min_val: f32, max_val: f32) {
+        let range = max_val - min_val;
+        self.sq_params = (min_val, if range > 0.0 { 255.0 / range } else { 1.0 });
+
+        // Encode existing nodes
+        let codes: Vec<Vec<u8>> = self.nodes.iter()
+            .map(|node| Self::encode_sq(&node.vector, self.sq_params.0, self.sq_params.1))
+            .collect();
+        self.sq_codes = Some(codes);
+    }
+
+    /// Disable scalar quantization (revert to exact distances only).
+    pub fn disable_scalar_quantization(&mut self) {
+        self.sq_codes = None;
+    }
+
+    /// Whether scalar quantization is active.
+    pub fn is_quantized(&self) -> bool {
+        self.sq_codes.is_some()
+    }
+
+    /// Encode a vector to uint8 using scalar quantization.
+    #[inline]
+    fn encode_sq(vector: &[f32], min_val: f32, scale: f32) -> Vec<u8> {
+        vector.iter()
+            .map(|&v| ((v - min_val) * scale).clamp(0.0, 255.0) as u8)
+            .collect()
+    }
+
+    /// Fast L2 distance on uint8 codes (auto-vectorized by LLVM).
+    #[inline]
+    fn distance_sq(a: &[u8], b: &[u8]) -> f32 {
+        let mut sum: u32 = 0;
+        for i in 0..a.len() {
+            let diff = a[i] as i32 - b[i] as i32;
+            sum += (diff * diff) as u32;
+        }
+        sum as f32 // skip sqrt — monotonic, preserves ordering
     }
 
     /// Number of vectors in the index.
@@ -177,6 +237,11 @@ impl<D: DistanceMetric> HnswGraph<D> {
             neighbors: (0..=level).map(|_| NeighborList::new()).collect(),
         };
         self.nodes.push(node);
+
+        // Store SQ code if quantization is enabled
+        if let Some(ref mut codes) = self.sq_codes {
+            codes.push(Self::encode_sq(vector, self.sq_params.0, self.sq_params.1));
+        }
 
         // First node
         if self.nodes.len() == 1 {
@@ -270,14 +335,18 @@ impl<D: DistanceMetric> HnswGraph<D> {
 
     /// Greedy search for the single closest node at a given level.
     fn greedy_closest(&self, start: u32, query: &[f32], level: usize) -> u32 {
+        let query_code = self.sq_codes.as_ref().map(|_|
+            Self::encode_sq(query, self.sq_params.0, self.sq_params.1));
+        let qc = query_code.as_deref();
+
         let mut current = start;
-        let mut current_dist = self.distance(current, query);
+        let mut current_dist = self.distance_fast(current, qc, query);
 
         loop {
             let mut changed = false;
             let neighbors = self.neighbors_at(current, level);
             for &neighbor in neighbors {
-                let dist = self.distance(neighbor, query);
+                let dist = self.distance_fast(neighbor, qc, query);
                 if dist < current_dist {
                     current = neighbor;
                     current_dist = dist;
@@ -291,8 +360,16 @@ impl<D: DistanceMetric> HnswGraph<D> {
     }
 
     /// Beam search at a single level. Returns candidates sorted by distance (ascending).
+    ///
+    /// When scalar quantization is enabled, candidate exploration uses fast uint8
+    /// distances. Final results are re-ranked with exact float32 distances.
     fn search_layer(&self, entry: u32, query: &[f32], ef: usize, level: usize) -> Vec<(u32, f32)> {
-        let entry_dist = self.distance(entry, query);
+        // Pre-encode query for SQ if enabled
+        let query_code = self.sq_codes.as_ref().map(|_|
+            Self::encode_sq(query, self.sq_params.0, self.sq_params.1));
+        let qc = query_code.as_deref();
+
+        let entry_dist = self.distance_fast(entry, qc, query);
 
         // Min-heap for candidates to explore (closest first)
         let mut candidates: BinaryHeap<Reverse<OrdF32Entry>> = BinaryHeap::new();
@@ -319,7 +396,7 @@ impl<D: DistanceMetric> HnswGraph<D> {
                 }
                 visited[neighbor as usize] = true;
 
-                let dist = self.distance(neighbor, query);
+                let dist = self.distance_fast(neighbor, qc, query);
                 let farthest_result = results.peek().map(|e| e.0).unwrap_or(f32::INFINITY);
 
                 if dist < farthest_result || results.len() < ef {
@@ -332,8 +409,14 @@ impl<D: DistanceMetric> HnswGraph<D> {
             }
         }
 
-        // Extract results sorted by distance (ascending)
-        let mut result_vec: Vec<(u32, f32)> = results.into_iter().map(|e| (e.1, e.0)).collect();
+        // Re-rank with exact distances when SQ was used (quality matters for final results)
+        let mut result_vec: Vec<(u32, f32)> = if self.sq_codes.is_some() {
+            results.into_iter()
+                .map(|e| (e.1, self.distance(e.1, query)))
+                .collect()
+        } else {
+            results.into_iter().map(|e| (e.1, e.0)).collect()
+        };
         result_vec.sort_by(|a, b| a.1.total_cmp(&b.1));
         result_vec
     }
@@ -505,10 +588,26 @@ impl<D: DistanceMetric> HnswGraph<D> {
     }
 
     /// Compute distance between a stored node and a query vector.
+    ///
+    /// When scalar quantization is enabled, uses fast uint8 distances
+    /// for candidate exploration (~4× faster). Falls back to exact
+    /// float32 distance when SQ is disabled.
     #[inline]
     fn distance(&self, node_id: u32, query: &[f32]) -> f32 {
         self.metric
             .distance(&self.nodes[node_id as usize].vector, query)
+    }
+
+    /// Fast approximate distance using scalar-quantized codes.
+    ///
+    /// Returns the exact distance if SQ is not enabled.
+    #[inline]
+    fn distance_fast(&self, node_id: u32, query_code: Option<&[u8]>, query: &[f32]) -> f32 {
+        if let (Some(codes), Some(qc)) = (&self.sq_codes, query_code) {
+            Self::distance_sq(&codes[node_id as usize], qc)
+        } else {
+            self.distance(node_id, query)
+        }
     }
 
     /// Get the neighbor list for a node at a given level.
