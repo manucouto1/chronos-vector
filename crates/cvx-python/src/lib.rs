@@ -503,6 +503,27 @@ fn log_signature(
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
+/// Compute discrete Fréchet distance between two trajectories.
+///
+/// Measures the maximum minimum distance between corresponding points
+/// when both paths are traversed monotonically (the "dog-walking" distance).
+///
+/// Args:
+///     traj_a: List of (timestamp, vector) tuples.
+///     traj_b: List of (timestamp, vector) tuples.
+///
+/// Returns:
+///     Fréchet distance (float). Lower = more similar paths.
+#[pyfunction]
+fn frechet_distance(
+    traj_a: Vec<(i64, Vec<f32>)>,
+    traj_b: Vec<(i64, Vec<f32>)>,
+) -> f64 {
+    let a: Vec<(i64, &[f32])> = traj_a.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+    let b: Vec<(i64, &[f32])> = traj_b.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+    cvx_analytics::trajectory::discrete_frechet_temporal(&a, &b)
+}
+
 /// Compute distance between two path signatures.
 ///
 /// Fast trajectory similarity: O(output_dim) per comparison.
@@ -528,5 +549,6 @@ fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(path_signature, m)?)?;
     m.add_function(wrap_pyfunction!(log_signature, m)?)?;
     m.add_function(wrap_pyfunction!(signature_distance, m)?)?;
+    m.add_function(wrap_pyfunction!(frechet_distance, m)?)?;
     Ok(())
 }
