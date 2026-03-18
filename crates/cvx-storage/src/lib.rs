@@ -1,8 +1,33 @@
-//! `cvx-storage` — Tiered storage architecture for ChronosVector.
+//! # `cvx-storage` — Tiered storage architecture for ChronosVector.
 //!
-//! Manages hot/warm/cold storage tiers with automatic compaction:
-//! - **hot**: RocksDB wrapper with column families for vectors, deltas, metadata, timelines
-//! - **warm**: Parquet read/write with Arrow RecordBatch and dictionary encoding
-//! - **cold**: Object store (S3/MinIO/GCS) with Zarr format and PQ-encoded vectors
-//! - **compactor**: Tier migration logic (hot -> warm -> cold)
-//! - **wal**: Write-ahead log with segment-based append-only design
+//! ## Layer 1: In-Memory Store
+//! [`memory::InMemoryStore`] — non-persistent storage for development and testing.
+//!
+//! ## Layer 3: Hot Store (RocksDB)
+//! [`hot::HotStore`] — persistent storage with column families, prefix bloom filters,
+//! and per-CF compression. Requires the `hot-storage` feature flag.
+//!
+//! ## Layer 5: Write-Ahead Log
+//! [`wal`] — Append-only, CRC32-validated log with segment rotation and crash recovery.
+//!
+//! ## Layer 9: Warm Store & Tiered Storage
+//! [`warm::WarmStore`] — File-based partitioned storage. Requires `warm-storage` feature.
+//! [`tiered::TieredStorage`] — Composite router across hot → warm tiers.
+//!
+//! ## Shared
+//! [`keys`] — Big-endian key encoding with sign-bit flip for correct timestamp ordering.
+
+#![deny(unsafe_code)]
+#![warn(missing_docs)]
+
+#[cfg(feature = "cold-storage")]
+pub mod cold;
+#[cfg(feature = "hot-storage")]
+pub mod hot;
+pub mod keys;
+pub mod memory;
+#[cfg(feature = "warm-storage")]
+pub mod tiered;
+pub mod wal;
+#[cfg(feature = "warm-storage")]
+pub mod warm;

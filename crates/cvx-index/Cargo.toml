@@ -4,21 +4,37 @@ description = "Temporal index engine (ST-HNSW) with time-decay edges and SIMD di
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license-file.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 
 [features]
-default = ["simd-auto"]
-simd-auto = []
-simd-explicit = []
+default = []
 poincare = []
 
 [dependencies]
 cvx-core = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
+parking_lot = { workspace = true }
+pulp = { workspace = true }
+smallvec = { workspace = true }
+rand = { workspace = true }
+roaring = { workspace = true }
+
+[dependencies.serde]
+workspace = true
+
+[dependencies.postcard]
+workspace = true
 
 [dev-dependencies]
 proptest = { workspace = true }
 criterion = { workspace = true }
+serde_json = "1"
+
+[[bench]]
+name = "distance_kernels"
+harness = false
+
+[[bench]]
+name = "hnsw_search"
+harness = false

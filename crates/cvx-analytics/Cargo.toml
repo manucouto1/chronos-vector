@@ -4,7 +4,7 @@ description = "Temporal analytics: Neural ODE, change point detection, and vecto
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license-file.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 
@@ -14,13 +14,21 @@ neural-ode = []
 pelt = []
 bocpd = []
 gpu-compute = []
+torch-backend = ["dep:tch"]
 
 [dependencies]
 cvx-core = { workspace = true }
 cvx-storage = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
+tch = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
 criterion = { workspace = true }
+rand = { workspace = true }
+
+[[bench]]
+name = "analytics_bench"
+harness = false

@@ -1,0 +1,25 @@
+[package]
+name = "cvx-python"
+description = "Python bindings for ChronosVector via PyO3"
+version = "0.1.0"
+edition = "2024"
+authors = ["Manuel Couto Pintos"]
+license-file = "../../LICENSE"
+rust-version = "1.88.0"
+repository = "https://github.com/manucouto1/chronos-vector"
+
+[features]
+default = []
+torch-backend = ["cvx-analytics/torch-backend"]
+
+[lib]
+name = "chronos_vector"
+crate-type = ["cdylib"]
+
+[dependencies]
+cvx-core = { path = "../cvx-core" }
+cvx-index = { path = "../cvx-index" }
+cvx-analytics = { path = "../cvx-analytics" }
+cvx-storage = { path = "../cvx-storage" }
+pyo3 = { version = "0.24", features = ["extension-module"] }
+numpy = "0.24"
