@@ -38,6 +38,8 @@ pub mod optimized;
 pub mod partitioned;
 pub mod streaming;
 pub mod temporal;
+pub mod temporal_edges;
+pub mod temporal_graph;
 pub mod temporal_lsh;
 
 pub use concurrent::ConcurrentTemporalHnsw;
@@ -545,6 +547,16 @@ impl<D: DistanceMetric> HnswGraph<D> {
     /// Get the maximum level in the graph.
     pub fn max_level(&self) -> usize {
         self.max_level
+    }
+
+    /// Get the neighbor list for a node at a specific level (public accessor).
+    pub fn neighbors_at_level(&self, node_id: u32, level: usize) -> &[u32] {
+        self.neighbors_at(node_id, level)
+    }
+
+    /// Compute distance between a stored node and a query vector (public accessor).
+    pub fn distance_to(&self, node_id: u32, query: &[f32]) -> f32 {
+        self.distance(node_id, query)
     }
 
     /// Get all neighbor lists for a node (one per level).

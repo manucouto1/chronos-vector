@@ -10,6 +10,7 @@
 #![warn(missing_docs)]
 
 pub mod anchor;
+pub mod anchor_index;
 pub mod backend;
 pub mod bocpd;
 pub mod calculus;
