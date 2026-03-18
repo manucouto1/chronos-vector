@@ -1,6 +1,6 @@
 ---
-title: "MLOps: Embedding Drift Detection"
-description: "Detecting gradual and sudden distribution shifts using 5 independent temporal signals"
+title: "MLOps Drift Detection"
+description: "Production drift detection with CVX temporal analytics"
 ---
 
 Production ML models degrade silently. The embeddings they produce shift over time --- new topics emerge,

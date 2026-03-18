@@ -1,6 +1,6 @@
 ---
-title: "MAP-Elites: HNSW as a Quality-Diversity Archive"
-description: "Tracking the shape of evolutionary exploration with temporal vector analytics"
+title: "MAP-Elites Archive"
+description: "Quality-diversity archive with CVX temporal analytics"
 ---
 
 ## MAP-Elites: The Dimension of Change
