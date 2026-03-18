@@ -19,6 +19,7 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod embedder;
 pub mod protocol;
 pub mod server;
 pub mod tools;
