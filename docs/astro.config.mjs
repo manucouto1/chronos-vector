@@ -104,6 +104,7 @@ export default defineConfig({
 						{ label: 'RFC-003: Neural ODE (TorchScript)', slug: 'rfc/rfc-003' },
 						{ label: 'RFC-004: Semantic Regions', slug: 'rfc/rfc-004' },
 						{ label: 'RFC-005: Query Capabilities', slug: 'rfc/rfc-005' },
+						{ label: 'RFC-006: Anchor Projection', slug: 'rfc/rfc-006', badge: { text: 'New', variant: 'success' } },
 					],
 				},
 				{
@@ -133,6 +134,7 @@ export default defineConfig({
 						{ label: 'Mental Health Explorer', slug: 'tutorials/b1-explorer', badge: { text: 'Live', variant: 'success' } },
 						{ label: 'MAP-Elites Archive', slug: 'tutorials/map-elites', badge: { text: 'Live', variant: 'success' } },
 						{ label: 'MLOps Drift Detection', slug: 'tutorials/mlops-drift', badge: { text: 'Live', variant: 'success' } },
+						{ label: 'Clinical Anchoring', slug: 'tutorials/b2-clinical-anchoring', badge: { text: 'Live', variant: 'success' } },
 						{ label: 'B1: Classification Results', slug: 'tutorials/b1-mental-health' },
 					],
 				},
