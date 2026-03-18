@@ -33,11 +33,14 @@
 //! ```
 
 use std::collections::BTreeMap;
+use std::io::{Read, Write};
+use std::path::Path;
 
 use cvx_core::{DistanceMetric, TemporalFilter};
 use roaring::RoaringBitmap;
+use serde::{Deserialize, Serialize};
 
-use super::{HnswConfig, HnswGraph};
+use super::{HnswConfig, HnswGraph, HnswSnapshot};
 
 /// Spatiotemporal HNSW index.
 ///
@@ -408,6 +411,62 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             }
         }
         members
+    }
+}
+
+/// Serializable snapshot of a TemporalHnsw index.
+#[derive(Serialize, Deserialize)]
+struct TemporalSnapshot {
+    graph: HnswSnapshot,
+    timestamps: Vec<i64>,
+    entity_ids: Vec<u64>,
+    entity_index: BTreeMap<u64, Vec<(i64, u32)>>,
+    min_timestamp: i64,
+    max_timestamp: i64,
+}
+
+impl<D: DistanceMetric> TemporalHnsw<D> {
+    /// Save the index to a file using postcard binary encoding.
+    ///
+    /// The distance metric is NOT serialized (it's stateless).
+    /// On load, you must provide the same metric type.
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        let snapshot = TemporalSnapshot {
+            graph: self.graph.to_snapshot(),
+            timestamps: self.timestamps.clone(),
+            entity_ids: self.entity_ids.clone(),
+            entity_index: self.entity_index.clone(),
+            min_timestamp: self.min_timestamp,
+            max_timestamp: self.max_timestamp,
+        };
+
+        let bytes = postcard::to_allocvec(&snapshot)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        let mut file = std::fs::File::create(path)?;
+        file.write_all(&bytes)?;
+        Ok(())
+    }
+
+    /// Load an index from a file, providing the distance metric.
+    ///
+    /// The metric must match the one used during construction.
+    pub fn load(path: &Path, metric: D) -> std::io::Result<Self> {
+        let mut file = std::fs::File::open(path)?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
+
+        let snapshot: TemporalSnapshot = postcard::from_bytes(&bytes)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        Ok(Self {
+            graph: HnswGraph::from_snapshot(snapshot.graph, metric),
+            timestamps: snapshot.timestamps,
+            entity_ids: snapshot.entity_ids,
+            entity_index: snapshot.entity_index,
+            min_timestamp: snapshot.min_timestamp,
+            max_timestamp: snapshot.max_timestamp,
+        })
     }
 }
 

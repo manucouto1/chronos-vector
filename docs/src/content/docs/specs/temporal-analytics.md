@@ -3,7 +3,7 @@ title: "Temporal Analytics Toolkit"
 description: "Complete reference of CVX analytical capabilities: mathematical foundations, Python API, and cross-domain applications"
 ---
 
-ChronosVector provides **17 analytical functions** for extracting insights from temporal vector data. Each function is grounded in a specific mathematical framework and applicable across multiple domains.
+ChronosVector provides **19 analytical functions** for extracting insights from temporal vector data. Each function is grounded in a specific mathematical framework and applicable across multiple domains.
 
 ## Overview
 
@@ -16,6 +16,7 @@ ChronosVector provides **17 analytical functions** for extracting insights from 
 | [Distributional Distances](#distributional-distances) | `wasserstein_drift`, `fisher_rao_distance`, `hellinger_distance` | Optimal transport, information geometry |
 | [Point Process Analysis](#point-process-analysis) | `event_features` | Temporal point processes |
 | [Topological Analysis](#topological-analysis) | `topological_features` | Persistent homology (TDA) |
+| [Anchor Projection](#anchor-projection) | `project_to_anchors`, `anchor_summary` | Coordinate system change to reference frame |
 | [Prediction](#prediction) | `predict` | Linear extrapolation / Neural ODE |
 
 ---
@@ -228,6 +229,46 @@ Implemented via Union-Find on the pairwise distance graph (single-linkage equiva
 
 ---
 
+## Anchor Projection
+
+*See [RFC-006: Anchor Projection](/rfc/rfc-006) for design rationale and clinical validation.*
+
+### `cvx.project_to_anchors(trajectory, anchors, metric='cosine')`
+
+**Theory:** Projects a trajectory from absolute embedding space $\mathbb{R}^D$ into an anchor-relative coordinate system $\mathbb{R}^K$, where $K$ is the number of anchors. Each output dimension $k$ is the distance (cosine or L2) from the trajectory point to anchor $k$:
+
+$$\text{projected}_t[k] = d(\mathbf{x}_t, \mathbf{a}_k), \quad k = 1, \ldots, K$$
+
+This is a **coordinate system change**, not a new analytics paradigm. The output is itself a trajectory, so all existing CVX functions (`velocity`, `hurst_exponent`, `detect_changepoints`, `path_signature`, etc.) compose with it natively.
+
+**Output:** $(T, K)$ array — a trajectory in $\mathbb{R}^K$ where each dimension represents distance to the corresponding anchor.
+
+**Applications:**
+- **Mental health:** Measure drift toward/away from clinical poles (depression, anxiety, neutral). Anchor-relative features improved F1 from 0.600 to 0.781 on eRisk
+- **Finance:** Track portfolio proximity to sector archetypes (tech-heavy, defensive, balanced)
+- **Drug discovery:** Monitor compound evolution relative to known active/toxic/selective reference molecules
+- **MLOps:** Measure model embedding drift relative to known-good and known-bad reference distributions
+
+### `cvx.anchor_summary(projected)`
+
+**Theory:** Aggregates per-anchor distance dynamics into a fixed-size summary. For each anchor $k$, computes statistics over the projected trajectory's $k$-th dimension.
+
+**Output:** Dictionary per anchor with:
+
+| Statistic | Formula | Interpretation |
+|-----------|---------|---------------|
+| `mean` | $\bar{d}_k = \frac{1}{T}\sum_t d_k(t)$ | Average proximity to anchor $k$ |
+| `min` | $\min_t d_k(t)$ | Closest approach to anchor $k$ |
+| `trend` | Linear slope of $d_k(t)$ | Positive = drifting away, negative = approaching |
+| `last` | $d_k(T)$ | Current distance to anchor $k$ |
+
+**Applications:**
+- **Mental health:** Trend toward depression anchor with decreasing `min` signals progressive deterioration
+- **Finance:** `last` vs `mean` reveals whether current positioning is typical or extreme
+- **MLOps:** Rising `trend` across all anchors indicates the model is entering an out-of-distribution region
+
+---
+
 ## Prediction
 
 ### `cvx.predict(trajectory, target_timestamp)`
@@ -249,3 +290,5 @@ Implemented via Union-Find on the pairwise distance graph (single-linkage equiva
 | `fisher_rao_distance` | Distribution shift | Risk profile change | Activity profile change | Diversity metric | State population change | Class balance drift |
 | `event_features` | Night posting, burstiness | Trading patterns | Experiment cadence | Generation dynamics | Simulation events | Request patterns |
 | `topological_features` | Topic fragmentation | Market structure | Landscape topology | Archive connectivity | Conformational basins | Embedding structure |
+| `project_to_anchors` | Drift toward clinical poles | Sector proximity | Reference compound distance | Archetype tracking | State proximity | Distribution drift |
+| `anchor_summary` | Deterioration trend | Position vs. norm | Campaign summary | Exploration summary | Basin residence | Drift summary |
