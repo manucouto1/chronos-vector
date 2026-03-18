@@ -36,7 +36,9 @@
 pub mod concurrent;
 pub mod optimized;
 pub mod partitioned;
+pub mod streaming;
 pub mod temporal;
+pub mod temporal_lsh;
 
 pub use concurrent::ConcurrentTemporalHnsw;
 pub use temporal::TemporalHnsw;
