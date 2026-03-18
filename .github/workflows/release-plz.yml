@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release-plz:
-    name: Create Release PR
+    name: Release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,8 +20,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Run release-plz
         uses: release-plz/action@v0.5
-        with:
-          command: release-pr
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

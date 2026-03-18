@@ -1,10 +1,12 @@
 # ChronosVector (CVX)
 
 [![CI](https://github.com/manucouto1/chronos-vector/actions/workflows/ci.yml/badge.svg)](https://github.com/manucouto1/chronos-vector/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/manucouto1/chronos-vector/branch/main/graph/badge.svg)](https://codecov.io/gh/manucouto1/chronos-vector)
 [![Docs](https://img.shields.io/badge/docs-live-green.svg)](https://manucouto1.github.io/chronos-vector/)
+[![crates.io](https://img.shields.io/crates/v/chronos-vector.svg)](https://crates.io/crates/chronos-vector)
+[![PyPI](https://img.shields.io/pypi/v/chronos-vector.svg)](https://pypi.org/project/chronos-vector/)
 [![License: Elastic-2.0](https://img.shields.io/badge/license-Elastic--2.0-blue.svg)](LICENSE)
 [![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://pypi.org/project/chronos-vector/)
 
 A high-performance temporal vector database that treats time as a geometric dimension of embedding space. ChronosVector answers not just "what is similar?" but "what *was* similar, what *changed*, and what *will be* similar?"
 

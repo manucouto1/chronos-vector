@@ -58,7 +58,7 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          for crate in cvx-core cvx-index cvx-storage cvx-ingest cvx-analytics cvx-query cvx-api cvx-server; do
+          for crate in cvx-core cvx-index cvx-storage cvx-ingest cvx-analytics cvx-query cvx-api cvx-server chronos-vector; do
             echo "Publishing $crate..."
             cargo publish -p $crate --allow-dirty || true
             sleep 30
