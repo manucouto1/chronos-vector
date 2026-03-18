@@ -284,6 +284,250 @@ pub struct PredictionResponse {
     pub method: String,
 }
 
+/// Counterfactual request params.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CounterfactualParams {
+    /// Change point timestamp.
+    pub change_point: i64,
+}
+
+/// Divergence point in the counterfactual analysis.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DivergenceEntry {
+    /// Timestamp.
+    pub timestamp: i64,
+    /// Distance between actual and counterfactual.
+    pub distance: f32,
+}
+
+/// Counterfactual response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CounterfactualResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Change point timestamp.
+    pub change_point: i64,
+    /// Total divergence (area under curve).
+    pub total_divergence: f64,
+    /// Timestamp of maximum divergence.
+    pub max_divergence_time: i64,
+    /// Maximum divergence value.
+    pub max_divergence_value: f32,
+    /// Divergence curve.
+    pub divergence_curve: Vec<DivergenceEntry>,
+    /// Method used.
+    pub method: String,
+}
+
+/// Granger causality request.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct GrangerRequest {
+    /// First entity (potential cause).
+    pub entity_a: u64,
+    /// Second entity (potential effect).
+    pub entity_b: u64,
+    /// Maximum lag to test (default 5).
+    #[serde(default = "default_top_n")]
+    pub max_lag: usize,
+    /// Significance threshold (default 0.05).
+    #[serde(default = "default_significance")]
+    pub significance: f64,
+}
+
+fn default_significance() -> f64 {
+    0.05
+}
+
+/// Granger causality response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct GrangerResponse {
+    /// Detected direction: "a_to_b", "b_to_a", "bidirectional", or "none".
+    pub direction: String,
+    /// Optimal lag (time steps).
+    pub optimal_lag: usize,
+    /// F-statistic.
+    pub f_statistic: f64,
+    /// Combined p-value.
+    pub p_value: f64,
+    /// Effect size (partial R²).
+    pub effect_size: f64,
+}
+
+/// Motif discovery request params.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct MotifParams {
+    /// Subsequence window size (number of time steps).
+    pub window: usize,
+    /// Maximum motifs to return (default 5).
+    #[serde(default = "default_top_n")]
+    pub max_motifs: usize,
+}
+
+/// A motif occurrence entry.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MotifOccurrenceEntry {
+    /// Start index in trajectory.
+    pub start_index: usize,
+    /// Timestamp.
+    pub timestamp: i64,
+    /// Distance to canonical.
+    pub distance: f32,
+}
+
+/// A discovered motif.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MotifEntry {
+    /// Index of canonical occurrence.
+    pub canonical_index: usize,
+    /// All occurrences.
+    pub occurrences: Vec<MotifOccurrenceEntry>,
+    /// Detected period (null if aperiodic).
+    pub period: Option<usize>,
+    /// Mean match distance.
+    pub mean_match_distance: f32,
+}
+
+/// Motifs response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MotifsResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Discovered motifs.
+    pub motifs: Vec<MotifEntry>,
+}
+
+/// Discord discovery request params.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct DiscordParams {
+    /// Subsequence window size.
+    pub window: usize,
+    /// Maximum discords to return (default 5).
+    #[serde(default = "default_top_n")]
+    pub max_discords: usize,
+}
+
+/// A discovered discord.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DiscordEntry {
+    /// Start index in trajectory.
+    pub start_index: usize,
+    /// Timestamp.
+    pub timestamp: i64,
+    /// Nearest-neighbor distance (higher = more anomalous).
+    pub nn_distance: f32,
+}
+
+/// Discords response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DiscordsResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Discovered discords.
+    pub discords: Vec<DiscordEntry>,
+}
+
+/// Temporal join request.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct TemporalJoinRequest {
+    /// First entity.
+    pub entity_a: u64,
+    /// Second entity.
+    pub entity_b: u64,
+    /// Distance threshold for convergence.
+    pub epsilon: f32,
+    /// Window size in days.
+    #[serde(default = "default_window_days")]
+    pub window_days: f64,
+}
+
+fn default_window_days() -> f64 {
+    7.0
+}
+
+/// A convergence window entry.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TemporalJoinEntry {
+    /// Start timestamp.
+    pub start: i64,
+    /// End timestamp.
+    pub end: i64,
+    /// Mean distance during convergence.
+    pub mean_distance: f32,
+    /// Minimum distance.
+    pub min_distance: f32,
+    /// Points from entity A.
+    pub points_a: usize,
+    /// Points from entity B.
+    pub points_b: usize,
+}
+
+/// Temporal join response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TemporalJoinResponse {
+    /// Entity A.
+    pub entity_a: u64,
+    /// Entity B.
+    pub entity_b: u64,
+    /// Convergence windows.
+    pub windows: Vec<TemporalJoinEntry>,
+}
+
+/// Cohort drift request.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CohortDriftRequest {
+    /// Entity identifiers in the cohort.
+    pub entity_ids: Vec<u64>,
+    /// Start timestamp.
+    pub t1: i64,
+    /// End timestamp.
+    pub t2: i64,
+    /// Number of top dimensions (default 5).
+    #[serde(default = "default_top_n")]
+    pub top_n: usize,
+}
+
+/// Cohort drift response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CohortDriftResponse {
+    /// Number of entities analyzed.
+    pub n_entities: usize,
+    /// Mean L2 drift magnitude.
+    pub mean_drift_l2: f32,
+    /// Median L2 drift magnitude.
+    pub median_drift_l2: f32,
+    /// Standard deviation of drift magnitudes.
+    pub std_drift_l2: f32,
+    /// Centroid L2 drift.
+    pub centroid_l2_magnitude: f32,
+    /// Centroid cosine drift.
+    pub centroid_cosine_drift: f32,
+    /// Dispersion at t1.
+    pub dispersion_t1: f32,
+    /// Dispersion at t2.
+    pub dispersion_t2: f32,
+    /// Dispersion change (positive = diverging).
+    pub dispersion_change: f32,
+    /// Convergence score (0 = random, 1 = all same direction).
+    pub convergence_score: f32,
+    /// Top changed dimensions.
+    pub top_dimensions: Vec<DimensionChange>,
+    /// Outlier entities.
+    pub outliers: Vec<CohortOutlierEntry>,
+}
+
+/// An outlier entity in cohort drift analysis.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CohortOutlierEntry {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Individual drift magnitude.
+    pub drift_magnitude: f32,
+    /// Z-score relative to cohort.
+    pub z_score: f32,
+    /// Alignment with cohort drift direction.
+    pub drift_direction_alignment: f32,
+}
+
 /// Analogy request.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AnalogyRequest {
@@ -644,6 +888,575 @@ pub async fn analogy(
     } else {
         unreachable!()
     }
+}
+
+/// Counterfactual trajectory analysis.
+#[utoipa::path(
+    get,
+    path = "/v1/entities/{id}/counterfactual",
+    params(
+        ("id" = u64, Path, description = "Entity identifier"),
+        ("change_point" = i64, Query, description = "Change point timestamp"),
+    ),
+    responses(
+        (status = 200, description = "Counterfactual analysis", body = CounterfactualResponse),
+        (status = 400, description = "Insufficient data", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn counterfactual(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<CounterfactualParams>,
+) -> Result<Json<CounterfactualResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::Counterfactual {
+            entity_id,
+            change_point: params.change_point,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Counterfactual(cf) = result {
+        Ok(Json(CounterfactualResponse {
+            entity_id,
+            change_point: cf.change_point,
+            total_divergence: cf.total_divergence,
+            max_divergence_time: cf.max_divergence_time,
+            max_divergence_value: cf.max_divergence_value,
+            divergence_curve: cf
+                .divergence_curve
+                .into_iter()
+                .map(|(t, d)| DivergenceEntry {
+                    timestamp: t,
+                    distance: d,
+                })
+                .collect(),
+            method: cf.method,
+        }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Granger causality test between two entities.
+#[utoipa::path(
+    post,
+    path = "/v1/granger",
+    request_body = GrangerRequest,
+    responses(
+        (status = 200, description = "Granger causality result", body = GrangerResponse),
+        (status = 400, description = "Insufficient data", body = ErrorResponse),
+        (status = 404, description = "Entity not found", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn granger(
+    State(state): State<SharedState>,
+    Json(req): Json<GrangerRequest>,
+) -> Result<Json<GrangerResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::GrangerCausality {
+            entity_a: req.entity_a,
+            entity_b: req.entity_b,
+            max_lag: req.max_lag,
+            significance: req.significance,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Granger(g) = result {
+        Ok(Json(GrangerResponse {
+            direction: g.direction,
+            optimal_lag: g.optimal_lag,
+            f_statistic: g.f_statistic,
+            p_value: g.p_value,
+            effect_size: g.effect_size,
+        }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Discover recurring motifs in an entity's trajectory.
+#[utoipa::path(
+    get,
+    path = "/v1/entities/{id}/motifs",
+    params(
+        ("id" = u64, Path, description = "Entity identifier"),
+        ("window" = usize, Query, description = "Subsequence window size (time steps)"),
+        ("max_motifs" = Option<usize>, Query, description = "Maximum motifs to return (default 5)"),
+    ),
+    responses(
+        (status = 200, description = "Discovered motifs", body = MotifsResponse),
+        (status = 400, description = "Insufficient data", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn motifs(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<MotifParams>,
+) -> Result<Json<MotifsResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::DiscoverMotifs {
+            entity_id,
+            window: params.window,
+            max_motifs: params.max_motifs,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Motifs(found) = result {
+        Ok(Json(MotifsResponse {
+            entity_id,
+            motifs: found
+                .into_iter()
+                .map(|m| MotifEntry {
+                    canonical_index: m.canonical_index,
+                    occurrences: m
+                        .occurrences
+                        .into_iter()
+                        .map(|o| MotifOccurrenceEntry {
+                            start_index: o.start_index,
+                            timestamp: o.timestamp,
+                            distance: o.distance,
+                        })
+                        .collect(),
+                    period: m.period,
+                    mean_match_distance: m.mean_match_distance,
+                })
+                .collect(),
+        }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Discover anomalous subsequences (discords) in an entity's trajectory.
+#[utoipa::path(
+    get,
+    path = "/v1/entities/{id}/discords",
+    params(
+        ("id" = u64, Path, description = "Entity identifier"),
+        ("window" = usize, Query, description = "Subsequence window size (time steps)"),
+        ("max_discords" = Option<usize>, Query, description = "Maximum discords to return (default 5)"),
+    ),
+    responses(
+        (status = 200, description = "Discovered discords", body = DiscordsResponse),
+        (status = 400, description = "Insufficient data", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn discords(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<DiscordParams>,
+) -> Result<Json<DiscordsResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::DiscoverDiscords {
+            entity_id,
+            window: params.window,
+            max_discords: params.max_discords,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Discords(found) = result {
+        Ok(Json(DiscordsResponse {
+            entity_id,
+            discords: found
+                .into_iter()
+                .map(|d| DiscordEntry {
+                    start_index: d.start_index,
+                    timestamp: d.timestamp,
+                    nn_distance: d.nn_distance,
+                })
+                .collect(),
+        }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Temporal join: find convergence windows between two entities.
+#[utoipa::path(
+    post,
+    path = "/v1/temporal-join",
+    request_body = TemporalJoinRequest,
+    responses(
+        (status = 200, description = "Convergence windows", body = TemporalJoinResponse),
+        (status = 404, description = "Entity not found", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn temporal_join(
+    State(state): State<SharedState>,
+    Json(req): Json<TemporalJoinRequest>,
+) -> Result<Json<TemporalJoinResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let window_us = (req.window_days * 86_400.0 * 1_000_000.0) as i64;
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::TemporalJoin {
+            entity_a: req.entity_a,
+            entity_b: req.entity_b,
+            epsilon: req.epsilon,
+            window_us,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::TemporalJoin(joins) = result {
+        Ok(Json(TemporalJoinResponse {
+            entity_a: req.entity_a,
+            entity_b: req.entity_b,
+            windows: joins
+                .into_iter()
+                .map(|j| TemporalJoinEntry {
+                    start: j.start,
+                    end: j.end,
+                    mean_distance: j.mean_distance,
+                    min_distance: j.min_distance,
+                    points_a: j.points_a,
+                    points_b: j.points_b,
+                })
+                .collect(),
+        }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Cohort drift analysis across multiple entities.
+#[utoipa::path(
+    post,
+    path = "/v1/cohort/drift",
+    request_body = CohortDriftRequest,
+    responses(
+        (status = 200, description = "Cohort drift report", body = CohortDriftResponse),
+        (status = 400, description = "Insufficient data", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn cohort_drift(
+    State(state): State<SharedState>,
+    Json(req): Json<CohortDriftRequest>,
+) -> Result<Json<CohortDriftResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::CohortDrift {
+            entity_ids: req.entity_ids,
+            t1: req.t1,
+            t2: req.t2,
+            top_n: req.top_n,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::CohortDrift(report) = result {
+        Ok(Json(CohortDriftResponse {
+            n_entities: report.n_entities,
+            mean_drift_l2: report.mean_drift_l2,
+            median_drift_l2: report.median_drift_l2,
+            std_drift_l2: report.std_drift_l2,
+            centroid_l2_magnitude: report.centroid_l2_magnitude,
+            centroid_cosine_drift: report.centroid_cosine_drift,
+            dispersion_t1: report.dispersion_t1,
+            dispersion_t2: report.dispersion_t2,
+            dispersion_change: report.dispersion_change,
+            convergence_score: report.convergence_score,
+            top_dimensions: report
+                .top_dimensions
+                .into_iter()
+                .map(|(index, change)| DimensionChange { index, change })
+                .collect(),
+            outliers: report
+                .outliers
+                .into_iter()
+                .map(|o| CohortOutlierEntry {
+                    entity_id: o.entity_id,
+                    drift_magnitude: o.drift_magnitude,
+                    z_score: o.z_score,
+                    drift_direction_alignment: o.drift_direction_alignment,
+                })
+                .collect(),
+        }))
+    } else {
+        unreachable!()
+    }
+}
+
+// ─── LLM-optimized composite endpoints (RFC-009 Phase 2) ────────────
+
+/// Entity summary request params.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct EntitySummaryParams {
+    /// Optional start timestamp to restrict analysis.
+    pub start: Option<i64>,
+    /// Optional end timestamp to restrict analysis.
+    pub end: Option<i64>,
+}
+
+/// Entity summary response — comprehensive temporal overview.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EntitySummaryResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// First seen timestamp.
+    pub first_seen: i64,
+    /// Last seen timestamp.
+    pub last_seen: i64,
+    /// Total data points.
+    pub total_points: usize,
+    /// Overall drift magnitude (L2).
+    pub drift_l2: f32,
+    /// Overall cosine drift.
+    pub drift_cosine: f32,
+    /// Drift interpretation.
+    pub drift_interpretation: String,
+    /// Top changed dimensions.
+    pub top_dimensions: Vec<DimensionChange>,
+    /// Detected change points in the period.
+    pub change_points: Vec<ChangepointEntry>,
+    /// Velocity magnitude at last observation.
+    pub velocity_magnitude: Option<f32>,
+    /// Human-readable summary.
+    pub summary: String,
+}
+
+/// Anomaly scan request.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AnomalyScanRequest {
+    /// Entity IDs to scan.
+    pub entity_ids: Vec<u64>,
+    /// Lookback window in microseconds (default: 7 days).
+    #[serde(default = "default_lookback")]
+    pub lookback_us: i64,
+}
+
+fn default_lookback() -> i64 {
+    7 * 86_400_000_000 // 7 days
+}
+
+/// A detected anomaly entry.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AnomalyEntry {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Anomaly type.
+    pub anomaly_type: String,
+    /// Timestamp of the anomaly.
+    pub timestamp: i64,
+    /// Severity [0, 1].
+    pub severity: f64,
+}
+
+/// Anomaly scan response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AnomalyScanResponse {
+    /// Number of entities scanned.
+    pub entities_scanned: usize,
+    /// Detected anomalies sorted by severity.
+    pub anomalies: Vec<AnomalyEntry>,
+    /// Human-readable summary.
+    pub summary: String,
+}
+
+/// Get comprehensive temporal summary of an entity.
+///
+/// Combines trajectory retrieval, drift quantification, change point detection,
+/// and velocity computation into a single LLM-friendly response.
+#[utoipa::path(
+    get,
+    path = "/v1/entities/{id}/summary",
+    params(
+        ("id" = u64, Path, description = "Entity identifier"),
+        ("start" = Option<i64>, Query, description = "Optional start timestamp"),
+        ("end" = Option<i64>, Query, description = "Optional end timestamp"),
+    ),
+    responses(
+        (status = 200, description = "Entity summary", body = EntitySummaryResponse),
+        (status = 404, description = "Entity not found", body = ErrorResponse),
+    ),
+    tag = "llm"
+)]
+pub async fn entity_summary(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<EntitySummaryParams>,
+) -> Result<Json<EntitySummaryResponse>, (StatusCode, Json<ErrorResponse>)> {
+    use cvx_core::TemporalIndexAccess;
+
+    let filter = match (params.start, params.end) {
+        (Some(s), Some(e)) => cvx_core::TemporalFilter::Range(s, e),
+        (Some(s), None) => cvx_core::TemporalFilter::After(s),
+        (None, Some(e)) => cvx_core::TemporalFilter::Before(e),
+        (None, None) => cvx_core::TemporalFilter::All,
+    };
+
+    let traj = state.index.trajectory(entity_id, filter.clone());
+    if traj.is_empty() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("entity {entity_id} not found"),
+            }),
+        ));
+    }
+
+    let first_seen = traj.first().unwrap().0;
+    let last_seen = traj.last().unwrap().0;
+    let total_points = traj.len();
+
+    // Drift between first and last
+    let v_first = state.index.vector(traj.first().unwrap().1);
+    let v_last = state.index.vector(traj.last().unwrap().1);
+    let drift = cvx_analytics::calculus::drift_report(&v_first, &v_last, 5);
+
+    let drift_interpretation = if drift.l2_magnitude < 0.1 {
+        "Minimal change"
+    } else if drift.l2_magnitude < 0.5 {
+        "Moderate drift"
+    } else {
+        "Significant semantic shift"
+    }
+    .to_string();
+
+    // Change points
+    let mut change_points = Vec::new();
+    if traj.len() >= 4 {
+        if let Ok(cvx_query::types::QueryResult::ChangePoints(cps)) =
+            cvx_query::engine::execute_query(
+                &state.index,
+                cvx_query::types::TemporalQuery::ChangePointDetect {
+                    entity_id,
+                    start: first_seen,
+                    end: last_seen,
+                },
+            )
+        {
+            change_points = cps
+                .into_iter()
+                .map(|cp| ChangepointEntry {
+                    timestamp: cp.timestamp(),
+                    severity: cp.severity(),
+                })
+                .collect();
+        }
+    }
+
+    // Velocity at last point
+    let velocity_magnitude = if traj.len() >= 2 {
+        let vectors: Vec<Vec<f32>> = traj
+            .iter()
+            .map(|&(_, nid)| state.index.vector(nid))
+            .collect();
+        let traj_refs: Vec<(i64, &[f32])> = traj
+            .iter()
+            .zip(vectors.iter())
+            .map(|(&(ts, _), v)| (ts, v.as_slice()))
+            .collect();
+        cvx_analytics::calculus::velocity(&traj_refs, last_seen)
+            .ok()
+            .map(|v| v.iter().map(|x| x * x).sum::<f32>().sqrt())
+    } else {
+        None
+    };
+
+    let summary = format!(
+        "Entity {} has {} points spanning {} to {}. {}. L2 drift: {:.4}. {} change point(s) detected.",
+        entity_id, total_points, first_seen, last_seen,
+        drift_interpretation, drift.l2_magnitude, change_points.len()
+    );
+
+    Ok(Json(EntitySummaryResponse {
+        entity_id,
+        first_seen,
+        last_seen,
+        total_points,
+        drift_l2: drift.l2_magnitude,
+        drift_cosine: drift.cosine_drift,
+        drift_interpretation,
+        top_dimensions: drift
+            .top_dimensions
+            .into_iter()
+            .map(|(index, change)| DimensionChange { index, change })
+            .collect(),
+        change_points,
+        velocity_magnitude,
+        summary,
+    }))
+}
+
+/// Scan entities for anomalous semantic changes.
+///
+/// Runs change point detection on each entity's recent trajectory and
+/// returns detected anomalies sorted by severity.
+#[utoipa::path(
+    post,
+    path = "/v1/anomalies/scan",
+    request_body = AnomalyScanRequest,
+    responses(
+        (status = 200, description = "Anomaly scan results", body = AnomalyScanResponse),
+    ),
+    tag = "llm"
+)]
+pub async fn anomaly_scan(
+    State(state): State<SharedState>,
+    Json(req): Json<AnomalyScanRequest>,
+) -> Json<AnomalyScanResponse> {
+    use cvx_core::TemporalIndexAccess;
+
+    let mut anomalies = Vec::new();
+
+    for &eid in &req.entity_ids {
+        let traj = state.index.trajectory(eid, cvx_core::TemporalFilter::All);
+        if traj.len() < 4 {
+            continue;
+        }
+
+        let last_ts = traj.last().unwrap().0;
+        let start = last_ts - req.lookback_us;
+
+        if let Ok(cvx_query::types::QueryResult::ChangePoints(cps)) =
+            cvx_query::engine::execute_query(
+                &state.index,
+                cvx_query::types::TemporalQuery::ChangePointDetect {
+                    entity_id: eid,
+                    start,
+                    end: last_ts,
+                },
+            )
+        {
+            for cp in cps {
+                anomalies.push(AnomalyEntry {
+                    entity_id: eid,
+                    anomaly_type: "change_point".to_string(),
+                    timestamp: cp.timestamp(),
+                    severity: cp.severity(),
+                });
+            }
+        }
+    }
+
+    // Sort by severity descending
+    anomalies.sort_by(|a, b| b.severity.partial_cmp(&a.severity).unwrap());
+
+    let summary = format!(
+        "{} anomalies detected across {} entities scanned.",
+        anomalies.len(),
+        req.entity_ids.len()
+    );
+
+    Json(AnomalyScanResponse {
+        entities_scanned: req.entity_ids.len(),
+        anomalies,
+        summary,
+    })
 }
 
 /// Health check with server info.

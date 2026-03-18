@@ -68,6 +68,7 @@ export default defineConfig({
 						{ label: 'Crate Structure', slug: 'architecture/crate-structure' },
 						{ label: 'Observability', slug: 'architecture/observability' },
 						{ label: 'Deployment', slug: 'architecture/deployment' },
+						{ label: 'LLM Integration', slug: 'architecture/llm-integration', badge: { text: 'MCP', variant: 'success' } },
 					],
 				},
 				{
@@ -107,9 +108,9 @@ export default defineConfig({
 						{ label: 'RFC-004: Semantic Regions', slug: 'rfc/rfc-004' },
 						{ label: 'RFC-005: Query Capabilities', slug: 'rfc/rfc-005' },
 						{ label: 'RFC-006: Anchor Projection', slug: 'rfc/rfc-006' },
-						{ label: 'RFC-007: Temporal Primitives', slug: 'rfc/rfc-007', badge: { text: 'New', variant: 'success' } },
-						{ label: 'RFC-008: Index Architecture', slug: 'rfc/rfc-008', badge: { text: 'New', variant: 'success' } },
-						{ label: 'RFC-009: LLM Integration', slug: 'rfc/rfc-009', badge: { text: 'New', variant: 'success' } },
+						{ label: 'RFC-007: Temporal Primitives', slug: 'rfc/rfc-007', badge: { text: 'Done', variant: 'success' } },
+						{ label: 'RFC-008: Index Architecture', slug: 'rfc/rfc-008', badge: { text: 'Done', variant: 'success' } },
+						{ label: 'RFC-009: LLM Integration', slug: 'rfc/rfc-009', badge: { text: 'Done', variant: 'success' } },
 					],
 				},
 				{

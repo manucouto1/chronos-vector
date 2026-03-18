@@ -7,7 +7,12 @@ use cvx_core::types::TemporalFilter;
 use cvx_core::{StorageBackend, TemporalIndexAccess};
 
 use cvx_analytics::calculus;
+use cvx_analytics::cohort;
+use cvx_analytics::counterfactual;
+use cvx_analytics::granger;
+use cvx_analytics::motifs;
 use cvx_analytics::ode;
+use cvx_analytics::temporal_join;
 use cvx_analytics::pelt::{self, PeltConfig};
 
 use crate::types::*;
@@ -140,6 +145,44 @@ pub fn execute_query(
             entity_b,
             t3,
         } => do_analogy(index, entity_a, t1, t2, entity_b, t3),
+
+        TemporalQuery::Counterfactual {
+            entity_id,
+            change_point,
+        } => do_counterfactual(index, entity_id, change_point),
+
+        TemporalQuery::GrangerCausality {
+            entity_a,
+            entity_b,
+            max_lag,
+            significance,
+        } => do_granger(index, entity_a, entity_b, max_lag, significance),
+
+        TemporalQuery::DiscoverMotifs {
+            entity_id,
+            window,
+            max_motifs,
+        } => do_discover_motifs(index, entity_id, window, max_motifs),
+
+        TemporalQuery::DiscoverDiscords {
+            entity_id,
+            window,
+            max_discords,
+        } => do_discover_discords(index, entity_id, window, max_discords),
+
+        TemporalQuery::TemporalJoin {
+            entity_a,
+            entity_b,
+            epsilon,
+            window_us,
+        } => do_temporal_join(index, entity_a, entity_b, epsilon, window_us),
+
+        TemporalQuery::CohortDrift {
+            entity_ids,
+            t1,
+            t2,
+            top_n,
+        } => do_cohort_drift(index, &entity_ids, t1, t2, top_n),
     }
 }
 
@@ -259,6 +302,271 @@ fn do_drift_quant(
         l2_magnitude: report.l2_magnitude,
         cosine_drift: report.cosine_drift,
         top_dimensions: report.top_dimensions,
+    }))
+}
+
+fn do_counterfactual(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    change_point: i64,
+) -> Result<QueryResult, QueryError> {
+    let (td_pre, vecs_pre) =
+        build_traj(index, entity_id, TemporalFilter::Before(change_point));
+    let (td_post, vecs_post) =
+        build_traj(index, entity_id, TemporalFilter::After(change_point));
+
+    if td_pre.len() < 2 {
+        return Err(QueryError::InsufficientData {
+            needed: 2,
+            have: td_pre.len(),
+        });
+    }
+    if td_post.is_empty() {
+        return Err(QueryError::InsufficientData {
+            needed: 1,
+            have: 0,
+        });
+    }
+
+    let pre = to_slices(&td_pre, &vecs_pre);
+    let post = to_slices(&td_post, &vecs_post);
+
+    let result =
+        counterfactual::counterfactual_trajectory(&pre, &post, change_point).map_err(|_| {
+            QueryError::InsufficientData {
+                needed: 2,
+                have: td_pre.len(),
+            }
+        })?;
+
+    Ok(QueryResult::Counterfactual(CounterfactualQueryResult {
+        change_point,
+        total_divergence: result.total_divergence,
+        max_divergence_time: result.max_divergence_time,
+        max_divergence_value: result.max_divergence_value,
+        divergence_curve: result.divergence_curve,
+        method: format!("{:?}", result.method),
+    }))
+}
+
+fn do_granger(
+    index: &dyn TemporalIndexAccess,
+    entity_a: u64,
+    entity_b: u64,
+    max_lag: usize,
+    significance: f64,
+) -> Result<QueryResult, QueryError> {
+    let (td_a, vecs_a) = build_traj(index, entity_a, TemporalFilter::All);
+    let (td_b, vecs_b) = build_traj(index, entity_b, TemporalFilter::All);
+
+    if td_a.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_a));
+    }
+    if td_b.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_b));
+    }
+
+    let traj_a = to_slices(&td_a, &vecs_a);
+    let traj_b = to_slices(&td_b, &vecs_b);
+
+    let result = granger::granger_causality(&traj_a, &traj_b, max_lag, significance)
+        .map_err(|_| QueryError::InsufficientData {
+            needed: max_lag + 3,
+            have: traj_a.len().min(traj_b.len()),
+        })?;
+
+    let direction = match result.direction {
+        granger::GrangerDirection::AToB => "a_to_b",
+        granger::GrangerDirection::BToA => "b_to_a",
+        granger::GrangerDirection::Bidirectional => "bidirectional",
+        granger::GrangerDirection::None => "none",
+    };
+
+    Ok(QueryResult::Granger(GrangerCausalityResult {
+        direction: direction.to_string(),
+        optimal_lag: result.optimal_lag,
+        f_statistic: result.f_statistic,
+        p_value: result.p_value,
+        effect_size: result.effect_size,
+        per_dimension_a_to_b: result.per_dimension_a_to_b,
+        per_dimension_b_to_a: result.per_dimension_b_to_a,
+    }))
+}
+
+fn do_discover_motifs(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    window: usize,
+    max_motifs: usize,
+) -> Result<QueryResult, QueryError> {
+    let (td, vecs) = build_traj(index, entity_id, TemporalFilter::All);
+    if td.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_id));
+    }
+    let traj = to_slices(&td, &vecs);
+    let found = motifs::discover_motifs(&traj, window, max_motifs, 0.5)
+        .map_err(|_| QueryError::InsufficientData {
+            needed: 2 * window,
+            have: traj.len(),
+        })?;
+
+    Ok(QueryResult::Motifs(
+        found
+            .into_iter()
+            .map(|m| MotifResult {
+                canonical_index: m.canonical_index,
+                occurrences: m
+                    .occurrences
+                    .into_iter()
+                    .map(|o| MotifOccurrenceResult {
+                        start_index: o.start_index,
+                        timestamp: o.timestamp,
+                        distance: o.distance,
+                    })
+                    .collect(),
+                period: m.period,
+                mean_match_distance: m.mean_match_distance,
+            })
+            .collect(),
+    ))
+}
+
+fn do_discover_discords(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    window: usize,
+    max_discords: usize,
+) -> Result<QueryResult, QueryError> {
+    let (td, vecs) = build_traj(index, entity_id, TemporalFilter::All);
+    if td.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_id));
+    }
+    let traj = to_slices(&td, &vecs);
+    let found = motifs::discover_discords(&traj, window, max_discords)
+        .map_err(|_| QueryError::InsufficientData {
+            needed: 2 * window,
+            have: traj.len(),
+        })?;
+
+    Ok(QueryResult::Discords(
+        found
+            .into_iter()
+            .map(|d| DiscordResult {
+                start_index: d.start_index,
+                timestamp: d.timestamp,
+                nn_distance: d.nn_distance,
+            })
+            .collect(),
+    ))
+}
+
+fn do_temporal_join(
+    index: &dyn TemporalIndexAccess,
+    entity_a: u64,
+    entity_b: u64,
+    epsilon: f32,
+    window_us: i64,
+) -> Result<QueryResult, QueryError> {
+    let (td_a, vecs_a) = build_traj(index, entity_a, TemporalFilter::All);
+    let (td_b, vecs_b) = build_traj(index, entity_b, TemporalFilter::All);
+
+    if td_a.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_a));
+    }
+    if td_b.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_b));
+    }
+
+    let traj_a = to_slices(&td_a, &vecs_a);
+    let traj_b = to_slices(&td_b, &vecs_b);
+
+    let joins = temporal_join::temporal_join(&traj_a, &traj_b, epsilon, window_us)
+        .map_err(|_| QueryError::InsufficientData {
+            needed: 1,
+            have: 0,
+        })?;
+
+    Ok(QueryResult::TemporalJoin(
+        joins
+            .into_iter()
+            .map(|j| TemporalJoinResultEntry {
+                start: j.start,
+                end: j.end,
+                mean_distance: j.mean_distance,
+                min_distance: j.min_distance,
+                points_a: j.points_a,
+                points_b: j.points_b,
+            })
+            .collect(),
+    ))
+}
+
+fn do_cohort_drift(
+    index: &dyn TemporalIndexAccess,
+    entity_ids: &[u64],
+    t1: i64,
+    t2: i64,
+    top_n: usize,
+) -> Result<QueryResult, QueryError> {
+    // Build trajectories for all entities
+    let mut traj_data: Vec<(Vec<(i64, u32)>, Vec<Vec<f32>>)> = Vec::new();
+    let mut valid_ids: Vec<u64> = Vec::new();
+
+    for &eid in entity_ids {
+        let (td, vecs) = build_traj(index, eid, TemporalFilter::All);
+        if !td.is_empty() {
+            traj_data.push((td, vecs));
+            valid_ids.push(eid);
+        }
+    }
+
+    if valid_ids.len() < 2 {
+        return Err(QueryError::InsufficientData {
+            needed: 2,
+            have: valid_ids.len(),
+        });
+    }
+
+    // Build slice-based trajectories for the cohort function
+    let slice_trajs: Vec<Vec<(i64, &[f32])>> = traj_data
+        .iter()
+        .map(|(td, vecs)| to_slices(td, vecs))
+        .collect();
+
+    let input: Vec<(u64, &[(i64, &[f32])])> = valid_ids
+        .iter()
+        .zip(slice_trajs.iter())
+        .map(|(&eid, st)| (eid, st.as_slice()))
+        .collect();
+
+    let report = cohort::cohort_drift(&input, t1, t2, top_n)
+        .map_err(|_| QueryError::InsufficientData {
+            needed: 2,
+            have: valid_ids.len(),
+        })?;
+
+    Ok(QueryResult::CohortDrift(CohortDriftResult {
+        n_entities: report.n_entities,
+        mean_drift_l2: report.mean_drift_l2,
+        median_drift_l2: report.median_drift_l2,
+        std_drift_l2: report.std_drift_l2,
+        centroid_l2_magnitude: report.centroid_drift.l2_magnitude,
+        centroid_cosine_drift: report.centroid_drift.cosine_drift,
+        dispersion_t1: report.dispersion_t1,
+        dispersion_t2: report.dispersion_t2,
+        dispersion_change: report.dispersion_change,
+        convergence_score: report.convergence_score,
+        top_dimensions: report.top_dimensions,
+        outliers: report
+            .outliers
+            .into_iter()
+            .map(|o| CohortOutlierResult {
+                entity_id: o.entity_id,
+                drift_magnitude: o.drift_magnitude,
+                z_score: o.z_score,
+                drift_direction_alignment: o.drift_direction_alignment,
+            })
+            .collect(),
     }))
 }
 
@@ -524,6 +832,43 @@ mod tests {
         } else {
             panic!("expected Analogy result");
         }
+    }
+
+    #[test]
+    fn cohort_drift_via_engine() {
+        let engine = setup_engine(5, 20, 4);
+        let result = engine
+            .execute(TemporalQuery::CohortDrift {
+                entity_ids: vec![0, 1, 2, 3, 4],
+                t1: 0,
+                t2: 19_000_000,
+                top_n: 3,
+            })
+            .unwrap();
+
+        if let QueryResult::CohortDrift(report) = result {
+            assert_eq!(report.n_entities, 5);
+            assert!(report.mean_drift_l2 > 0.0);
+            assert!(report.top_dimensions.len() <= 3);
+            assert!(
+                report.convergence_score > 0.0,
+                "entities with similar drift patterns should show some convergence"
+            );
+        } else {
+            panic!("expected CohortDrift result");
+        }
+    }
+
+    #[test]
+    fn cohort_drift_insufficient_entities() {
+        let engine = setup_engine(1, 10, 4);
+        let result = engine.execute(TemporalQuery::CohortDrift {
+            entity_ids: vec![0],
+            t1: 0,
+            t2: 9_000_000,
+            top_n: 3,
+        });
+        assert!(result.is_err());
     }
 
     #[test]

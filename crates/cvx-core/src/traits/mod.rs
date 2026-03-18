@@ -202,3 +202,39 @@ pub trait AnalyticsBackend: Send + Sync {
         timestamp: i64,
     ) -> Result<Vec<f32>, AnalyticsError>;
 }
+
+// ─── Embedder trait (RFC-009) ───────────────────────────────────────
+
+/// Error type for embedding operations.
+#[derive(Debug, thiserror::Error)]
+pub enum EmbedError {
+    /// Model not loaded or unavailable.
+    #[error("model not available: {0}")]
+    ModelNotAvailable(String),
+    /// Input text is empty or invalid.
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+    /// Backend-specific error.
+    #[error("embedding error: {0}")]
+    BackendError(String),
+}
+
+/// Trait for converting text to embedding vectors.
+///
+/// Implementations may use local models (ONNX, TorchScript) or
+/// remote APIs (OpenAI, Cohere).
+pub trait Embedder: Send + Sync {
+    /// Embed a single text string into a vector.
+    fn embed(&self, text: &str) -> Result<Vec<f32>, EmbedError>;
+
+    /// Embed multiple texts in a batch (more efficient for APIs).
+    fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, EmbedError> {
+        texts.iter().map(|t| self.embed(t)).collect()
+    }
+
+    /// Output dimensionality of the embedding model.
+    fn dimension(&self) -> usize;
+
+    /// Name of the embedding model.
+    fn model_name(&self) -> &str;
+}

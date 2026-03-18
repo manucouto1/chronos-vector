@@ -31,8 +31,8 @@ pub mod types;
 pub use config::CvxConfig;
 pub use error::{CvxError, CvxResult};
 pub use traits::{
-    AnalyticsBackend, DistanceMetric, IndexBackend, StorageBackend, TemporalIndexAccess,
-    VectorSpace,
+    AnalyticsBackend, DistanceMetric, EmbedError, Embedder, IndexBackend, StorageBackend,
+    TemporalIndexAccess, VectorSpace,
 };
 pub use types::{
     ChangePoint, CpdMethod, DeltaEntry, DenseVector, EntityTimeline, ScoredResult, TemporalFilter,

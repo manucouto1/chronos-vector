@@ -30,6 +30,7 @@ workspace = true
 proptest = { workspace = true }
 criterion = { workspace = true }
 serde_json = "1"
+tempfile = "3.27.0"
 
 [[bench]]
 name = "distance_kernels"
