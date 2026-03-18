@@ -9,6 +9,7 @@ members = [
   "crates/cvx-query",
   "crates/cvx-api",
   "crates/cvx-server",
+  "crates/cvx-mcp",
 ]
 exclude = [
   "crates/cvx-python",
