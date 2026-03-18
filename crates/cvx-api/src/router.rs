@@ -31,6 +31,8 @@ pub fn build_router(state: SharedState) -> Router {
             get(handlers::prediction),
         )
         .route("/v1/analogy", post(handlers::analogy))
+        .route("/v1/entities/{id}/motifs", get(handlers::motifs))
+        .route("/v1/entities/{id}/discords", get(handlers::discords))
         .route("/v1/temporal-join", post(handlers::temporal_join))
         .route("/v1/cohort/drift", post(handlers::cohort_drift))
         // System

@@ -284,6 +284,79 @@ pub struct PredictionResponse {
     pub method: String,
 }
 
+/// Motif discovery request params.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct MotifParams {
+    /// Subsequence window size (number of time steps).
+    pub window: usize,
+    /// Maximum motifs to return (default 5).
+    #[serde(default = "default_top_n")]
+    pub max_motifs: usize,
+}
+
+/// A motif occurrence entry.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MotifOccurrenceEntry {
+    /// Start index in trajectory.
+    pub start_index: usize,
+    /// Timestamp.
+    pub timestamp: i64,
+    /// Distance to canonical.
+    pub distance: f32,
+}
+
+/// A discovered motif.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MotifEntry {
+    /// Index of canonical occurrence.
+    pub canonical_index: usize,
+    /// All occurrences.
+    pub occurrences: Vec<MotifOccurrenceEntry>,
+    /// Detected period (null if aperiodic).
+    pub period: Option<usize>,
+    /// Mean match distance.
+    pub mean_match_distance: f32,
+}
+
+/// Motifs response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MotifsResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Discovered motifs.
+    pub motifs: Vec<MotifEntry>,
+}
+
+/// Discord discovery request params.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct DiscordParams {
+    /// Subsequence window size.
+    pub window: usize,
+    /// Maximum discords to return (default 5).
+    #[serde(default = "default_top_n")]
+    pub max_discords: usize,
+}
+
+/// A discovered discord.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DiscordEntry {
+    /// Start index in trajectory.
+    pub start_index: usize,
+    /// Timestamp.
+    pub timestamp: i64,
+    /// Nearest-neighbor distance (higher = more anomalous).
+    pub nn_distance: f32,
+}
+
+/// Discords response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DiscordsResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Discovered discords.
+    pub discords: Vec<DiscordEntry>,
+}
+
 /// Temporal join request.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct TemporalJoinRequest {
@@ -743,6 +816,109 @@ pub async fn analogy(
 
     if let cvx_query::types::QueryResult::Analogy(vec) = result {
         Ok(Json(AnalogyResponse { vector: vec }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Discover recurring motifs in an entity's trajectory.
+#[utoipa::path(
+    get,
+    path = "/v1/entities/{id}/motifs",
+    params(
+        ("id" = u64, Path, description = "Entity identifier"),
+        ("window" = usize, Query, description = "Subsequence window size (time steps)"),
+        ("max_motifs" = Option<usize>, Query, description = "Maximum motifs to return (default 5)"),
+    ),
+    responses(
+        (status = 200, description = "Discovered motifs", body = MotifsResponse),
+        (status = 400, description = "Insufficient data", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn motifs(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<MotifParams>,
+) -> Result<Json<MotifsResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::DiscoverMotifs {
+            entity_id,
+            window: params.window,
+            max_motifs: params.max_motifs,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Motifs(found) = result {
+        Ok(Json(MotifsResponse {
+            entity_id,
+            motifs: found
+                .into_iter()
+                .map(|m| MotifEntry {
+                    canonical_index: m.canonical_index,
+                    occurrences: m
+                        .occurrences
+                        .into_iter()
+                        .map(|o| MotifOccurrenceEntry {
+                            start_index: o.start_index,
+                            timestamp: o.timestamp,
+                            distance: o.distance,
+                        })
+                        .collect(),
+                    period: m.period,
+                    mean_match_distance: m.mean_match_distance,
+                })
+                .collect(),
+        }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Discover anomalous subsequences (discords) in an entity's trajectory.
+#[utoipa::path(
+    get,
+    path = "/v1/entities/{id}/discords",
+    params(
+        ("id" = u64, Path, description = "Entity identifier"),
+        ("window" = usize, Query, description = "Subsequence window size (time steps)"),
+        ("max_discords" = Option<usize>, Query, description = "Maximum discords to return (default 5)"),
+    ),
+    responses(
+        (status = 200, description = "Discovered discords", body = DiscordsResponse),
+        (status = 400, description = "Insufficient data", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn discords(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<DiscordParams>,
+) -> Result<Json<DiscordsResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::DiscoverDiscords {
+            entity_id,
+            window: params.window,
+            max_discords: params.max_discords,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Discords(found) = result {
+        Ok(Json(DiscordsResponse {
+            entity_id,
+            discords: found
+                .into_iter()
+                .map(|d| DiscordEntry {
+                    start_index: d.start_index,
+                    timestamp: d.timestamp,
+                    nn_distance: d.nn_distance,
+                })
+                .collect(),
+        }))
     } else {
         unreachable!()
     }

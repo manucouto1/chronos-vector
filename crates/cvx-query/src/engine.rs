@@ -8,6 +8,7 @@ use cvx_core::{StorageBackend, TemporalIndexAccess};
 
 use cvx_analytics::calculus;
 use cvx_analytics::cohort;
+use cvx_analytics::motifs;
 use cvx_analytics::ode;
 use cvx_analytics::temporal_join;
 use cvx_analytics::pelt::{self, PeltConfig};
@@ -142,6 +143,18 @@ pub fn execute_query(
             entity_b,
             t3,
         } => do_analogy(index, entity_a, t1, t2, entity_b, t3),
+
+        TemporalQuery::DiscoverMotifs {
+            entity_id,
+            window,
+            max_motifs,
+        } => do_discover_motifs(index, entity_id, window, max_motifs),
+
+        TemporalQuery::DiscoverDiscords {
+            entity_id,
+            window,
+            max_discords,
+        } => do_discover_discords(index, entity_id, window, max_discords),
 
         TemporalQuery::TemporalJoin {
             entity_a,
@@ -279,6 +292,73 @@ fn do_drift_quant(
         cosine_drift: report.cosine_drift,
         top_dimensions: report.top_dimensions,
     }))
+}
+
+fn do_discover_motifs(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    window: usize,
+    max_motifs: usize,
+) -> Result<QueryResult, QueryError> {
+    let (td, vecs) = build_traj(index, entity_id, TemporalFilter::All);
+    if td.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_id));
+    }
+    let traj = to_slices(&td, &vecs);
+    let found = motifs::discover_motifs(&traj, window, max_motifs, 0.5)
+        .map_err(|_| QueryError::InsufficientData {
+            needed: 2 * window,
+            have: traj.len(),
+        })?;
+
+    Ok(QueryResult::Motifs(
+        found
+            .into_iter()
+            .map(|m| MotifResult {
+                canonical_index: m.canonical_index,
+                occurrences: m
+                    .occurrences
+                    .into_iter()
+                    .map(|o| MotifOccurrenceResult {
+                        start_index: o.start_index,
+                        timestamp: o.timestamp,
+                        distance: o.distance,
+                    })
+                    .collect(),
+                period: m.period,
+                mean_match_distance: m.mean_match_distance,
+            })
+            .collect(),
+    ))
+}
+
+fn do_discover_discords(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    window: usize,
+    max_discords: usize,
+) -> Result<QueryResult, QueryError> {
+    let (td, vecs) = build_traj(index, entity_id, TemporalFilter::All);
+    if td.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_id));
+    }
+    let traj = to_slices(&td, &vecs);
+    let found = motifs::discover_discords(&traj, window, max_discords)
+        .map_err(|_| QueryError::InsufficientData {
+            needed: 2 * window,
+            have: traj.len(),
+        })?;
+
+    Ok(QueryResult::Discords(
+        found
+            .into_iter()
+            .map(|d| DiscordResult {
+                start_index: d.start_index,
+                timestamp: d.timestamp,
+                nn_distance: d.nn_distance,
+            })
+            .collect(),
+    ))
 }
 
 fn do_temporal_join(

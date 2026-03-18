@@ -83,6 +83,24 @@ pub enum TemporalQuery {
         /// Target timestamp.
         t3: i64,
     },
+    /// Discover recurring motifs in an entity's trajectory.
+    DiscoverMotifs {
+        /// Entity identifier.
+        entity_id: u64,
+        /// Subsequence window size (number of time steps).
+        window: usize,
+        /// Maximum number of motifs to return.
+        max_motifs: usize,
+    },
+    /// Discover anomalous subsequences (discords) in an entity's trajectory.
+    DiscoverDiscords {
+        /// Entity identifier.
+        entity_id: u64,
+        /// Subsequence window size (number of time steps).
+        window: usize,
+        /// Maximum number of discords to return.
+        max_discords: usize,
+    },
     /// Temporal join: find convergence windows between two entities.
     TemporalJoin {
         /// First entity.
@@ -124,6 +142,10 @@ pub enum QueryResult {
     Drift(DriftResult),
     /// Analogy result.
     Analogy(Vec<f32>),
+    /// Discovered motifs.
+    Motifs(Vec<MotifResult>),
+    /// Discovered discords.
+    Discords(Vec<DiscordResult>),
     /// Temporal join results.
     TemporalJoin(Vec<TemporalJoinResultEntry>),
     /// Cohort drift report.
@@ -145,6 +167,41 @@ pub struct TemporalJoinResultEntry {
     pub points_a: usize,
     /// Points from entity B in window.
     pub points_b: usize,
+}
+
+/// A discovered motif result.
+#[derive(Debug, Clone)]
+pub struct MotifResult {
+    /// Index of the canonical occurrence.
+    pub canonical_index: usize,
+    /// All occurrences with timestamps and distances.
+    pub occurrences: Vec<MotifOccurrenceResult>,
+    /// Detected period (None if aperiodic).
+    pub period: Option<usize>,
+    /// Mean match distance.
+    pub mean_match_distance: f32,
+}
+
+/// A single motif occurrence.
+#[derive(Debug, Clone)]
+pub struct MotifOccurrenceResult {
+    /// Start index in trajectory.
+    pub start_index: usize,
+    /// Timestamp.
+    pub timestamp: i64,
+    /// Distance to canonical.
+    pub distance: f32,
+}
+
+/// A discovered discord result.
+#[derive(Debug, Clone)]
+pub struct DiscordResult {
+    /// Start index in trajectory.
+    pub start_index: usize,
+    /// Timestamp.
+    pub timestamp: i64,
+    /// Nearest-neighbor distance (higher = more anomalous).
+    pub nn_distance: f32,
 }
 
 /// Cohort drift analysis result.
