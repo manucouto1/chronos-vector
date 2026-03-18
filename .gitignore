@@ -8,9 +8,9 @@ Cargo.lock
 crates/cvx-python/Cargo.lock
 
 # Node (docs site)
-docs/node_modules/
+node_modules/
+.astro/
 docs/dist/
-docs/.astro/
 docs/public/api/
 
 # IDE

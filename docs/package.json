@@ -12,7 +12,7 @@
   "dependencies": {
     "@astrojs/starlight": "^0.38.1",
     "@pasqal-io/starlight-client-mermaid": "^0.1.0",
-    "astro": "^6.0.1",
+    "astro": "^6.0.6",
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0",
     "sharp": "^0.34.2"
