@@ -139,6 +139,20 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Research',
+					badge: { text: 'White Paper', variant: 'caution' },
+					items: [
+						{ label: 'White Paper', slug: 'research/white-paper' },
+						{ label: 'Mental Health Explorer (B1)', slug: 'tutorials/b1-explorer' },
+						{ label: 'Clinical Anchoring (B2)', slug: 'research/clinical-anchoring' },
+						{ label: 'Political Rhetoric (B3)', slug: 'research/trump-impact' },
+						{ label: 'Market Regimes', slug: 'research/finance-regimes' },
+						{ label: 'Anomaly Detection (NAB)', slug: 'research/nab-anomaly' },
+						{ label: 'Fraud Detection', slug: 'research/fraud-detection' },
+						{ label: 'Insider Threat', slug: 'research/insider-threat' },
+					],
+				},
+				{
 					label: 'Roadmap',
 					items: [
 						{ label: 'Development Plan', slug: 'roadmap/iterative-plan' },
