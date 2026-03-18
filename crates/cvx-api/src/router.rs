@@ -40,6 +40,12 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/v1/entities/{id}/discords", get(handlers::discords))
         .route("/v1/temporal-join", post(handlers::temporal_join))
         .route("/v1/cohort/drift", post(handlers::cohort_drift))
+        // LLM-optimized composite endpoints
+        .route(
+            "/v1/entities/{id}/summary",
+            get(handlers::entity_summary),
+        )
+        .route("/v1/anomalies/scan", post(handlers::anomaly_scan))
         // System
         .route("/v1/health", get(handlers::health))
         .route("/v1/ready", get(handlers::ready))

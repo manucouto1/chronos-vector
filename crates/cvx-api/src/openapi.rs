@@ -28,6 +28,8 @@ use crate::handlers;
         handlers::discords,
         handlers::temporal_join,
         handlers::cohort_drift,
+        handlers::entity_summary,
+        handlers::anomaly_scan,
         handlers::health,
         handlers::ready,
     ),
@@ -72,6 +74,11 @@ use crate::handlers;
         handlers::CohortDriftRequest,
         handlers::CohortDriftResponse,
         handlers::CohortOutlierEntry,
+        handlers::EntitySummaryParams,
+        handlers::EntitySummaryResponse,
+        handlers::AnomalyScanRequest,
+        handlers::AnomalyScanResponse,
+        handlers::AnomalyEntry,
         handlers::HealthResponse,
         handlers::ErrorResponse,
     )),
@@ -79,6 +86,7 @@ use crate::handlers;
         (name = "ingestion", description = "Data ingestion endpoints"),
         (name = "query", description = "Spatiotemporal search and retrieval"),
         (name = "analytics", description = "Temporal analytics (velocity, drift, change points, prediction)"),
+        (name = "llm", description = "LLM-optimized composite endpoints for temporal reasoning"),
         (name = "system", description = "Health checks and operational endpoints"),
     )
 )]

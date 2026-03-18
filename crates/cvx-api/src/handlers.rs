@@ -1190,6 +1190,275 @@ pub async fn cohort_drift(
     }
 }
 
+// ─── LLM-optimized composite endpoints (RFC-009 Phase 2) ────────────
+
+/// Entity summary request params.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct EntitySummaryParams {
+    /// Optional start timestamp to restrict analysis.
+    pub start: Option<i64>,
+    /// Optional end timestamp to restrict analysis.
+    pub end: Option<i64>,
+}
+
+/// Entity summary response — comprehensive temporal overview.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EntitySummaryResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// First seen timestamp.
+    pub first_seen: i64,
+    /// Last seen timestamp.
+    pub last_seen: i64,
+    /// Total data points.
+    pub total_points: usize,
+    /// Overall drift magnitude (L2).
+    pub drift_l2: f32,
+    /// Overall cosine drift.
+    pub drift_cosine: f32,
+    /// Drift interpretation.
+    pub drift_interpretation: String,
+    /// Top changed dimensions.
+    pub top_dimensions: Vec<DimensionChange>,
+    /// Detected change points in the period.
+    pub change_points: Vec<ChangepointEntry>,
+    /// Velocity magnitude at last observation.
+    pub velocity_magnitude: Option<f32>,
+    /// Human-readable summary.
+    pub summary: String,
+}
+
+/// Anomaly scan request.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct AnomalyScanRequest {
+    /// Entity IDs to scan.
+    pub entity_ids: Vec<u64>,
+    /// Lookback window in microseconds (default: 7 days).
+    #[serde(default = "default_lookback")]
+    pub lookback_us: i64,
+}
+
+fn default_lookback() -> i64 {
+    7 * 86_400_000_000 // 7 days
+}
+
+/// A detected anomaly entry.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AnomalyEntry {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Anomaly type.
+    pub anomaly_type: String,
+    /// Timestamp of the anomaly.
+    pub timestamp: i64,
+    /// Severity [0, 1].
+    pub severity: f64,
+}
+
+/// Anomaly scan response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AnomalyScanResponse {
+    /// Number of entities scanned.
+    pub entities_scanned: usize,
+    /// Detected anomalies sorted by severity.
+    pub anomalies: Vec<AnomalyEntry>,
+    /// Human-readable summary.
+    pub summary: String,
+}
+
+/// Get comprehensive temporal summary of an entity.
+///
+/// Combines trajectory retrieval, drift quantification, change point detection,
+/// and velocity computation into a single LLM-friendly response.
+#[utoipa::path(
+    get,
+    path = "/v1/entities/{id}/summary",
+    params(
+        ("id" = u64, Path, description = "Entity identifier"),
+        ("start" = Option<i64>, Query, description = "Optional start timestamp"),
+        ("end" = Option<i64>, Query, description = "Optional end timestamp"),
+    ),
+    responses(
+        (status = 200, description = "Entity summary", body = EntitySummaryResponse),
+        (status = 404, description = "Entity not found", body = ErrorResponse),
+    ),
+    tag = "llm"
+)]
+pub async fn entity_summary(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<EntitySummaryParams>,
+) -> Result<Json<EntitySummaryResponse>, (StatusCode, Json<ErrorResponse>)> {
+    use cvx_core::TemporalIndexAccess;
+
+    let filter = match (params.start, params.end) {
+        (Some(s), Some(e)) => cvx_core::TemporalFilter::Range(s, e),
+        (Some(s), None) => cvx_core::TemporalFilter::After(s),
+        (None, Some(e)) => cvx_core::TemporalFilter::Before(e),
+        (None, None) => cvx_core::TemporalFilter::All,
+    };
+
+    let traj = state.index.trajectory(entity_id, filter.clone());
+    if traj.is_empty() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("entity {entity_id} not found"),
+            }),
+        ));
+    }
+
+    let first_seen = traj.first().unwrap().0;
+    let last_seen = traj.last().unwrap().0;
+    let total_points = traj.len();
+
+    // Drift between first and last
+    let v_first = state.index.vector(traj.first().unwrap().1);
+    let v_last = state.index.vector(traj.last().unwrap().1);
+    let drift = cvx_analytics::calculus::drift_report(&v_first, &v_last, 5);
+
+    let drift_interpretation = if drift.l2_magnitude < 0.1 {
+        "Minimal change"
+    } else if drift.l2_magnitude < 0.5 {
+        "Moderate drift"
+    } else {
+        "Significant semantic shift"
+    }
+    .to_string();
+
+    // Change points
+    let mut change_points = Vec::new();
+    if traj.len() >= 4 {
+        if let Ok(cvx_query::types::QueryResult::ChangePoints(cps)) =
+            cvx_query::engine::execute_query(
+                &state.index,
+                cvx_query::types::TemporalQuery::ChangePointDetect {
+                    entity_id,
+                    start: first_seen,
+                    end: last_seen,
+                },
+            )
+        {
+            change_points = cps
+                .into_iter()
+                .map(|cp| ChangepointEntry {
+                    timestamp: cp.timestamp(),
+                    severity: cp.severity(),
+                })
+                .collect();
+        }
+    }
+
+    // Velocity at last point
+    let velocity_magnitude = if traj.len() >= 2 {
+        let vectors: Vec<Vec<f32>> = traj
+            .iter()
+            .map(|&(_, nid)| state.index.vector(nid))
+            .collect();
+        let traj_refs: Vec<(i64, &[f32])> = traj
+            .iter()
+            .zip(vectors.iter())
+            .map(|(&(ts, _), v)| (ts, v.as_slice()))
+            .collect();
+        cvx_analytics::calculus::velocity(&traj_refs, last_seen)
+            .ok()
+            .map(|v| v.iter().map(|x| x * x).sum::<f32>().sqrt())
+    } else {
+        None
+    };
+
+    let summary = format!(
+        "Entity {} has {} points spanning {} to {}. {}. L2 drift: {:.4}. {} change point(s) detected.",
+        entity_id, total_points, first_seen, last_seen,
+        drift_interpretation, drift.l2_magnitude, change_points.len()
+    );
+
+    Ok(Json(EntitySummaryResponse {
+        entity_id,
+        first_seen,
+        last_seen,
+        total_points,
+        drift_l2: drift.l2_magnitude,
+        drift_cosine: drift.cosine_drift,
+        drift_interpretation,
+        top_dimensions: drift
+            .top_dimensions
+            .into_iter()
+            .map(|(index, change)| DimensionChange { index, change })
+            .collect(),
+        change_points,
+        velocity_magnitude,
+        summary,
+    }))
+}
+
+/// Scan entities for anomalous semantic changes.
+///
+/// Runs change point detection on each entity's recent trajectory and
+/// returns detected anomalies sorted by severity.
+#[utoipa::path(
+    post,
+    path = "/v1/anomalies/scan",
+    request_body = AnomalyScanRequest,
+    responses(
+        (status = 200, description = "Anomaly scan results", body = AnomalyScanResponse),
+    ),
+    tag = "llm"
+)]
+pub async fn anomaly_scan(
+    State(state): State<SharedState>,
+    Json(req): Json<AnomalyScanRequest>,
+) -> Json<AnomalyScanResponse> {
+    use cvx_core::TemporalIndexAccess;
+
+    let mut anomalies = Vec::new();
+
+    for &eid in &req.entity_ids {
+        let traj = state.index.trajectory(eid, cvx_core::TemporalFilter::All);
+        if traj.len() < 4 {
+            continue;
+        }
+
+        let last_ts = traj.last().unwrap().0;
+        let start = last_ts - req.lookback_us;
+
+        if let Ok(cvx_query::types::QueryResult::ChangePoints(cps)) =
+            cvx_query::engine::execute_query(
+                &state.index,
+                cvx_query::types::TemporalQuery::ChangePointDetect {
+                    entity_id: eid,
+                    start,
+                    end: last_ts,
+                },
+            )
+        {
+            for cp in cps {
+                anomalies.push(AnomalyEntry {
+                    entity_id: eid,
+                    anomaly_type: "change_point".to_string(),
+                    timestamp: cp.timestamp(),
+                    severity: cp.severity(),
+                });
+            }
+        }
+    }
+
+    // Sort by severity descending
+    anomalies.sort_by(|a, b| b.severity.partial_cmp(&a.severity).unwrap());
+
+    let summary = format!(
+        "{} anomalies detected across {} entities scanned.",
+        anomalies.len(),
+        req.entity_ids.len()
+    );
+
+    Json(AnomalyScanResponse {
+        entities_scanned: req.entity_ids.len(),
+        anomalies,
+        summary,
+    })
+}
+
 /// Health check with server info.
 #[utoipa::path(
     get,
