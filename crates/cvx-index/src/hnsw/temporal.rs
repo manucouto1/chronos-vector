@@ -433,7 +433,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         };
 
         let bytes = postcard::to_allocvec(&snapshot)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(|e| std::io::Error::other(e))?;
 
         let mut file = std::fs::File::create(path)?;
         file.write_all(&bytes)?;
