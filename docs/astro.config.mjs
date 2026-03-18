@@ -134,7 +134,7 @@ export default defineConfig({
 						{ label: 'Mental Health Explorer', slug: 'tutorials/b1-explorer', badge: { text: 'Live', variant: 'success' } },
 						{ label: 'MAP-Elites Archive', slug: 'tutorials/map-elites', badge: { text: 'Live', variant: 'success' } },
 						{ label: 'MLOps Drift Detection', slug: 'tutorials/mlops-drift', badge: { text: 'Live', variant: 'success' } },
-						{ label: 'Clinical Anchoring', slug: 'tutorials/b2-clinical-anchoring', badge: { text: 'New', variant: 'note' } },
+						{ label: 'Clinical Anchoring', slug: 'tutorials/b2-clinical-anchoring', badge: { text: 'Live', variant: 'success' } },
 						{ label: 'B1: Classification Results', slug: 'tutorials/b1-mental-health' },
 					],
 				},
