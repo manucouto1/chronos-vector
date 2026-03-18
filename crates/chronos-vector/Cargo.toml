@@ -1,0 +1,20 @@
+[package]
+name = "chronos-vector"
+description = "High-performance temporal vector database — treats time as a geometric dimension of embedding space"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license-file.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["vector-database", "temporal", "hnsw", "embeddings", "analytics"]
+categories = ["database", "science", "algorithms"]
+
+[dependencies]
+cvx-core = { workspace = true }
+cvx-index = { workspace = true }
+cvx-analytics = { workspace = true }
+cvx-storage = { workspace = true }
+cvx-ingest = { workspace = true }
+cvx-query = { workspace = true }
