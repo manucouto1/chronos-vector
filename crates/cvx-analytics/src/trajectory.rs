@@ -66,10 +66,7 @@ pub fn discrete_frechet(a: &[&[f32]], b: &[&[f32]]) -> f64 {
 /// Compute discrete Fréchet distance from timestamped trajectories.
 ///
 /// Convenience wrapper that extracts vectors from (timestamp, vector) pairs.
-pub fn discrete_frechet_temporal(
-    a: &[(i64, &[f32])],
-    b: &[(i64, &[f32])],
-) -> f64 {
+pub fn discrete_frechet_temporal(a: &[(i64, &[f32])], b: &[(i64, &[f32])]) -> f64 {
     let va: Vec<&[f32]> = a.iter().map(|(_, v)| *v).collect();
     let vb: Vec<&[f32]> = b.iter().map(|(_, v)| *v).collect();
     discrete_frechet(&va, &vb)
@@ -97,7 +94,10 @@ mod tests {
         let a: Vec<&[f32]> = vec![&[0.0, 0.0], &[1.0, 0.0], &[1.0, 1.0]];
         let b: Vec<&[f32]> = vec![&[0.0, 0.0], &[1.0, 0.0], &[1.0, 1.0]];
         let d = discrete_frechet(&a, &b);
-        assert!(d < 1e-10, "identical paths should have distance ~0, got {d}");
+        assert!(
+            d < 1e-10,
+            "identical paths should have distance ~0, got {d}"
+        );
     }
 
     #[test]
@@ -106,7 +106,10 @@ mod tests {
         let b: Vec<&[f32]> = vec![&[0.0, 1.0], &[1.0, 1.0], &[2.0, 1.0]];
         let d = discrete_frechet(&a, &b);
         // Parallel paths offset by 1.0 → Fréchet = 1.0
-        assert!((d - 1.0).abs() < 1e-10, "parallel offset should be 1.0, got {d}");
+        assert!(
+            (d - 1.0).abs() < 1e-10,
+            "parallel offset should be 1.0, got {d}"
+        );
     }
 
     #[test]
@@ -126,7 +129,10 @@ mod tests {
         let b: Vec<&[f32]> = vec![&[0.0, 0.0], &[0.0, 1.0], &[1.0, 1.0]];
         let d = discrete_frechet(&a, &b);
         // Same endpoints but different paths → nonzero Fréchet
-        assert!(d > 0.5, "different-order paths should have positive distance, got {d}");
+        assert!(
+            d > 0.5,
+            "different-order paths should have positive distance, got {d}"
+        );
     }
 
     #[test]

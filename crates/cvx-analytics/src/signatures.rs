@@ -119,11 +119,7 @@ pub fn compute_signature(
     // Compute increments: dx[i] = points[i+1] - points[i]
     let n = points.len();
     let increments: Vec<Vec<f64>> = (0..n - 1)
-        .map(|i| {
-            (0..dim)
-                .map(|d| points[i + 1][d] - points[i][d])
-                .collect()
-        })
+        .map(|i| (0..dim).map(|d| points[i + 1][d] - points[i][d]).collect())
         .collect();
 
     let mut signature = Vec::new();
@@ -302,8 +298,7 @@ pub fn update_signature_incremental(
         for i in 0..dim {
             let old_s1_i = existing.signature[i] - dx[i];
             for j in 0..dim {
-                existing.signature[level2_start + i * dim + j] +=
-                    old_s1_i * dx[j];
+                existing.signature[level2_start + i * dim + j] += old_s1_i * dx[j];
             }
         }
     }
@@ -356,13 +351,20 @@ mod tests {
     use super::*;
 
     fn make_trajectory<'a>(points: &'a [&'a [f32]]) -> Vec<(i64, &'a [f32])> {
-        points.iter().enumerate().map(|(i, p)| (i as i64, *p)).collect()
+        points
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (i as i64, *p))
+            .collect()
     }
 
     #[test]
     fn depth1_is_displacement() {
         let traj = make_trajectory(&[&[0.0, 0.0], &[1.0, 0.0], &[1.0, 2.0]]);
-        let config = SignatureConfig { depth: 1, time_augmentation: false };
+        let config = SignatureConfig {
+            depth: 1,
+            time_augmentation: false,
+        };
         let result = compute_signature(&traj, &config).unwrap();
 
         assert_eq!(result.output_dim, 2);
@@ -378,7 +380,10 @@ mod tests {
         // Path going up then right: (0,0) → (0,1) → (1,1)
         let traj_b = make_trajectory(&[&[0.0, 0.0], &[0.0, 1.0], &[1.0, 1.0]]);
 
-        let config = SignatureConfig { depth: 2, time_augmentation: false };
+        let config = SignatureConfig {
+            depth: 2,
+            time_augmentation: false,
+        };
         let sig_a = compute_signature(&traj_a, &config).unwrap();
         let sig_b = compute_signature(&traj_b, &config).unwrap();
 
@@ -405,7 +410,10 @@ mod tests {
             [2.0, 0.8, 0.5],
         ];
 
-        let config = SignatureConfig { depth: 2, time_augmentation: false };
+        let config = SignatureConfig {
+            depth: 2,
+            time_augmentation: false,
+        };
 
         // Full signature on all 4 points
         let traj_full: Vec<(i64, &[f32])> = points
@@ -440,12 +448,11 @@ mod tests {
 
     #[test]
     fn log_signature_is_smaller() {
-        let traj = make_trajectory(&[
-            &[0.0, 0.0, 0.0],
-            &[1.0, 0.5, -0.3],
-            &[1.5, 1.0, 0.2],
-        ]);
-        let config = SignatureConfig { depth: 2, time_augmentation: false };
+        let traj = make_trajectory(&[&[0.0, 0.0, 0.0], &[1.0, 0.5, -0.3], &[1.5, 1.0, 0.2]]);
+        let config = SignatureConfig {
+            depth: 2,
+            time_augmentation: false,
+        };
 
         let full = compute_signature(&traj, &config).unwrap();
         let log = compute_log_signature(&traj, &config).unwrap();
@@ -461,7 +468,10 @@ mod tests {
         let traj_b = make_trajectory(&[&[0.0, 0.0], &[0.0, 1.0], &[1.0, 1.0]]);
         let traj_c = make_trajectory(&[&[0.0, 0.0], &[1.0, 0.0], &[1.0, 1.0]]); // same as A
 
-        let config = SignatureConfig { depth: 2, time_augmentation: false };
+        let config = SignatureConfig {
+            depth: 2,
+            time_augmentation: false,
+        };
         let sig_a = compute_signature(&traj_a, &config).unwrap();
         let sig_b = compute_signature(&traj_b, &config).unwrap();
         let sig_c = compute_signature(&traj_c, &config).unwrap();

@@ -148,7 +148,9 @@ impl<D: DistanceMetric> HnswGraph<D> {
         self.sq_params = (min_val, if range > 0.0 { 255.0 / range } else { 1.0 });
 
         // Encode existing nodes
-        let codes: Vec<Vec<u8>> = self.nodes.iter()
+        let codes: Vec<Vec<u8>> = self
+            .nodes
+            .iter()
             .map(|node| Self::encode_sq(&node.vector, self.sq_params.0, self.sq_params.1))
             .collect();
         self.sq_codes = Some(codes);
@@ -167,7 +169,8 @@ impl<D: DistanceMetric> HnswGraph<D> {
     /// Encode a vector to uint8 using scalar quantization.
     #[inline]
     fn encode_sq(vector: &[f32], min_val: f32, scale: f32) -> Vec<u8> {
-        vector.iter()
+        vector
+            .iter()
             .map(|&v| ((v - min_val) * scale).clamp(0.0, 255.0) as u8)
             .collect()
     }
@@ -337,8 +340,10 @@ impl<D: DistanceMetric> HnswGraph<D> {
 
     /// Greedy search for the single closest node at a given level.
     fn greedy_closest(&self, start: u32, query: &[f32], level: usize) -> u32 {
-        let query_code = self.sq_codes.as_ref().map(|_|
-            Self::encode_sq(query, self.sq_params.0, self.sq_params.1));
+        let query_code = self
+            .sq_codes
+            .as_ref()
+            .map(|_| Self::encode_sq(query, self.sq_params.0, self.sq_params.1));
         let qc = query_code.as_deref();
 
         let mut current = start;
@@ -367,8 +372,10 @@ impl<D: DistanceMetric> HnswGraph<D> {
     /// distances. Final results are re-ranked with exact float32 distances.
     fn search_layer(&self, entry: u32, query: &[f32], ef: usize, level: usize) -> Vec<(u32, f32)> {
         // Pre-encode query for SQ if enabled
-        let query_code = self.sq_codes.as_ref().map(|_|
-            Self::encode_sq(query, self.sq_params.0, self.sq_params.1));
+        let query_code = self
+            .sq_codes
+            .as_ref()
+            .map(|_| Self::encode_sq(query, self.sq_params.0, self.sq_params.1));
         let qc = query_code.as_deref();
 
         let entry_dist = self.distance_fast(entry, qc, query);
@@ -413,7 +420,8 @@ impl<D: DistanceMetric> HnswGraph<D> {
 
         // Re-rank with exact distances when SQ was used (quality matters for final results)
         let mut result_vec: Vec<(u32, f32)> = if self.sq_codes.is_some() {
-            results.into_iter()
+            results
+                .into_iter()
                 .map(|e| (e.1, self.distance(e.1, query)))
                 .collect()
         } else {
@@ -581,11 +589,10 @@ impl<D: DistanceMetric> HnswGraph<D> {
         } else {
             // Fallback: search among known hubs at this level
             let hubs = self.nodes_at_level(level);
-            hubs.into_iter()
-                .min_by(|&a, &b| {
-                    self.distance(a, vector)
-                        .total_cmp(&self.distance(b, vector))
-                })
+            hubs.into_iter().min_by(|&a, &b| {
+                self.distance(a, vector)
+                    .total_cmp(&self.distance(b, vector))
+            })
         }
     }
 
@@ -682,10 +689,14 @@ impl<D: DistanceMetric> HnswGraph<D> {
     pub(crate) fn to_snapshot(&self) -> HnswSnapshot {
         HnswSnapshot {
             config: self.config.clone(),
-            nodes: self.nodes.iter().map(|n| HnswNode {
-                vector: n.vector.clone(),
-                neighbors: n.neighbors.clone(),
-            }).collect(),
+            nodes: self
+                .nodes
+                .iter()
+                .map(|n| HnswNode {
+                    vector: n.vector.clone(),
+                    neighbors: n.neighbors.clone(),
+                })
+                .collect(),
             entry_point: self.entry_point,
             max_level: self.max_level,
             sq_codes: self.sq_codes.clone(),

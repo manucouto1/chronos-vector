@@ -71,15 +71,15 @@ pub fn extract_event_features(timestamps: &[i64]) -> Result<EventFeatures, Point
     }
 
     // Inter-event intervals
-    let gaps: Vec<f64> = timestamps.windows(2)
+    let gaps: Vec<f64> = timestamps
+        .windows(2)
         .map(|w| (w[1] - w[0]) as f64)
         .collect();
     let n_gaps = gaps.len();
 
     let span = (timestamps[n - 1] - timestamps[0]) as f64;
     let mean_gap = gaps.iter().sum::<f64>() / n_gaps as f64;
-    let std_gap = (gaps.iter().map(|g| (g - mean_gap).powi(2)).sum::<f64>()
-        / n_gaps as f64).sqrt();
+    let std_gap = (gaps.iter().map(|g| (g - mean_gap).powi(2)).sum::<f64>() / n_gaps as f64).sqrt();
     let max_gap = gaps.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
     // Burstiness: B = (σ - μ) / (σ + μ)
@@ -90,7 +90,11 @@ pub fn extract_event_features(timestamps: &[i64]) -> Result<EventFeatures, Point
     };
 
     // Gap CV
-    let gap_cv = if mean_gap > 0.0 { std_gap / mean_gap } else { 0.0 };
+    let gap_cv = if mean_gap > 0.0 {
+        std_gap / mean_gap
+    } else {
+        0.0
+    };
 
     // Memory coefficient: autocorrelation of consecutive gaps
     let memory = if n_gaps >= 3 {
@@ -122,7 +126,8 @@ pub fn extract_event_features(timestamps: &[i64]) -> Result<EventFeatures, Point
                 counts[bin.min(n_bins - 1)] += 1;
             }
             let total = n_gaps as f64;
-            counts.iter()
+            counts
+                .iter()
                 .filter(|&&c| c > 0)
                 .map(|&c| {
                     let p = c as f64 / total;
@@ -143,7 +148,8 @@ pub fn extract_event_features(timestamps: &[i64]) -> Result<EventFeatures, Point
                 .map(|w| {
                     let start = timestamps[0] as f64 + w as f64 * window_size;
                     let end = start + window_size;
-                    timestamps.iter()
+                    timestamps
+                        .iter()
                         .filter(|&&t| (t as f64) >= start && (t as f64) < end)
                         .count() as f64
                 })
@@ -230,7 +236,9 @@ mod tests {
         // Using deterministic pseudo-exponential for reproducibility
         let mut timestamps = vec![0i64];
         let mut t = 0i64;
-        let gaps = [8, 12, 7, 15, 9, 11, 13, 6, 14, 10, 8, 12, 11, 9, 7, 13, 10, 14, 8, 12];
+        let gaps = [
+            8, 12, 7, 15, 9, 11, 13, 6, 14, 10, 8, 12, 11, 9, 7, 13, 10, 14, 8, 12,
+        ];
         for &g in &gaps {
             t += g;
             timestamps.push(t);

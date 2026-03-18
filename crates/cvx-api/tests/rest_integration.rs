@@ -443,5 +443,9 @@ async fn openapi_json_endpoint() {
     assert_eq!(json["openapi"], "3.1.0");
     assert_eq!(json["info"]["title"], "ChronosVector API");
     let paths = json["paths"].as_object().unwrap();
-    assert!(paths.len() >= 10, "expected >= 10 paths, got {}", paths.len());
+    assert!(
+        paths.len() >= 10,
+        "expected >= 10 paths, got {}",
+        paths.len()
+    );
 }

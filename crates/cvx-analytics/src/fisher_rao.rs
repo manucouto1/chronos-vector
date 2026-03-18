@@ -42,7 +42,8 @@
 pub fn fisher_rao_distance(p: &[f64], q: &[f64]) -> f64 {
     assert_eq!(p.len(), q.len(), "distributions must have equal length");
 
-    let bhattacharyya_coeff: f64 = p.iter()
+    let bhattacharyya_coeff: f64 = p
+        .iter()
         .zip(q.iter())
         .map(|(&pi, &qi)| (pi.max(0.0) * qi.max(0.0)).sqrt())
         .sum();

@@ -398,7 +398,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/finance-regimes_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/finance-regimes_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 4. Anchor Projection — Bull / Bear / Crisis Reference Frames
@@ -578,7 +578,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/finance-regimes_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/finance-regimes_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 5. Sector Rotation via Region Trajectory
@@ -739,9 +739,9 @@ if wass_values:
 ```
 
 
-<iframe src="/plots/finance-regimes_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/finance-regimes_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
-<iframe src="/plots/finance-regimes_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/finance-regimes_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 6. Path Signatures — Market Fingerprinting
@@ -836,7 +836,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/finance-regimes_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/finance-regimes_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # ── PCA on signatures: market state space ──
@@ -904,7 +904,7 @@ else:
 ```
 
 
-<iframe src="/plots/finance-regimes_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/finance-regimes_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 7. Classification — Regime Prediction
@@ -1169,7 +1169,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/finance-regimes_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/finance-regimes_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## Summary

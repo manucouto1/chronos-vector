@@ -158,10 +158,7 @@ fn build_traj(
     (traj_data, vectors)
 }
 
-fn to_slices<'a>(
-    traj_data: &'a [(i64, u32)],
-    vectors: &'a [Vec<f32>],
-) -> Vec<(i64, &'a [f32])> {
+fn to_slices<'a>(traj_data: &'a [(i64, u32)], vectors: &'a [Vec<f32>]) -> Vec<(i64, &'a [f32])> {
     traj_data
         .iter()
         .zip(vectors.iter())

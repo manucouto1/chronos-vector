@@ -228,7 +228,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/b1-explorer_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # Individual trajectory lines for selected users
@@ -265,7 +265,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/b1-explorer_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 4. HNSW Hierarchy & Semantic Regions
@@ -412,7 +412,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/b1-explorer_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # Prepare Level 3 data for distributional/topological analysis
@@ -564,7 +564,7 @@ Detected 0 regime transitions (on L3 region trajectory)
 Velocity computed at 335 points (step=1)
 ```
 
-<iframe src="/plots/b1-explorer_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 6. Point Process Analysis
@@ -635,7 +635,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/b1-explorer_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # Circadian strength distribution
@@ -657,7 +657,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/b1-explorer_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 7. Distributional Distances
@@ -701,7 +701,7 @@ fig.show()
 Region trajectory for train_subject6146: 144 time points, 47 regions
 ```
 
-<iframe src="/plots/b1-explorer_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # Compute distributional drift over time using Fisher-Rao, Hellinger, and Wasserstein
@@ -748,7 +748,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/b1-explorer_fig_7.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_7.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # Compare total drift between depression and control users (Level 3)
@@ -847,7 +847,7 @@ Topological features of HNSW Level 3 regions (47 centroids):
   n_components: 47
 ```
 
-<iframe src="/plots/b1-explorer_fig_8.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_8.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # Compare topology between depression-dominant and control-dominant L3 regions
@@ -885,7 +885,7 @@ else:
 ```
 
 
-<iframe src="/plots/b1-explorer_fig_9.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_9.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 9. Path Signatures
@@ -970,7 +970,7 @@ else:
 ```
 
 
-<iframe src="/plots/b1-explorer_fig_10.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_10.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # Trajectory similarity: find most similar users to case study via signature distance
@@ -1262,7 +1262,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/b1-explorer_fig_11.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_11.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 11. Early Detection: CVX Features → Classification
@@ -1563,7 +1563,7 @@ fig.show()
   100% posts: F1=0.600 +/- 0.041, AUC=0.639
 ```
 
-<iframe src="/plots/b1-explorer_fig_12.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b1-explorer_fig_12.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## Summary

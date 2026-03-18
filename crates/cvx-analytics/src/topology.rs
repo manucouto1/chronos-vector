@@ -59,7 +59,8 @@ pub struct PersistenceDiagram {
 impl PersistenceDiagram {
     /// Count features alive at a given radius (Betti number).
     pub fn betti(&self, dimension: usize, radius: f64) -> usize {
-        self.intervals.iter()
+        self.intervals
+            .iter()
             .filter(|iv| iv.dimension == dimension && iv.birth <= radius && iv.death > radius)
             .count()
     }
@@ -71,7 +72,8 @@ impl PersistenceDiagram {
 
     /// Total persistence for a given dimension (sum of lifetimes, excluding infinite).
     pub fn total_persistence(&self, dimension: usize) -> f64 {
-        self.intervals.iter()
+        self.intervals
+            .iter()
             .filter(|iv| iv.dimension == dimension && iv.death.is_finite())
             .map(|iv| iv.persistence())
             .sum()
@@ -79,7 +81,8 @@ impl PersistenceDiagram {
 
     /// Number of features with persistence above a threshold.
     pub fn n_significant(&self, dimension: usize, min_persistence: f64) -> usize {
-        self.intervals.iter()
+        self.intervals
+            .iter()
             .filter(|iv| iv.dimension == dimension && iv.persistence() > min_persistence)
             .count()
     }
@@ -105,7 +108,10 @@ impl PersistenceDiagram {
 pub fn vietoris_rips_h0(points: &[&[f32]]) -> PersistenceDiagram {
     let n = points.len();
     if n == 0 {
-        return PersistenceDiagram { intervals: vec![], n_points: 0 };
+        return PersistenceDiagram {
+            intervals: vec![],
+            n_points: 0,
+        };
     }
 
     // All points born at radius 0
@@ -174,7 +180,10 @@ pub fn vietoris_rips_h0(points: &[&[f32]]) -> PersistenceDiagram {
         death: f64::INFINITY,
     });
 
-    PersistenceDiagram { intervals, n_points: n }
+    PersistenceDiagram {
+        intervals,
+        n_points: n,
+    }
 }
 
 /// Topological summary features extracted from a persistence diagram.
@@ -212,18 +221,25 @@ pub fn topological_summary(
 ) -> TopologicalFeatures {
     let diagram = vietoris_rips_h0(points);
 
-    let finite: Vec<f64> = diagram.intervals.iter()
+    let finite: Vec<f64> = diagram
+        .intervals
+        .iter()
         .filter(|iv| iv.death.is_finite())
         .map(|iv| iv.persistence())
         .collect();
 
     let max_persistence = finite.iter().cloned().fold(0.0f64, f64::max);
     let total = finite.iter().sum::<f64>();
-    let mean_persistence = if finite.is_empty() { 0.0 } else { total / finite.len() as f64 };
+    let mean_persistence = if finite.is_empty() {
+        0.0
+    } else {
+        total / finite.len() as f64
+    };
 
     // Persistence entropy
     let persistence_entropy = if total > 0.0 {
-        finite.iter()
+        finite
+            .iter()
             .map(|&p| {
                 let q = p / total;
                 if q > 0.0 { -q * q.ln() } else { 0.0 }
@@ -256,8 +272,12 @@ pub fn topological_summary(
 /// L2 distance between two vectors.
 #[inline]
 fn l2_dist(a: &[f32], b: &[f32]) -> f64 {
-    a.iter().zip(b.iter())
-        .map(|(x, y)| { let d = *x as f64 - *y as f64; d * d })
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| {
+            let d = *x as f64 - *y as f64;
+            d * d
+        })
         .sum::<f64>()
         .sqrt()
 }
@@ -279,8 +299,12 @@ mod tests {
     fn two_distant_clusters() {
         // Two well-separated clusters
         let points: Vec<&[f32]> = vec![
-            &[0.0f32, 0.0], &[0.1, 0.0], &[0.0, 0.1],  // cluster A
-            &[10.0, 10.0], &[10.1, 10.0], &[10.0, 10.1], // cluster B
+            &[0.0f32, 0.0],
+            &[0.1, 0.0],
+            &[0.0, 0.1], // cluster A
+            &[10.0, 10.0],
+            &[10.1, 10.0],
+            &[10.0, 10.1], // cluster B
         ];
         let d = vietoris_rips_h0(&points);
 
@@ -309,9 +333,7 @@ mod tests {
 
     #[test]
     fn betti_curve_monotone_decreasing() {
-        let points: Vec<&[f32]> = vec![
-            &[0.0f32], &[1.0], &[3.0], &[6.0], &[10.0],
-        ];
+        let points: Vec<&[f32]> = vec![&[0.0f32], &[1.0], &[3.0], &[6.0], &[10.0]];
         let d = vietoris_rips_h0(&points);
         let radii: Vec<f64> = (0..20).map(|i| i as f64 * 0.6).collect();
         let curve = d.betti_curve(0, &radii);
@@ -321,22 +343,25 @@ mod tests {
             assert!(
                 curve[i] <= curve[i - 1],
                 "β₀ should be non-increasing: β₀[{}]={} > β₀[{}]={}",
-                i, curve[i], i - 1, curve[i - 1]
+                i,
+                curve[i],
+                i - 1,
+                curve[i - 1]
             );
         }
     }
 
     #[test]
     fn topological_summary_two_clusters() {
-        let points: Vec<&[f32]> = vec![
-            &[0.0f32, 0.0], &[0.1, 0.0],
-            &[10.0, 0.0], &[10.1, 0.0],
-        ];
+        let points: Vec<&[f32]> = vec![&[0.0f32, 0.0], &[0.1, 0.0], &[10.0, 0.0], &[10.1, 0.0]];
         let feat = topological_summary(&points, 20, 1.0);
 
         // Two clusters with large gap → at least 1 significant component separation
         assert!(feat.n_components >= 1, "should detect cluster structure");
-        assert!(feat.max_persistence > 5.0, "max persistence should reflect cluster gap");
+        assert!(
+            feat.max_persistence > 5.0,
+            "max persistence should reflect cluster gap"
+        );
     }
 
     #[test]
@@ -347,7 +372,11 @@ mod tests {
         let feat = topological_summary(&point_refs, 10, 0.01);
 
         // Uniform persistence → high entropy
-        assert!(feat.persistence_entropy > 1.0, "uniform should have high entropy, got {}", feat.persistence_entropy);
+        assert!(
+            feat.persistence_entropy > 1.0,
+            "uniform should have high entropy, got {}",
+            feat.persistence_entropy
+        );
     }
 
     #[test]

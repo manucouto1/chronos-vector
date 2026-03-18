@@ -104,9 +104,8 @@ pub fn detect(
         // Safety cap: prevent O(N²) worst case if pruning is ineffective.
         // Keep candidates with lowest f[s] values.
         if new_candidates.len() > n / 2 {
-            new_candidates.sort_by(|&a, &b| {
-                f[a].partial_cmp(&f[b]).unwrap_or(std::cmp::Ordering::Equal)
-            });
+            new_candidates
+                .sort_by(|&a, &b| f[a].partial_cmp(&f[b]).unwrap_or(std::cmp::Ordering::Equal));
             new_candidates.truncate(n / 4);
         }
 

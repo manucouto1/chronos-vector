@@ -82,8 +82,7 @@ impl WarmStore {
         let manifest_path = dir.join("manifest.json");
         if manifest_path.exists() {
             let content = fs::read_to_string(&manifest_path)?;
-            serde_json::from_str(&content)
-                .map_err(|_| StorageError::WalCorrupted { offset: 0 })
+            serde_json::from_str(&content).map_err(|_| StorageError::WalCorrupted { offset: 0 })
         } else {
             Ok(ZoneManifest::default())
         }

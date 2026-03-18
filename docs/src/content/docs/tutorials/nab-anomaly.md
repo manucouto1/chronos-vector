@@ -523,7 +523,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/nab-anomaly_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/nab-anomaly_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 4. Anchor-Based Detection
@@ -653,7 +653,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/nab-anomaly_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/nab-anomaly_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 5. Change Point Detection
@@ -783,7 +783,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/nab-anomaly_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/nab-anomaly_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 6. Topological Detection
@@ -909,7 +909,7 @@ else:
 ```
 
 
-<iframe src="/plots/nab-anomaly_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/nab-anomaly_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 7. Combined Scoring & NAB Evaluation
@@ -1135,7 +1135,7 @@ if demo_name in eval_results:
 ```
 
 
-<iframe src="/plots/nab-anomaly_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/nab-anomaly_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # NAB baseline comparison table
@@ -1169,7 +1169,7 @@ print('Direct comparison is approximate but illustrative.')
 ```
 
 
-<iframe src="/plots/nab-anomaly_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/nab-anomaly_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```text
 Note: NAB scores use a specialized scoring function with early detection bonus.
@@ -1235,7 +1235,7 @@ for cat in cats:
 ```
 
 
-<iframe src="/plots/nab-anomaly_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/nab-anomaly_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```text
 Category                         N         F1       Prec        Rec
@@ -1324,7 +1324,7 @@ for c, m, s in zip(component_names, mean_corrs, std_corrs):
 ```
 
 
-<iframe src="/plots/nab-anomaly_fig_7.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/nab-anomaly_fig_7.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```text
 

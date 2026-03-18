@@ -164,19 +164,16 @@ mod tests {
         let traj = vec![(0i64, [1.0f32, 0.0, 0.0].as_slice())];
         let anchors = vec![[0.0f32, 1.0, 0.0].as_slice()];
         let result = project_to_anchors(&traj, &anchors, AnchorMetric::Cosine);
-        assert!((result[0].1[0] - 1.0).abs() < 1e-6, "orthogonal should be 1.0");
+        assert!(
+            (result[0].1[0] - 1.0).abs() < 1e-6,
+            "orthogonal should be 1.0"
+        );
     }
 
     #[test]
     fn project_multiple_anchors() {
-        let traj = vec![
-            (0i64, [1.0f32, 0.0].as_slice()),
-            (1, [0.0, 1.0].as_slice()),
-        ];
-        let anchors = vec![
-            [1.0f32, 0.0].as_slice(),
-            [0.0, 1.0].as_slice(),
-        ];
+        let traj = vec![(0i64, [1.0f32, 0.0].as_slice()), (1, [0.0, 1.0].as_slice())];
+        let anchors = vec![[1.0f32, 0.0].as_slice(), [0.0, 1.0].as_slice()];
         let result = project_to_anchors(&traj, &anchors, AnchorMetric::Cosine);
         // t=0: close to anchor 0, far from anchor 1
         assert!(result[0].1[0] < 0.1);
@@ -197,7 +194,10 @@ mod tests {
             (4, vec![0.2]),
         ];
         let summary = anchor_summary(&projected);
-        assert!(summary.trend[0] < 0.0, "should have negative trend (approaching)");
+        assert!(
+            summary.trend[0] < 0.0,
+            "should have negative trend (approaching)"
+        );
         assert!((summary.mean[0] - 0.6).abs() < 0.01);
         assert!((summary.min[0] - 0.2).abs() < 0.01);
     }

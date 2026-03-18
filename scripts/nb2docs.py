@@ -58,7 +58,7 @@ def parse_args():
     p.add_argument("--plots-dir", required=True, help="Directory for Plotly HTML and images")
     p.add_argument("--title", required=True, help="Page title (Starlight frontmatter)")
     p.add_argument("--description", default="", help="Page description")
-    p.add_argument("--base-url", default="/plots/", help="URL base for plot files")
+    p.add_argument("--base-url", default="/chronos-vector/plots/", help="URL base for plot files")
     p.add_argument("--skip-code", action="store_true", help="Omit code cells (show only outputs)")
     p.add_argument("--dry-run", action="store_true", help="Print output without writing files")
     return p.parse_args()

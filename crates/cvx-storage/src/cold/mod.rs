@@ -70,8 +70,7 @@ impl PqCodebook {
                                     let base = sub * k * sub_dim + ci * sub_dim;
                                     (0..sub_dim)
                                         .map(|d| {
-                                            let diff =
-                                                sub_vec[d] - centroids[base + d];
+                                            let diff = sub_vec[d] - centroids[base + d];
                                             (diff * diff) as f64
                                         })
                                         .sum::<f64>()
