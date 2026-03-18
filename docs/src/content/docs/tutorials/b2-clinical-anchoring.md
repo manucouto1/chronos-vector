@@ -1,6 +1,6 @@
 ---
 title: "Clinical Anchoring"
-description: "Symptom-aware temporal analysis with DSM-5 anchor projection for early depression detection"
+description: "Symptom-aware temporal analysis with DSM-5 anchor projection"
 ---
 
 This notebook moves beyond generic embedding comparison to **clinically meaningful drift detection**.
@@ -726,7 +726,7 @@ meaningful ℝᴷ coordinates defined by DSM-5 symptom anchors.
 | B1 baseline (5-fold CV) | 0.600 | 0.639 | 13 absolute temporal features |
 | B2 anchor only (5-fold CV) | 0.760 | 0.857 | DSM-5 anchor projection |
 | B2 combined (5-fold CV) | 0.781 | 0.863 | All 43 features |
-| B2 temporal split (Train 17+18 → Test 22) | 0.744 | 0.886 | No data contamination |
+| B2 temporal split (Train 17+18 → Test 22) | TBD | TBD | No data contamination |
 
 ### Key Insight
 

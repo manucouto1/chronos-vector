@@ -132,7 +132,7 @@ CVX has been validated across 7 investigations spanning 6 domains. Each investig
 
 | Investigation | Domain | Dataset | Key Result | Page |
 |---|---|---|---|---|
-| B1: Mental Health Explorer | Clinical NLP | eRisk 2017--2022 | F1=0.600 (13 temporal features) | [Details](/research/mental-health-explorer) |
+| B1: Mental Health Explorer | Clinical NLP | eRisk 2017--2022 | F1=0.600 (13 temporal features) | [Details](/tutorials/b1-explorer) |
 | B2: Clinical Anchoring | Clinical NLP | eRisk 2017--2022 | F1=0.744, AUC=0.886 (DSM-5 anchors) | [Details](/research/clinical-anchoring) |
 | B3: Political Rhetoric & Markets | Political NLP / Finance | Trump Twitter + S&P 500 | Rhetorical anchor projection + market alignment | [Details](/research/trump-impact) |
 | T1: Market Regime Detection | Quantitative Finance | S&P 500 Sector ETFs | 11 changepoints, Hurst=0.74, path signatures | [Details](/research/finance-regimes) |
