@@ -1,6 +1,6 @@
 ---
-title: "Political Rhetoric"
-description: "CVX temporal analytics"
+title: "Political Rhetoric & Market Impact"
+description: "Trump Twitter temporal analysis with CVX"
 ---
 
 This notebook treats **presidential tweets as a temporal trajectory in embedding space**
@@ -134,7 +134,12 @@ else:
 
 
 ```text
-Loaded cached tweets: 28,272
+Raw tweets: 56,571
+Columns: ['id', 'text', 'is_retweet', 'is_deleted', 'device', 'favorites', 'retweets', 'datetime', 'is_flagged', 'date']
+Date range: 2009-05-04 18:54:25+00:00 to 2021-01-08 15:44:28+00:00
+
+Filtered tweets: 28,272 (2015-2021, no retweets)
+Date range: 2015-01-01 00:00:26+00:00 to 2021-01-08 15:44:28+00:00
 ```
 
 ```python
@@ -261,6 +266,10 @@ print(f'D={D}, {len(tweet_embeddings):,} tweet embeddings')
 
 ```text
 Loaded cached embeddings: (28272, 384)
+```
+
+```text
+
 D=384, 28,272 tweet embeddings
 ```
 
@@ -269,7 +278,7 @@ D=384, 28,272 tweet embeddings
 df_emb = pd.DataFrame({
     'date': pd.to_datetime(tweet_dates),
 })
-df_emb['day'] = df_emb['date'].dt.normalize()  # datetime64 at midnight
+df_emb['day'] = df_emb['date'].dt.normalize()
 
 # Add embedding columns
 for i in range(D):
@@ -283,20 +292,25 @@ emb_cols = [f'e{i}' for i in range(D)]
 daily = df_emb.groupby('day')[emb_cols].mean().reset_index()
 daily = daily.sort_values('day').reset_index(drop=True)
 
-# Merge tweet counts (both are datetime64 now)
+# Merge tweet counts
 daily = daily.merge(tweet_counts.reset_index(), on='day', how='left')
 
-# Unix timestamp in seconds (for CVX)
-daily['ts_unix'] = (daily['day'].astype(np.int64) // 10**9).astype(np.int64)
+# Unix timestamp in SECONDS — handle both ns and us datetime resolution
+day_int = daily['day'].dt.tz_localize(None).astype('datetime64[s]').astype(np.int64)
+daily['ts_unix'] = day_int
 
 print(f'Daily aggregated: {len(daily):,} days, D={D}')
 print(f'Mean tweets/day: {daily["n_tweets"].mean():.1f}, max: {daily["n_tweets"].max()}')
+print(f'Timestamp range: {daily["ts_unix"].min()} to {daily["ts_unix"].max()} (unix seconds)')
+print(f'Sanity check: {pd.Timestamp(daily["ts_unix"].iloc[0], unit="s")} to {pd.Timestamp(daily["ts_unix"].iloc[-1], unit="s")}')
 ```
 
 
 ```text
 Daily aggregated: 2,176 days, D=384
 Mean tweets/day: 13.0, max: 160
+Timestamp range: 1420070400 to 1610064000 (unix seconds)
+Sanity check: 2015-01-01 00:00:00 to 2021-01-08 00:00:00
 ```
 
 ```python
@@ -329,7 +343,8 @@ print(f'Trajectory: {len(traj):,} points, D={len(traj[0][1])}')
 
 
 ```text
-Loaded CVX index in 0.00s (2,176 points)
+Inserted 2,176 daily vectors in 0.88s
+Saved to ../data/cache/trump_index.cvx
 Trajectory: 2,176 points, D=384
 ```
 
@@ -427,7 +442,7 @@ for j, name in enumerate(ANCHOR_NAMES):
 
 
 ```text
-Projected 2,176 points to 6 anchors in 0.013s
+Projected 2,176 points to 6 anchors in 0.012s
 
 Anchor Summary (cosine distance, lower = closer):
 Anchor              Mean      Min      Trend     Last
@@ -443,7 +458,7 @@ threat            0.8117   0.6134  -0.000025   0.7507
 ```python
 # ── 3c. Plotly: 6-panel anchor distance time series ──────────────
 # Build dates from trajectory timestamps
-traj_dates = [pd.Timestamp('1970-01-01') + pd.Timedelta(days=int(ts)) for ts, _ in projected]
+traj_dates = [pd.Timestamp(ts, unit='s') for ts, _ in projected]
 anchor_dists = np.array([dists for _, dists in projected])
 
 # Political periods for coloring
@@ -547,7 +562,7 @@ print(f'Anchor-projected changepoints: {len(cps_anchor)} detected in {elapsed:.3
 
 # Convert timestamps to dates
 def ts_to_date(ts):
-    return pd.Timestamp('1970-01-01') + pd.Timedelta(days=int(ts))
+    return pd.Timestamp(ts, unit='s')
 
 cp_raw_dates = [(ts_to_date(ts), sev) for ts, sev in cps_raw]
 cp_anchor_dates = [(ts_to_date(ts), sev) for ts, sev in cps_anchor]
@@ -563,8 +578,8 @@ for date, sev in sorted(cp_anchor_dates, key=lambda x: -x[1])[:8]:
 
 
 ```text
-Raw trajectory changepoints: 0 detected in 0.762s (penalty=23.1)
-Anchor-projected changepoints: 0 detected in 0.013s
+Raw trajectory changepoints: 0 detected in 0.709s (penalty=23.1)
+Anchor-projected changepoints: 0 detected in 0.015s
 
 Top raw changepoints by severity:
 
@@ -672,8 +687,8 @@ print(f'Max velocity:  {df_vel["velocity"].max():.6f} on {df_vel["velocity"].idx
 
 ```text
 Computed velocity for 2,174 days
-Mean velocity: 0.000000
-Max velocity:  0.000000 on 1970-01-02
+Mean velocity: 0.000003
+Max velocity:  0.000008 on 2016-11-22
 ```
 
 ```python
@@ -702,7 +717,7 @@ print(f'Columns: {list(df_aligned.columns)}')
 
 
 ```text
-Aligned dataset: 4,730,624 days
+Aligned dataset: 2,176 days
 Columns: ['anchor_economy', 'anchor_trade_war', 'anchor_immigration', 'anchor_media_attack', 'anchor_self_praise', 'anchor_threat', 'velocity', 'vel_7d', 'SPY', 'VIX', 'USD', 'Oil', 'TNX', 'SPY_ret', 'VIX_ret', 'USD_ret', 'Oil_ret', 'TNX_ret']
 ```
 
@@ -745,6 +760,9 @@ fig.update_layout(
 )
 fig.show()
 ```
+
+
+<iframe src="/plots/trump-impact_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # ── 5d. Multi-panel aligned view: tweet velocity, VIX, S&P 500 ──
@@ -801,6 +819,9 @@ fig.update_layout(
 fig.show()
 ```
 
+
+<iframe src="/plots/trump-impact_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+
 ---
 ## 6. Topic Drift & Market Response
 
@@ -846,6 +867,17 @@ for period_name, (start, end) in PERIODS.items():
         print(f'  {period_name:20s}: too few points ({len(period_proj)})')
 ```
 
+
+```text
+Global Hurst exponent (anchor space): 0.7945
+  -> Persistent: rhetoric tends to continue in the same direction
+  Campaign            : too few points (0)
+  Year 1              : too few points (0)
+  Trade War           : too few points (0)
+  COVID               : too few points (0)
+  Post-Election       : too few points (0)
+```
+
 ```python
 # ── 6b. Path signatures per political period ─────────────────────
 # Compute depth-2 path signatures on anchor-projected trajectory per period
@@ -882,6 +914,12 @@ print(f'{"":20s}', '  '.join(f'{n:>12s}' for n in period_names_sig))
 for i, name in enumerate(period_names_sig):
     row = '  '.join(f'{sig_dist_matrix[i, j]:12.4f}' for j in range(n_periods))
     print(f'{name:20s} {row}')
+```
+
+
+```text
+
+Signature Distance Matrix:
 ```
 
 ```python
@@ -931,6 +969,9 @@ fig.update_layout(
 fig.update_yaxes(title_text='Hurst Exponent', row=1, col=2)
 fig.show()
 ```
+
+
+<iframe src="/plots/trump-impact_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # ── 6d. Rolling Wasserstein drift on anchor-projected trajectory ──
@@ -998,6 +1039,9 @@ fig.update_layout(
 fig.show()
 ```
 
+
+<iframe src="/plots/trump-impact_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+
 ---
 ## 7. Event Study — Tweet Storms & Market Reaction
 
@@ -1043,6 +1087,13 @@ else:
     df_aligned['is_storm'] = df_aligned['n_tweets'] >= count_threshold
     storm_days = df_aligned[df_aligned['is_storm']].index
     print(f'Tweet storms (by count): {len(storm_days)} days')
+```
+
+
+```text
+Tweet storms identified: 497 days
+  By count (>=20 tweets): 392
+  By velocity (top 5%): 109
 ```
 
 ```python
@@ -1097,6 +1148,16 @@ if spy_col and vix_col:
 else:
     print('Economic data columns not found — skipping event study')
     df_events = pd.DataFrame()
+```
+
+
+```text
+Available columns: ['anchor_economy', 'anchor_trade_war', 'anchor_immigration', 'anchor_media_attack', 'anchor_self_praise', 'anchor_threat', 'velocity', 'vel_7d', 'SPY', 'VIX', 'USD', 'Oil', 'TNX', 'SPY_ret', 'VIX_ret', 'USD_ret', 'Oil_ret', 'TNX_ret', 'n_tweets', 'is_storm']
+SPY column: SPY, VIX column: VIX
+
+Event study: 497 storm days with market data
+Mean next-day SPY return after storms: 0.0006
+Mean next-day VIX change after storms: -0.0312
 ```
 
 ```python
@@ -1165,6 +1226,9 @@ else:
     print('Not enough event data for scatter plots')
 ```
 
+
+<iframe src="/plots/trump-impact_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+
 ---
 ## 8. Classification — Can Rhetoric Predict Market Direction?
 
@@ -1204,6 +1268,14 @@ df_features = df_clf_data
 
 print(f'Feature matrix: {df_features.shape}')
 print(f'Label distribution: up={int(df_features["label"].sum())}, down={int((1-df_features["label"]).sum())}')
+```
+
+
+```text
+Available feature columns: ['anchor_economy', 'anchor_trade_war', 'anchor_immigration', 'anchor_media_attack', 'anchor_self_praise', 'anchor_threat', 'velocity', 'vel_7d', 'n_tweets']
+df_aligned shape: (2176, 22), date range: 2015-01-01 00:00:00 to 2021-01-08 00:00:00
+Feature matrix: (2176, 10)
+Label distribution: up=824, down=1352
 ```
 
 ```python
@@ -1250,6 +1322,29 @@ else:
     print('Insufficient data for classification')
 ```
 
+
+```text
+df_features index type: <class 'pandas.DatetimeIndex'>
+df_features date range: 2015-01-01 00:00:00 to 2021-01-08 00:00:00
+df_features shape: (2176, 10)
+
+Train: 1523 days, up-rate=0.370
+Test:  653 days, up-rate=0.400
+
+=== CVX Rhetoric -> Market Direction ===
+  F1:  0.417
+  AUC: 0.498
+
+              precision    recall  f1-score   support
+
+        Down       0.60      0.58      0.59       392
+          Up       0.41      0.43      0.42       261
+
+    accuracy                           0.52       653
+   macro avg       0.51      0.51      0.51       653
+weighted avg       0.53      0.52      0.52       653
+```
+
 ```python
 # ── 8c. Feature importance (if classification succeeded) ──────────
 if 'clf' in dir() and hasattr(clf, 'coef_'):
@@ -1275,6 +1370,9 @@ if 'clf' in dir() and hasattr(clf, 'coef_'):
 else:
     print('Classification not performed — check upstream cells')
 ```
+
+
+<iframe src="/plots/trump-impact_fig_7.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## Summary
