@@ -33,15 +33,15 @@ PLOTLY_HTML_TEMPLATE = """<!DOCTYPE html>
   <meta charset="utf-8"/>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
-    body {{ margin: 0; background: #1a1a2e; }}
-    #plot {{ width: 100%; height: 100vh; }}
+    body { margin: 0; background: #1a1a2e; }
+    #plot { width: 100%; height: 100vh; }
   </style>
 </head>
 <body>
   <div id="plot"></div>
   <script>
     var figure = {figure_json};
-    Plotly.newPlot('plot', figure.data, figure.layout, {{responsive: true}});
+    Plotly.newPlot('plot', figure.data, figure.layout, {responsive: true});
   </script>
 </body>
 </html>"""
