@@ -1,6 +1,6 @@
 ---
 title: "MLOps Drift Detection"
-description: "Production drift detection with CVX temporal analytics"
+description: "CVX temporal analytics"
 ---
 
 Production ML models degrade silently. The embeddings they produce shift over time --- new topics emerge,
