@@ -175,6 +175,6 @@ cd notebooks && jupyter notebook T_Insider_Threat.ipynb
 
 ## Further Reading
 
-- [Theoretical Foundations](/research/foundations/) — Temporal embedding theory and trajectory analytics
-- [Use Cases & Applications](/research/use-cases/) — Domain overview including security analytics
-- [Stochastic Processes](/research/stochastic-processes/) — Statistical foundations for behavioral modeling
+- [Theoretical Foundations](/chronos-vector/research/foundations/) — Temporal embedding theory and trajectory analytics
+- [Use Cases & Applications](/chronos-vector/research/use-cases/) — Domain overview including security analytics
+- [Stochastic Processes](/chronos-vector/research/stochastic-processes/) — Statistical foundations for behavioral modeling

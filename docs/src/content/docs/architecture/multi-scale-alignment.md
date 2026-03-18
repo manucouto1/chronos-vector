@@ -87,7 +87,7 @@ The solution uses SVD: given $B^T A = U \Sigma V^T$, the optimal rotation is $R 
 
 **Cost:** $O(T \cdot D^2)$ for the SVD computation.
 
-This is the same method used for [model version alignment](/architecture/data-virtualization/#2-model-version-alignment), but applied to cross-modal comparison rather than cross-version comparison.
+This is the same method used for [model version alignment](/chronos-vector/architecture/data-virtualization/#2-model-version-alignment), but applied to cross-modal comparison rather than cross-version comparison.
 
 ### 4. Canonical Correlation Analysis (CCA)
 

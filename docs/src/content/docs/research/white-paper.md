@@ -132,15 +132,15 @@ CVX has been validated across 7 investigations spanning 6 domains. Each investig
 
 | Investigation | Domain | Dataset | Key Result | Page |
 |---|---|---|---|---|
-| B1: Mental Health Explorer | Clinical NLP | eRisk 2017--2022 | F1=0.600 (13 temporal features) | [Details](/tutorials/b1-explorer) |
-| B2: Clinical Anchoring | Clinical NLP | eRisk 2017--2022 | F1=0.744, AUC=0.886 (DSM-5 anchors) | [Details](/research/clinical-anchoring) |
-| B3: Political Rhetoric & Markets | Political NLP / Finance | Trump Twitter + S&P 500 | Rhetorical anchor projection + market alignment | [Details](/research/trump-impact) |
-| T1: Market Regime Detection | Quantitative Finance | S&P 500 Sector ETFs | 11 changepoints, Hurst=0.74, path signatures | [Details](/research/finance-regimes) |
-| T2: Anomaly Detection | Time Series | Numenta NAB | Trajectory-geometric anomaly detection | [Details](/research/nab-anomaly) |
-| T3: Fraud Detection | Cybersecurity | IEEE-CIS | Transaction trajectory fingerprinting | [Details](/research/fraud-detection) |
-| T4: Insider Threat | Cybersecurity | CERT CMU | Behavioral regime shift detection | [Details](/research/insider-threat) |
-| T5: MAP-Elites Archive | Quality-Diversity | Synthetic (D=20) | HNSW replaces CVT for adaptive niches | [Details](/research/map-elites) |
-| T6: MLOps Drift Detection | Production ML | Synthetic (D=64) | 5 independent drift signals for monitoring | [Details](/research/mlops-drift) |
+| B1: Mental Health Explorer | Clinical NLP | eRisk 2017--2022 | F1=0.600 (13 temporal features) | [Details](/chronos-vector/tutorials/b1-explorer) |
+| B2: Clinical Anchoring | Clinical NLP | eRisk 2017--2022 | F1=0.744, AUC=0.886 (DSM-5 anchors) | [Details](/chronos-vector/research/clinical-anchoring) |
+| B3: Political Rhetoric & Markets | Political NLP / Finance | Trump Twitter + S&P 500 | Rhetorical anchor projection + market alignment | [Details](/chronos-vector/research/trump-impact) |
+| T1: Market Regime Detection | Quantitative Finance | S&P 500 Sector ETFs | 11 changepoints, Hurst=0.74, path signatures | [Details](/chronos-vector/research/finance-regimes) |
+| T2: Anomaly Detection | Time Series | Numenta NAB | Trajectory-geometric anomaly detection | [Details](/chronos-vector/research/nab-anomaly) |
+| T3: Fraud Detection | Cybersecurity | IEEE-CIS | Transaction trajectory fingerprinting | [Details](/chronos-vector/research/fraud-detection) |
+| T4: Insider Threat | Cybersecurity | CERT CMU | Behavioral regime shift detection | [Details](/chronos-vector/research/insider-threat) |
+| T5: MAP-Elites Archive | Quality-Diversity | Synthetic (D=20) | HNSW replaces CVT for adaptive niches | [Details](/chronos-vector/research/map-elites) |
+| T6: MLOps Drift Detection | Production ML | Synthetic (D=64) | 5 independent drift signals for monitoring | [Details](/chronos-vector/research/mlops-drift) |
 
 ### Reading Guide
 

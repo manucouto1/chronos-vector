@@ -3,7 +3,7 @@ title: "Examples"
 description: "Code examples demonstrating ChronosVector's 17 analytical functions across 6 domains"
 ---
 
-ChronosVector (CVX) ships **17 analytical functions** that turn a temporal vector index into a full analytical engine. This page demonstrates the core API with concise, practical examples drawn from the [Interactive Explorer notebook](/notebooks/B1_interactive_explorer).
+ChronosVector (CVX) ships **17 analytical functions** that turn a temporal vector index into a full analytical engine. This page demonstrates the core API with concise, practical examples drawn from the [Interactive Explorer notebook](/chronos-vector/notebooks/B1_interactive_explorer).
 
 For domain-specific walkthroughs, see the [Cross-Domain Examples](#cross-domain-examples) table at the bottom.
 
@@ -237,9 +237,9 @@ CVX is domain-agnostic. The same 17 functions apply wherever you have entities e
 
 | Domain | Key CVX Functions | Page |
 |--------|------------------|------|
-| **Mental Health Detection** | `hurst_exponent`, `event_features`, `detect_changepoints` | [Mental Health](/examples/mental-health) |
-| **Quality-Diversity (MAP-Elites)** | `regions`, `topological_features`, `path_signature` | [MAP-Elites](/examples/map-elites) |
-| **Molecular Dynamics** | `velocity`, `frechet_distance`, `wasserstein_drift` | [Molecular Dynamics](/examples/molecular-dynamics) |
-| **Drug Discovery** | `region_trajectory`, `fisher_rao_distance`, `signature_distance` | [Drug Discovery](/examples/drug-discovery) |
-| **MLOps Drift Detection** | `wasserstein_drift`, `detect_changepoints`, `hellinger_distance` | [MLOps Drift](/examples/mlops-drift) |
-| **Quantitative Finance** | `hurst_exponent`, `path_signature`, `event_features` | [Finance](/examples/finance) |
+| **Mental Health Detection** | `hurst_exponent`, `event_features`, `detect_changepoints` | [Mental Health](/chronos-vector/examples/mental-health) |
+| **Quality-Diversity (MAP-Elites)** | `regions`, `topological_features`, `path_signature` | [MAP-Elites](/chronos-vector/examples/map-elites) |
+| **Molecular Dynamics** | `velocity`, `frechet_distance`, `wasserstein_drift` | [Molecular Dynamics](/chronos-vector/examples/molecular-dynamics) |
+| **Drug Discovery** | `region_trajectory`, `fisher_rao_distance`, `signature_distance` | [Drug Discovery](/chronos-vector/examples/drug-discovery) |
+| **MLOps Drift Detection** | `wasserstein_drift`, `detect_changepoints`, `hellinger_distance` | [MLOps Drift](/chronos-vector/examples/mlops-drift) |
+| **Quantitative Finance** | `hurst_exponent`, `path_signature`, `event_features` | [Finance](/chronos-vector/examples/finance) |

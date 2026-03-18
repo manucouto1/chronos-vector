@@ -71,4 +71,4 @@ This opens the full API documentation in your browser, including all private ite
 
 ## Python Bindings
 
-The Python API (`chronos_vector` module) is a subset of the Rust API exposed via PyO3. See the [Temporal Analytics Toolkit](/specs/temporal-analytics) for the Python function reference.
+The Python API (`chronos_vector` module) is a subset of the Rust API exposed via PyO3. See the [Temporal Analytics Toolkit](/chronos-vector/specs/temporal-analytics) for the Python function reference.
