@@ -1,6 +1,6 @@
 ---
 title: "MAP-Elites Archive"
-description: "Quality-diversity archive with CVX temporal analytics"
+description: "CVX temporal analytics"
 ---
 
 ## MAP-Elites: The Dimension of Change

@@ -99,7 +99,13 @@ def extract_plotly_figure(output):
 
 
 def save_plotly_html(figure_json, path):
-    """Save a Plotly figure as standalone HTML."""
+    """Save a Plotly figure as standalone responsive HTML."""
+    # Remove fixed dimensions so the plot fills the iframe
+    layout = figure_json.get("layout", {})
+    layout.pop("width", None)
+    layout.pop("height", None)
+    layout["autosize"] = True
+    figure_json["layout"] = layout
     html = PLOTLY_HTML_TEMPLATE.replace("{figure_json}", json.dumps(figure_json))
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
