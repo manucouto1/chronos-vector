@@ -1,6 +1,6 @@
 ---
-title: "Anomaly Detection (NAB)"
-description: "Trajectory-geometric anomaly detection on Numenta Benchmark"
+title: "Anomaly Detection"
+description: "CVX temporal analytics"
 ---
 
 This notebook demonstrates **ChronosVector (CVX)** as a trajectory-based anomaly detector

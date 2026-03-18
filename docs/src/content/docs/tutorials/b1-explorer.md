@@ -1,6 +1,6 @@
 ---
 title: "Mental Health Explorer"
-description: "Interactive exploration of depression detection with 17 CVX analytical functions on eRisk data"
+description: "CVX temporal analytics"
 ---
 
 This notebook showcases **ChronosVector (CVX)** as a temporal vector database for mental health research.
