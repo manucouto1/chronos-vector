@@ -82,6 +82,13 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         self.graph.is_empty()
     }
 
+    /// Get the last (most recent) node_id for an entity, or None if not found.
+    pub fn entity_last_node(&self, entity_id: u64) -> Option<u32> {
+        self.entity_index
+            .get(&entity_id)
+            .and_then(|pts| pts.last().map(|&(_, nid)| nid))
+    }
+
     /// Set ef_construction at runtime (lower for bulk load, higher for quality).
     pub fn set_ef_construction(&mut self, ef: usize) {
         self.graph.set_ef_construction(ef);
