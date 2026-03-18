@@ -386,7 +386,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/b2-clinical-anchoring_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b2-clinical-anchoring_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # Anchor drift trends: who is APPROACHING symptoms over time?
@@ -408,7 +408,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/b2-clinical-anchoring_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b2-clinical-anchoring_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 4. Classification — Feature Ablation
@@ -512,7 +512,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/b2-clinical-anchoring_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b2-clinical-anchoring_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 5. Temporal Evaluation — Train/Val/Test by eRisk Edition
@@ -700,7 +700,7 @@ fig.show()
   100%: F1=0.753, AUC=0.895 (train=226, test=236)
 ```
 
-<iframe src="/plots/b2-clinical-anchoring_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/b2-clinical-anchoring_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## Summary

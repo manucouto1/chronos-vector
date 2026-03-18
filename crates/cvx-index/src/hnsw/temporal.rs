@@ -268,11 +268,8 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
 
         // Count assignments: for each node, find nearest hub
         let mut counts = vec![0usize; hubs.len()];
-        let hub_set: std::collections::HashMap<u32, usize> = hubs
-            .iter()
-            .enumerate()
-            .map(|(i, &h)| (h, i))
-            .collect();
+        let hub_set: std::collections::HashMap<u32, usize> =
+            hubs.iter().enumerate().map(|(i, &h)| (h, i)).collect();
 
         for node_id in 0..n as u32 {
             if let Some(hub) = self.graph.assign_region(self.graph.vector(node_id), level) {
@@ -284,9 +281,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
 
         hubs.iter()
             .enumerate()
-            .map(|(i, &hub_id)| {
-                (hub_id, self.graph.vector(hub_id).to_vec(), counts[i])
-            })
+            .map(|(i, &hub_id)| (hub_id, self.graph.vector(hub_id).to_vec(), counts[i]))
             .collect()
     }
 
@@ -312,11 +307,8 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         }
 
         // Map hub_node_id → region index
-        let hub_index: std::collections::HashMap<u32, usize> = hubs
-            .iter()
-            .enumerate()
-            .map(|(i, &h)| (h, i))
-            .collect();
+        let hub_index: std::collections::HashMap<u32, usize> =
+            hubs.iter().enumerate().map(|(i, &h)| (h, i)).collect();
 
         // Get entity's posts sorted by time
         let posts = self.trajectory(entity_id, TemporalFilter::All);

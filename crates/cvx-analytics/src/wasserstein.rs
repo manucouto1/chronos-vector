@@ -112,7 +112,8 @@ pub fn sliced_wasserstein(
             .iter()
             .enumerate()
             .map(|(i, c)| {
-                let proj: f64 = c.iter()
+                let proj: f64 = c
+                    .iter()
                     .zip(direction.iter())
                     .map(|(&cv, &dv)| cv as f64 * dv)
                     .sum();
@@ -208,7 +209,8 @@ mod tests {
         let d_ac = wasserstein_1d(&a, &c);
         assert!(
             d_ac <= d_ab + d_bc + 1e-10,
-            "triangle inequality: d(a,c)={d_ac} > d(a,b)+d(b,c)={}", d_ab + d_bc
+            "triangle inequality: d(a,c)={d_ac} > d(a,b)+d(b,c)={}",
+            d_ab + d_bc
         );
     }
 
@@ -216,37 +218,34 @@ mod tests {
     fn sliced_identical_zero() {
         let a = vec![0.5, 0.3, 0.2];
         let b = vec![0.5, 0.3, 0.2];
-        let centroids: Vec<&[f32]> = vec![
-            &[1.0f32, 0.0] as &[f32],
-            &[0.0f32, 1.0],
-            &[-1.0f32, 0.0],
-        ];
+        let centroids: Vec<&[f32]> =
+            vec![&[1.0f32, 0.0] as &[f32], &[0.0f32, 1.0], &[-1.0f32, 0.0]];
         let d = sliced_wasserstein(&a, &b, &centroids, 100, 42);
-        assert!(d < 1e-10, "identical distributions should have distance ~0, got {d}");
+        assert!(
+            d < 1e-10,
+            "identical distributions should have distance ~0, got {d}"
+        );
     }
 
     #[test]
     fn sliced_different_positive() {
         let a = vec![1.0, 0.0, 0.0];
         let b = vec![0.0, 0.0, 1.0];
-        let centroids: Vec<&[f32]> = vec![
-            &[1.0f32, 0.0] as &[f32],
-            &[0.0f32, 0.0],
-            &[-1.0f32, 0.0],
-        ];
+        let centroids: Vec<&[f32]> =
+            vec![&[1.0f32, 0.0] as &[f32], &[0.0f32, 0.0], &[-1.0f32, 0.0]];
         let d = sliced_wasserstein(&a, &b, &centroids, 100, 42);
-        assert!(d > 0.1, "different distributions should have positive distance, got {d}");
+        assert!(
+            d > 0.1,
+            "different distributions should have positive distance, got {d}"
+        );
     }
 
     #[test]
     fn sliced_symmetric() {
         let a = vec![0.6, 0.3, 0.1];
         let b = vec![0.1, 0.2, 0.7];
-        let centroids: Vec<&[f32]> = vec![
-            &[1.0f32, 0.0] as &[f32],
-            &[0.0f32, 1.0],
-            &[-1.0f32, -1.0],
-        ];
+        let centroids: Vec<&[f32]> =
+            vec![&[1.0f32, 0.0] as &[f32], &[0.0f32, 1.0], &[-1.0f32, -1.0]];
         let d_ab = sliced_wasserstein(&a, &b, &centroids, 200, 42);
         let d_ba = sliced_wasserstein(&b, &a, &centroids, 200, 42);
         assert!(
@@ -259,11 +258,8 @@ mod tests {
     fn drift_convenience() {
         let dist_t1: Vec<f32> = vec![0.5, 0.3, 0.2];
         let dist_t2: Vec<f32> = vec![0.2, 0.3, 0.5];
-        let centroids: Vec<&[f32]> = vec![
-            &[1.0f32, 0.0] as &[f32],
-            &[0.0f32, 1.0],
-            &[-1.0f32, 0.0],
-        ];
+        let centroids: Vec<&[f32]> =
+            vec![&[1.0f32, 0.0] as &[f32], &[0.0f32, 1.0], &[-1.0f32, 0.0]];
         let d = wasserstein_drift(&dist_t1, &dist_t2, &centroids, 100);
         assert!(d > 0.0);
     }

@@ -159,7 +159,9 @@ impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for ConcurrentTemporalHnsw
         alpha: f32,
         query_timestamp: i64,
     ) -> Vec<(u32, f32)> {
-        self.inner.read().search(query, k, filter, alpha, query_timestamp)
+        self.inner
+            .read()
+            .search(query, k, filter, alpha, query_timestamp)
     }
 
     fn trajectory(&self, entity_id: u64, filter: TemporalFilter) -> Vec<(i64, u32)> {
@@ -202,7 +204,9 @@ impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for ConcurrentTemporalHnsw
         window_days: i64,
         alpha: f32,
     ) -> Vec<(i64, Vec<f32>)> {
-        self.inner.read().region_trajectory(entity_id, level, window_days, alpha)
+        self.inner
+            .read()
+            .region_trajectory(entity_id, level, window_days, alpha)
     }
 }
 

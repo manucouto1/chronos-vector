@@ -1,6 +1,6 @@
 ---
-title: "Political Rhetoric & Market Impact"
-description: "Trump Twitter temporal analysis with CVX"
+title: "Political Rhetoric"
+description: "CVX temporal analytics"
 ---
 
 This notebook treats **presidential tweets as a temporal trajectory in embedding space**
@@ -518,7 +518,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/trump-impact_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/trump-impact_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 4. Change Point Detection — Rhetorical Regime Shifts
@@ -652,7 +652,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/trump-impact_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/trump-impact_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 5. Economic Indicator Alignment
@@ -801,7 +801,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/trump-impact_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/trump-impact_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # ── 5d. Multi-panel aligned view: tweet velocity, VIX, S&P 500 ──
@@ -859,7 +859,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/trump-impact_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/trump-impact_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 6. Topic Drift & Market Response
@@ -1096,7 +1096,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/trump-impact_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/trump-impact_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```python
 # ── 6d. Rolling Wasserstein drift on anchor-projected trajectory ──
@@ -1165,7 +1165,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/trump-impact_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/trump-impact_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 7. Event Study — Tweet Storms & Market Reaction
@@ -1352,7 +1352,7 @@ else:
 ```
 
 
-<iframe src="/plots/trump-impact_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/trump-impact_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 8. Classification — Can Rhetoric Predict Market Direction?
@@ -1497,7 +1497,7 @@ else:
 ```
 
 
-<iframe src="/plots/trump-impact_fig_7.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/trump-impact_fig_7.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## Summary

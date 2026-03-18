@@ -52,11 +52,10 @@ impl TorchOdeModel {
             Device::Cpu
         };
 
-        let model = CModule::load_on_device(path, device).map_err(|e| {
-            AnalyticsError::ModelNotLoaded {
+        let model =
+            CModule::load_on_device(path, device).map_err(|e| AnalyticsError::ModelNotLoaded {
                 name: path.display().to_string(),
-            }
-        })?;
+            })?;
 
         tracing::info!("Loaded Neural ODE model from {}", path.display());
         Ok(Self { model, device })
@@ -121,10 +120,7 @@ impl TorchOdeModel {
         if output_size.len() != 2 || output_size[1] != dim as i64 {
             return Err(AnalyticsError::SolverDiverged {
                 step: 0,
-                error: format!(
-                    "model output shape {:?}, expected [1, {dim}]",
-                    output_size
-                ),
+                error: format!("model output shape {:?}, expected [1, {dim}]", output_size),
             });
         }
 

@@ -122,10 +122,7 @@ pub fn train_neural_ode(
     config: &TrainConfig,
 ) -> Result<TrainedModel, AnalyticsError> {
     if trajectories.is_empty() {
-        return Err(AnalyticsError::InsufficientData {
-            needed: 1,
-            have: 0,
-        });
+        return Err(AnalyticsError::InsufficientData { needed: 1, have: 0 });
     }
 
     let device = if tch::Cuda::is_available() {
@@ -178,11 +175,12 @@ pub fn train_neural_ode(
         Default::default(),
     );
 
-    let mut opt = nn::Adam::default().build(&vs, config.lr).map_err(|e| {
-        AnalyticsError::ModelNotLoaded {
-            name: format!("optimizer init failed: {e}"),
-        }
-    })?;
+    let mut opt =
+        nn::Adam::default()
+            .build(&vs, config.lr)
+            .map_err(|e| AnalyticsError::ModelNotLoaded {
+                name: format!("optimizer init failed: {e}"),
+            })?;
 
     // Prepare training data: split each trajectory into (input, target)
     let (inputs, targets) = prepare_training_data(trajectories, config.dim, device)?;
@@ -212,7 +210,12 @@ pub fn train_neural_ode(
 
         if (epoch + 1) % 10 == 0 || epoch == 0 {
             let loss_val: f64 = loss.double_value(&[]);
-            tracing::info!("  Epoch {}/{}, loss={:.6}", epoch + 1, config.epochs, loss_val);
+            tracing::info!(
+                "  Epoch {}/{}, loss={:.6}",
+                epoch + 1,
+                config.epochs,
+                loss_val
+            );
         }
     }
 
@@ -239,10 +242,7 @@ fn prepare_training_data(
         .collect();
 
     if valid.is_empty() {
-        return Err(AnalyticsError::InsufficientData {
-            needed: 3,
-            have: 0,
-        });
+        return Err(AnalyticsError::InsufficientData { needed: 3, have: 0 });
     }
 
     // Find max sequence length (for padding)
@@ -261,8 +261,7 @@ fn prepare_training_data(
         for (i, (ts, vec)) in traj[..input_len].iter().enumerate() {
             let t_norm = ((*ts as f64 - t_first) / t_range) as f32;
             input_data[i * (dim + 1)] = t_norm;
-            input_data[i * (dim + 1) + 1..i * (dim + 1) + 1 + dim]
-                .copy_from_slice(&vec[..dim]);
+            input_data[i * (dim + 1) + 1..i * (dim + 1) + 1 + dim].copy_from_slice(&vec[..dim]);
         }
         all_inputs.extend_from_slice(&input_data);
 

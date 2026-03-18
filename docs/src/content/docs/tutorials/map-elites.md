@@ -174,7 +174,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/map-elites_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/map-elites_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ## 3. Niche Discovery via HNSW Regions
 
@@ -268,7 +268,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/map-elites_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/map-elites_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ## 4. Novelty Scoring: O(log N) via HNSW
 
@@ -342,7 +342,7 @@ print(f'  Negative correlation expected: high-fitness solutions cluster near nic
 ```
 
 
-<iframe src="/plots/map-elites_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/map-elites_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```text
 Fitness-Novelty correlation: r=-0.052
@@ -567,7 +567,7 @@ print(f'Regions visualized: {top_k} of {n_regions} (sorted by total activity)')
 ```
 
 
-<iframe src="/plots/map-elites_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/map-elites_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ```text
 Regions visualized: 30 of 42 (sorted by total activity)
@@ -648,7 +648,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/map-elites_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/map-elites_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ## 8. Path Signatures: The Shape of Evolutionary Trajectories
 
@@ -846,7 +846,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/map-elites_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/map-elites_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ## 10. Summary
 

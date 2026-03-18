@@ -180,7 +180,7 @@ else:
   Region 1460: 1,214 members, centroid norm=4.02
 ```
 
-<iframe src="/plots/mlops-drift_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/mlops-drift_fig_0.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 3. Region Trajectory: Watching the Distribution Transform
@@ -228,7 +228,7 @@ fig.show()
 Region trajectory: 18 time steps, 69 regions per step
 ```
 
-<iframe src="/plots/mlops-drift_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/mlops-drift_fig_1.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 4. Distributional Drift Signals
@@ -324,7 +324,7 @@ fig.show()
 Computed 17 consecutive-day drift measurements
 ```
 
-<iframe src="/plots/mlops-drift_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/mlops-drift_fig_2.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 5. Change Point Detection: When Did Drift Start?
@@ -380,7 +380,7 @@ fig.show()
 Detected 0 regime transitions:
 ```
 
-<iframe src="/plots/mlops-drift_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/mlops-drift_fig_3.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 6. Drift Persistence: Will It Self-Correct?
@@ -479,7 +479,7 @@ fig.show()
 Computed velocity at 17998 time steps
 ```
 
-<iframe src="/plots/mlops-drift_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/mlops-drift_fig_4.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 8. Topological Monitoring: Is the Embedding Space Fragmenting?
@@ -539,7 +539,7 @@ Topological features of 69 region centroids:
   Total persistence: 245.4166
 ```
 
-<iframe src="/plots/mlops-drift_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/mlops-drift_fig_5.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## 9. Event Features: Temporal Patterns in Production Traffic
@@ -665,7 +665,7 @@ fig.show()
 ```
 
 
-<iframe src="/plots/mlops-drift_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+<iframe src="/chronos-vector/plots/mlops-drift_fig_6.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ---
 ## Summary

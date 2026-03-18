@@ -255,7 +255,7 @@ mod tests {
         let v = [0.5, -0.3, 0.0, 1.0, -1.0];
         let code = q.encode(&v);
         assert_eq!(code.len(), 5);
-        assert_eq!(code[4], 0);   // -1.0 → 0
+        assert_eq!(code[4], 0); // -1.0 → 0
         assert_eq!(code[3], 255); // 1.0 → 255
 
         // Distance between identical codes should be ~0

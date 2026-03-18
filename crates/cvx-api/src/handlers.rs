@@ -690,5 +690,10 @@ fn query_err(e: cvx_core::error::QueryError) -> (StatusCode, Json<ErrorResponse>
         cvx_core::error::QueryError::InsufficientData { .. } => StatusCode::BAD_REQUEST,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
-    (status, Json(ErrorResponse { error: e.to_string() }))
+    (
+        status,
+        Json(ErrorResponse {
+            error: e.to_string(),
+        }),
+    )
 }
