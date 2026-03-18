@@ -16,6 +16,7 @@ pub mod calculus;
 pub mod cohort;
 pub mod explain;
 pub mod fisher_rao;
+pub mod granger;
 pub mod motifs;
 pub mod multiscale;
 pub mod ode;

@@ -8,6 +8,7 @@ use cvx_core::{StorageBackend, TemporalIndexAccess};
 
 use cvx_analytics::calculus;
 use cvx_analytics::cohort;
+use cvx_analytics::granger;
 use cvx_analytics::motifs;
 use cvx_analytics::ode;
 use cvx_analytics::temporal_join;
@@ -143,6 +144,13 @@ pub fn execute_query(
             entity_b,
             t3,
         } => do_analogy(index, entity_a, t1, t2, entity_b, t3),
+
+        TemporalQuery::GrangerCausality {
+            entity_a,
+            entity_b,
+            max_lag,
+            significance,
+        } => do_granger(index, entity_a, entity_b, max_lag, significance),
 
         TemporalQuery::DiscoverMotifs {
             entity_id,
@@ -291,6 +299,50 @@ fn do_drift_quant(
         l2_magnitude: report.l2_magnitude,
         cosine_drift: report.cosine_drift,
         top_dimensions: report.top_dimensions,
+    }))
+}
+
+fn do_granger(
+    index: &dyn TemporalIndexAccess,
+    entity_a: u64,
+    entity_b: u64,
+    max_lag: usize,
+    significance: f64,
+) -> Result<QueryResult, QueryError> {
+    let (td_a, vecs_a) = build_traj(index, entity_a, TemporalFilter::All);
+    let (td_b, vecs_b) = build_traj(index, entity_b, TemporalFilter::All);
+
+    if td_a.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_a));
+    }
+    if td_b.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_b));
+    }
+
+    let traj_a = to_slices(&td_a, &vecs_a);
+    let traj_b = to_slices(&td_b, &vecs_b);
+
+    let result = granger::granger_causality(&traj_a, &traj_b, max_lag, significance)
+        .map_err(|_| QueryError::InsufficientData {
+            needed: max_lag + 3,
+            have: traj_a.len().min(traj_b.len()),
+        })?;
+
+    let direction = match result.direction {
+        granger::GrangerDirection::AToB => "a_to_b",
+        granger::GrangerDirection::BToA => "b_to_a",
+        granger::GrangerDirection::Bidirectional => "bidirectional",
+        granger::GrangerDirection::None => "none",
+    };
+
+    Ok(QueryResult::Granger(GrangerCausalityResult {
+        direction: direction.to_string(),
+        optimal_lag: result.optimal_lag,
+        f_statistic: result.f_statistic,
+        p_value: result.p_value,
+        effect_size: result.effect_size,
+        per_dimension_a_to_b: result.per_dimension_a_to_b,
+        per_dimension_b_to_a: result.per_dimension_b_to_a,
     }))
 }
 

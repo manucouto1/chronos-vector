@@ -284,6 +284,40 @@ pub struct PredictionResponse {
     pub method: String,
 }
 
+/// Granger causality request.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct GrangerRequest {
+    /// First entity (potential cause).
+    pub entity_a: u64,
+    /// Second entity (potential effect).
+    pub entity_b: u64,
+    /// Maximum lag to test (default 5).
+    #[serde(default = "default_top_n")]
+    pub max_lag: usize,
+    /// Significance threshold (default 0.05).
+    #[serde(default = "default_significance")]
+    pub significance: f64,
+}
+
+fn default_significance() -> f64 {
+    0.05
+}
+
+/// Granger causality response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct GrangerResponse {
+    /// Detected direction: "a_to_b", "b_to_a", "bidirectional", or "none".
+    pub direction: String,
+    /// Optimal lag (time steps).
+    pub optimal_lag: usize,
+    /// F-statistic.
+    pub f_statistic: f64,
+    /// Combined p-value.
+    pub p_value: f64,
+    /// Effect size (partial R²).
+    pub effect_size: f64,
+}
+
 /// Motif discovery request params.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MotifParams {
@@ -816,6 +850,46 @@ pub async fn analogy(
 
     if let cvx_query::types::QueryResult::Analogy(vec) = result {
         Ok(Json(AnalogyResponse { vector: vec }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Granger causality test between two entities.
+#[utoipa::path(
+    post,
+    path = "/v1/granger",
+    request_body = GrangerRequest,
+    responses(
+        (status = 200, description = "Granger causality result", body = GrangerResponse),
+        (status = 400, description = "Insufficient data", body = ErrorResponse),
+        (status = 404, description = "Entity not found", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn granger(
+    State(state): State<SharedState>,
+    Json(req): Json<GrangerRequest>,
+) -> Result<Json<GrangerResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::GrangerCausality {
+            entity_a: req.entity_a,
+            entity_b: req.entity_b,
+            max_lag: req.max_lag,
+            significance: req.significance,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Granger(g) = result {
+        Ok(Json(GrangerResponse {
+            direction: g.direction,
+            optimal_lag: g.optimal_lag,
+            f_statistic: g.f_statistic,
+            p_value: g.p_value,
+            effect_size: g.effect_size,
+        }))
     } else {
         unreachable!()
     }

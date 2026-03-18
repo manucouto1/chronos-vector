@@ -83,6 +83,17 @@ pub enum TemporalQuery {
         /// Target timestamp.
         t3: i64,
     },
+    /// Granger causality test between two entities.
+    GrangerCausality {
+        /// First entity (potential cause).
+        entity_a: u64,
+        /// Second entity (potential effect).
+        entity_b: u64,
+        /// Maximum lag to test.
+        max_lag: usize,
+        /// Significance threshold (e.g., 0.05).
+        significance: f64,
+    },
     /// Discover recurring motifs in an entity's trajectory.
     DiscoverMotifs {
         /// Entity identifier.
@@ -142,6 +153,8 @@ pub enum QueryResult {
     Drift(DriftResult),
     /// Analogy result.
     Analogy(Vec<f32>),
+    /// Granger causality result.
+    Granger(GrangerCausalityResult),
     /// Discovered motifs.
     Motifs(Vec<MotifResult>),
     /// Discovered discords.
@@ -167,6 +180,25 @@ pub struct TemporalJoinResultEntry {
     pub points_a: usize,
     /// Points from entity B in window.
     pub points_b: usize,
+}
+
+/// Granger causality test result.
+#[derive(Debug, Clone)]
+pub struct GrangerCausalityResult {
+    /// Detected direction.
+    pub direction: String,
+    /// Optimal lag.
+    pub optimal_lag: usize,
+    /// F-statistic.
+    pub f_statistic: f64,
+    /// Combined p-value.
+    pub p_value: f64,
+    /// Effect size (partial R²).
+    pub effect_size: f64,
+    /// Per-dimension F-statistics for A→B.
+    pub per_dimension_a_to_b: Vec<f64>,
+    /// Per-dimension F-statistics for B→A.
+    pub per_dimension_b_to_a: Vec<f64>,
 }
 
 /// A discovered motif result.
