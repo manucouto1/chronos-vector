@@ -1,8 +1,11 @@
 # Rust
 /target/
+target */
+**/target/
 **/*.rs.bk
 Cargo.lock
 !Cargo.lock
+crates/cvx-python/Cargo.lock
 
 # Node (docs site)
 docs/node_modules/
