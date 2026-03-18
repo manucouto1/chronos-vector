@@ -334,7 +334,7 @@ print(f'Trajectory: {len(traj):,} points, D={len(traj[0][1])}')
 
 
 ```text
-Inserted 2,176 daily vectors in 0.90s
+Inserted 2,176 daily vectors in 0.92s
 Saved to ../data/cache/trump_index.cvx
 Trajectory: 2,176 points, D=384
 ```
@@ -433,7 +433,7 @@ for j, name in enumerate(ANCHOR_NAMES):
 
 
 ```text
-Projected 2,176 points to 6 anchors in 0.015s
+Projected 2,176 points to 6 anchors in 0.017s
 
 Anchor Summary (cosine distance, lower = closer):
 Anchor              Mean      Min      Trend     Last
@@ -529,27 +529,46 @@ to see if CVX detects regime shifts automatically.
 
 ```python
 # ── 4a. Changepoints on anchor-projected trajectory ──────────────
-# Use lower penalty for D=6 projected space (more sensitive to rhetorical shifts)
+# Cosine distances in [0.7, 0.9] have very small variance.
+# Need very low penalty to detect subtle rhetorical shifts.
 n_points = len(projected)
-penalty_anchor = np.log(n_points)  # ln(n) ≈ 7.7, much lower than 3*ln(n)=23
 
-t0 = time.perf_counter()
-cps_anchor = cvx.detect_changepoints(
-    entity_id=1, trajectory=projected,
-    penalty=penalty_anchor, min_segment_len=14,  # at least 2 weeks per regime
-)
-elapsed = time.perf_counter() - t0
-print(f'Anchor-projected changepoints: {len(cps_anchor)} detected in {elapsed:.3f}s (penalty={penalty_anchor:.1f})')
+# Try multiple penalties and pick the one giving 5-15 changepoints
+best_cps = []
+for penalty_test in [0.5, 1.0, 2.0, 3.0, 5.0, np.log(n_points)]:
+    cps_test = cvx.detect_changepoints(
+        entity_id=1, trajectory=projected,
+        penalty=penalty_test, min_segment_len=14,
+    )
+    print(f'  penalty={penalty_test:.1f}: {len(cps_test)} changepoints')
+    if 5 <= len(cps_test) <= 20 and not best_cps:
+        best_cps = cps_test
+        best_penalty = penalty_test
+
+# Fallback: use the most granular that gives >0
+if not best_cps:
+    for penalty_test in [0.1, 0.2, 0.5]:
+        cps_test = cvx.detect_changepoints(
+            entity_id=1, trajectory=projected,
+            penalty=penalty_test, min_segment_len=14,
+        )
+        if len(cps_test) > 0:
+            best_cps = cps_test
+            best_penalty = penalty_test
+            break
+
+cps_anchor = best_cps
+print(f'\nSelected: penalty={best_penalty:.1f}, {len(cps_anchor)} changepoints')
 
 # Convert timestamps to dates
 def ts_to_date(ts):
-    """Convert unix seconds to pandas Timestamp."""
     return pd.Timestamp(ts, unit='s')
 
 cp_anchor_dates = [(ts_to_date(ts), sev) for ts, sev in cps_anchor]
 
-# Known political events for comparison
+# Known political events
 KNOWN_EVENTS = {
+    '2016-06-16': 'Campaign Launch',
     '2016-11-08': 'Election Day',
     '2017-01-20': 'Inauguration',
     '2018-03-22': 'Trade War Begins',
@@ -564,18 +583,31 @@ KNOWN_EVENTS = {
 
 print(f'\nDetected changepoints (by severity):')
 for date, sev in sorted(cp_anchor_dates, key=lambda x: -x[1])[:15]:
-    # Find nearest known event
     nearest = min(KNOWN_EVENTS.items(), key=lambda e: abs((pd.Timestamp(e[0]) - date).days))
     days_diff = (date - pd.Timestamp(nearest[0])).days
-    event_str = f'  (~{nearest[1]}, {days_diff:+d}d)' if abs(days_diff) < 30 else ''
+    event_str = f'  (~{nearest[1]}, {days_diff:+d}d)' if abs(days_diff) < 45 else ''
     print(f'  {date.date()}: severity={sev:.4f}{event_str}')
 ```
 
 
 ```text
-Anchor-projected changepoints: 0 detected in 0.013s (penalty=7.7)
+  penalty=0.5: 7 changepoints
+  penalty=1.0: 3 changepoints
+  penalty=2.0: 2 changepoints
+  penalty=3.0: 1 changepoints
+  penalty=5.0: 1 changepoints
+  penalty=7.7: 0 changepoints
+
+Selected: penalty=0.5, 7 changepoints
 
 Detected changepoints (by severity):
+  2017-10-10: severity=0.1729
+  2017-01-02: severity=0.1560  (~Inauguration, -18d)
+  2018-11-21: severity=0.1549
+  2016-11-06: severity=0.1438  (~Election Day, -2d)
+  2015-06-19: severity=0.1143
+  2019-09-08: severity=0.0884
+  2018-09-21: severity=0.0670
 ```
 
 ```python
@@ -667,6 +699,9 @@ for date, row in top_vel.iterrows():
 ```text
 Computed anchor-space velocity for 2174 days
 Mean velocity: 0.000001
+```
+
+```text
 Max velocity:  0.000004 on 2018-12-03
 
 Top 10 rhetorical pivots (highest velocity in anchor space):
@@ -713,40 +748,53 @@ Columns: ['anchor_economy', 'anchor_trade_war', 'anchor_immigration', 'anchor_me
 ```
 
 ```python
-# ── 5c. Rolling correlations: anchor distances vs economic indicators ──
-WINDOW = 30  # 30-day rolling window
-indicators = ['SPY', 'VIX', 'Oil', 'USD', 'TNX']
+# ── 5c. Quarterly-smoothed correlations: rhetoric vs markets ─────
+# Rolling 90-day (quarterly) correlation, smoothed for readability
+WINDOW = 90  # ~1 quarter
+indicators = {'VIX': C_CRISIS, 'SPY': C_ECON}  # Focus on the 2 most relevant
+
+# Select the 3 most interesting anchors (economy, trade_war, threat)
+focus_anchors = ['economy', 'trade_war', 'threat']
 
 fig = make_subplots(
-    rows=len(ANCHOR_NAMES), cols=1,
-    subplot_titles=[f'{name.replace("_", " ").title()} anchor' for name in ANCHOR_NAMES],
-    shared_xaxes=True, vertical_spacing=0.03,
+    rows=len(focus_anchors), cols=1,
+    subplot_titles=[f'Distance to "{a.replace("_", " ").title()}" anchor vs markets' for a in focus_anchors],
+    shared_xaxes=True, vertical_spacing=0.08,
 )
 
-indicator_colors = {
-    'SPY': C_ECON, 'VIX': C_CRISIS, 'Oil': '#e67e22', 'USD': '#9b59b6', 'TNX': C_TWEET,
-}
-
-for j, anchor_name in enumerate(ANCHOR_NAMES):
+for j, anchor_name in enumerate(focus_anchors):
     anchor_col = f'anchor_{anchor_name}'
-    for ind in indicators:
+    if anchor_col not in df_aligned.columns:
+        continue
+    for ind, color in indicators.items():
         if ind not in df_aligned.columns:
             continue
-        # Rolling Pearson correlation
-        rolling_corr = df_aligned[anchor_col].rolling(WINDOW).corr(df_aligned[ind])
+        # Quarterly rolling Pearson correlation
+        rolling_corr = df_aligned[anchor_col].rolling(WINDOW, center=True).corr(df_aligned[ind])
+        # Additional smoothing for readability
+        rolling_corr_smooth = rolling_corr.rolling(30, center=True).mean()
+        
         fig.add_trace(go.Scatter(
-            x=df_aligned.index, y=rolling_corr,
-            mode='lines', line=dict(color=indicator_colors[ind], width=1),
+            x=df_aligned.index, y=rolling_corr_smooth,
+            mode='lines', line=dict(color=color, width=2.5),
             name=ind, showlegend=(j == 0),
             legendgroup=ind,
         ), row=j + 1, col=1)
-
+    
     fig.add_hline(y=0, line=dict(color='gray', width=0.5, dash='dash'), row=j + 1, col=1)
-    fig.update_yaxes(range=[-1, 1], row=j + 1, col=1)
+    fig.update_yaxes(range=[-0.8, 0.8], title_text='Correlation', row=j + 1, col=1)
+
+# Add known events
+for event_date, event_name in KNOWN_EVENTS.items():
+    event_dt = pd.Timestamp(event_date)
+    if event_name in ['Trade War Begins', 'COVID Emergency', 'Election 2020']:
+        for row in range(1, len(focus_anchors) + 1):
+            fig.add_vline(x=event_dt, row=row, col=1,
+                         line=dict(color=C_EVENT, width=1, dash='dot'))
 
 fig.update_layout(
-    title=f'Rolling {WINDOW}-Day Correlation: Anchor Distance vs Economic Indicators',
-    height=1200, width=1100, template=TEMPLATE,
+    title=f'Quarterly Correlation: Rhetoric ↔ Markets (90-day rolling, smoothed)',
+    height=700, width=1100, template=TEMPLATE,
     legend=dict(orientation='h', yanchor='bottom', y=1.02),
 )
 fig.show()
