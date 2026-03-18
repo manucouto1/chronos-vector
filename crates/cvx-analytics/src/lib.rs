@@ -9,6 +9,7 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod anchor;
 pub mod backend;
 pub mod bocpd;
 pub mod calculus;
