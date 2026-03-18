@@ -1,6 +1,6 @@
 ---
-title: "Political Rhetoric & Market Impact"
-description: "Trump Twitter temporal analysis with CVX"
+title: "Political Rhetoric"
+description: "CVX temporal analytics"
 ---
 
 This notebook treats **presidential tweets as a temporal trajectory in embedding space**

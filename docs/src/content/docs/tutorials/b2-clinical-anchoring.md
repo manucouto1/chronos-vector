@@ -1,6 +1,6 @@
 ---
 title: "Clinical Anchoring"
-description: "Symptom-aware temporal analysis with DSM-5 anchor projection"
+description: "CVX temporal analytics"
 ---
 
 This notebook moves beyond generic embedding comparison to **clinically meaningful drift detection**.

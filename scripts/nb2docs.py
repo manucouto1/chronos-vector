@@ -33,14 +33,18 @@ PLOTLY_HTML_TEMPLATE = """<!DOCTYPE html>
   <meta charset="utf-8"/>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
-    body { margin: 0; background: #1a1a2e; }
-    #plot { width: 100%; height: 100vh; }
+    body { margin: 0; background: #1a1a2e; overflow: hidden; }
+    #plot { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
   </style>
 </head>
 <body>
   <div id="plot"></div>
   <script>
     var figure = {figure_json};
+    // Override fixed dimensions — let iframe control size
+    figure.layout.width = undefined;
+    figure.layout.height = undefined;
+    figure.layout.autosize = true;
     Plotly.newPlot('plot', figure.data, figure.layout, {responsive: true});
   </script>
 </body>

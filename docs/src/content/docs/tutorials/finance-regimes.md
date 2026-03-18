@@ -1,6 +1,6 @@
 ---
 title: "Market Regime Detection"
-description: "S&P 500 temporal analytics with CVX"
+description: "CVX temporal analytics"
 ---
 
 This notebook applies **ChronosVector (CVX)** to financial market data, demonstrating
