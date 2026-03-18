@@ -1,7 +1,7 @@
 # Rust
 /target/
 target */
-**/target/
+*/**/target/
 **/*.rs.bk
 Cargo.lock
 !Cargo.lock
@@ -11,6 +11,7 @@ crates/cvx-python/Cargo.lock
 docs/node_modules/
 docs/dist/
 docs/.astro/
+docs/public/api/
 
 # IDE
 .idea/

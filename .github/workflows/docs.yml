@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "crates/**"
 
 permissions:
   contents: read
@@ -19,18 +20,32 @@ jobs:
   build:
     name: Build Docs
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: docs
     steps:
       - uses: actions/checkout@v4
+
+      # ── Rust API docs ──
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Generate Rust API docs
+        run: cargo doc --workspace --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: "--default-theme ayu"
+
+      # ── Starlight docs ──
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: docs/package-lock.json
       - run: npm ci
+        working-directory: docs
       - run: npm run build
+        working-directory: docs
+
+      # ── Merge: copy rustdocs into Starlight output ──
+      - name: Copy Rust API docs into site
+        run: cp -r target/doc docs/dist/api
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/dist
