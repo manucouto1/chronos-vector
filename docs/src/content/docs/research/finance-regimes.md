@@ -137,6 +137,6 @@ cd notebooks && jupyter notebook T_Finance_Regimes.ipynb
 
 ## Further Reading
 
-- [Theoretical Foundations](/research/foundations/) — Neural ODE and temporal embedding theory
-- [Use Cases & Applications](/research/use-cases/) — Domain overview including quantitative finance
-- [Path Signatures](/research/path-signatures/) — Mathematical background on rough path theory
+- [Theoretical Foundations](/chronos-vector/research/foundations/) — Neural ODE and temporal embedding theory
+- [Use Cases & Applications](/chronos-vector/research/use-cases/) — Domain overview including quantitative finance
+- [Path Signatures](/chronos-vector/research/path-signatures/) — Mathematical background on rough path theory

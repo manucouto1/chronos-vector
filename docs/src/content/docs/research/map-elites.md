@@ -44,8 +44,8 @@ jupyter notebook notebooks/T_MAP_Elites.ipynb
 
 No external data required — generates synthetic data.
 
-See the [full tutorial with Plotly plots](/tutorials/map-elites).
+See the [full tutorial with Plotly plots](/chronos-vector/tutorials/map-elites).
 
 ---
 
-[← Back to White Paper](/research/white-paper)
+[← Back to White Paper](/chronos-vector/research/white-paper)

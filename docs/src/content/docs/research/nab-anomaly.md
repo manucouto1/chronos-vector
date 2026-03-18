@@ -157,6 +157,6 @@ cd notebooks && jupyter notebook T_NAB_Anomaly.ipynb
 
 ## Further Reading
 
-- [Theoretical Foundations](/research/foundations/) — Delay embeddings and dynamical systems theory
-- [Use Cases & Applications](/research/use-cases/) — Domain overview including anomaly detection
-- [Stochastic Processes](/research/stochastic-processes/) — Hurst exponent and long-memory processes
+- [Theoretical Foundations](/chronos-vector/research/foundations/) — Delay embeddings and dynamical systems theory
+- [Use Cases & Applications](/chronos-vector/research/use-cases/) — Domain overview including anomaly detection
+- [Stochastic Processes](/chronos-vector/research/stochastic-processes/) — Hurst exponent and long-memory processes

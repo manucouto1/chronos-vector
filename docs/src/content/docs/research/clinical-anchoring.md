@@ -85,8 +85,8 @@ jupyter notebook notebooks/B2_clinical_anchoring.ipynb
 
 ## Interactive Visualizations
 
-See the [full tutorial with Plotly plots](/tutorials/b2-clinical-anchoring).
+See the [full tutorial with Plotly plots](/chronos-vector/tutorials/b2-clinical-anchoring).
 
 ---
 
-[← Back to White Paper](/research/white-paper)
+[← Back to White Paper](/chronos-vector/research/white-paper)

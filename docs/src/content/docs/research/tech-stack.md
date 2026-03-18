@@ -43,7 +43,7 @@ Este proyecto te obligará a dominar aspectos avanzados de Rust en cada fase:
 
 ## Implementation Choices
 
-The following technical choices were made during the design phase (see [Implementation Decisions](/specs/implementation-guide) for full rationale):
+The following technical choices were made during the design phase (see [Implementation Decisions](/chronos-vector/specs/implementation-guide) for full rationale):
 
 | Category | Choice | Why |
 |----------|--------|-----|

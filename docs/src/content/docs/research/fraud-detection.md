@@ -148,6 +148,6 @@ cd notebooks && jupyter notebook T_Fraud_Detection.ipynb
 
 ## Further Reading
 
-- [Theoretical Foundations](/research/foundations/) — Trajectory analytics and temporal embeddings
-- [Use Cases & Applications](/research/use-cases/) — Domain overview including fraud detection
-- [Stochastic Processes](/research/stochastic-processes/) — Statistical foundations for anomaly scoring
+- [Theoretical Foundations](/chronos-vector/research/foundations/) — Trajectory analytics and temporal embeddings
+- [Use Cases & Applications](/chronos-vector/research/use-cases/) — Domain overview including fraud detection
+- [Stochastic Processes](/chronos-vector/research/stochastic-processes/) — Statistical foundations for anomaly scoring
