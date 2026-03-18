@@ -135,6 +135,9 @@ export default defineConfig({
 						{ label: 'MAP-Elites Archive', slug: 'tutorials/map-elites', badge: { text: 'Live', variant: 'success' } },
 						{ label: 'MLOps Drift Detection', slug: 'tutorials/mlops-drift', badge: { text: 'Live', variant: 'success' } },
 						{ label: 'Clinical Anchoring', slug: 'tutorials/b2-clinical-anchoring', badge: { text: 'Live', variant: 'success' } },
+						{ label: 'Market Regime Detection', slug: 'tutorials/finance-regimes', badge: { text: 'Live', variant: 'success' } },
+						{ label: 'Anomaly Detection (NAB)', slug: 'tutorials/nab-anomaly', badge: { text: 'Live', variant: 'success' } },
+						{ label: 'Political Rhetoric', slug: 'tutorials/trump-impact', badge: { text: 'Live', variant: 'success' } },
 						{ label: 'B1: Classification Results', slug: 'tutorials/b1-mental-health' },
 					],
 				},
@@ -150,6 +153,8 @@ export default defineConfig({
 						{ label: 'Anomaly Detection (NAB)', slug: 'research/nab-anomaly' },
 						{ label: 'Fraud Detection', slug: 'research/fraud-detection' },
 						{ label: 'Insider Threat', slug: 'research/insider-threat' },
+						{ label: 'MAP-Elites Archive', slug: 'research/map-elites' },
+						{ label: 'MLOps Drift Detection', slug: 'research/mlops-drift' },
 					],
 				},
 				{

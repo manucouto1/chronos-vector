@@ -139,11 +139,13 @@ CVX has been validated across 7 investigations spanning 6 domains. Each investig
 | T2: Anomaly Detection | Time Series | Numenta NAB | Trajectory-geometric anomaly detection | [Details](/research/nab-anomaly) |
 | T3: Fraud Detection | Cybersecurity | IEEE-CIS | Transaction trajectory fingerprinting | [Details](/research/fraud-detection) |
 | T4: Insider Threat | Cybersecurity | CERT CMU | Behavioral regime shift detection | [Details](/research/insider-threat) |
+| T5: MAP-Elites Archive | Quality-Diversity | Synthetic (D=20) | HNSW replaces CVT for adaptive niches | [Details](/research/map-elites) |
+| T6: MLOps Drift Detection | Production ML | Synthetic (D=64) | 5 independent drift signals for monitoring | [Details](/research/mlops-drift) |
 
 ### Reading Guide
 
 - **B-series** (B1, B2, B3) investigations are **benchmark** studies with full experimental protocols, train/test splits, and quantitative evaluation against baselines.
-- **T-series** (T1--T4) investigations are **technical** demonstrations showing how CVX's analytical toolkit applies to each domain, with qualitative and quantitative results.
+- **T-series** (T1--T6) investigations are **technical** demonstrations showing how CVX's analytical toolkit applies to each domain, with qualitative and quantitative results.
 
 ---
 
