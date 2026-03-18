@@ -432,7 +432,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             max_timestamp: self.max_timestamp,
         };
 
-        let bytes = postcard::to_allocvec(&snapshot).map_err(|e| std::io::Error::other(e))?;
+        let bytes = postcard::to_allocvec(&snapshot).map_err(std::io::Error::other)?;
 
         let mut file = std::fs::File::create(path)?;
         file.write_all(&bytes)?;
