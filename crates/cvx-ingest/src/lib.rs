@@ -1,6 +1,13 @@
-//! `cvx-ingest` — Data ingestion pipeline for ChronosVector.
+//! # `cvx-ingest` — Data ingestion pipeline for ChronosVector.
 //!
-//! Orchestrates the full ingestion flow:
-//! - **pipeline**: Ingestion orchestrator coordinating validation, delta encoding, indexing, and storage
-//! - **delta**: Delta encoder/decoder with configurable threshold and keyframe intervals
-//! - **validate**: Schema validation for incoming temporal vector data
+//! ## Layer 3: Delta Encoding
+//!
+//! [`delta::DeltaEncoder`] compresses embedding trajectories by storing only
+//! the sparse differences between consecutive vectors. [`delta::DeltaDecoder`]
+//! reconstructs full vectors from keyframes + delta chains.
+
+#![deny(unsafe_code)]
+#![warn(missing_docs)]
+
+pub mod delta;
+pub mod validation;

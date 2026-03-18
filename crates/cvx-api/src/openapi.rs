@@ -1,0 +1,61 @@
+//! OpenAPI specification auto-generated from handler annotations.
+
+use utoipa::OpenApi;
+
+use crate::handlers;
+
+/// Auto-generated OpenAPI 3.1 specification for the ChronosVector REST API.
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "ChronosVector API",
+        version = "0.1.0",
+        description = "High-performance temporal vector database REST API.\n\nChronosVector stores, indexes, and analyzes time-evolving embedding vectors with spatiotemporal queries, change point detection, and trajectory analytics.",
+        license(name = "MIT OR Apache-2.0"),
+    ),
+    paths(
+        handlers::ingest,
+        handlers::query,
+        handlers::trajectory,
+        handlers::velocity,
+        handlers::drift,
+        handlers::changepoints,
+        handlers::prediction,
+        handlers::analogy,
+        handlers::health,
+        handlers::ready,
+    ),
+    components(schemas(
+        handlers::BatchIngestRequest,
+        handlers::IngestRequest,
+        handlers::BatchIngestResponse,
+        handlers::IngestReceipt,
+        handlers::QueryRequest,
+        handlers::QueryFilter,
+        handlers::QueryResponse,
+        handlers::QueryResult,
+        handlers::TrajectoryResponse,
+        handlers::TrajectoryEntry,
+        handlers::VelocityParams,
+        handlers::VelocityResponse,
+        handlers::DriftParams,
+        handlers::DriftResponse,
+        handlers::DimensionChange,
+        handlers::ChangepointParams,
+        handlers::ChangepointResponse,
+        handlers::ChangepointEntry,
+        handlers::PredictionParams,
+        handlers::PredictionResponse,
+        handlers::AnalogyRequest,
+        handlers::AnalogyResponse,
+        handlers::HealthResponse,
+        handlers::ErrorResponse,
+    )),
+    tags(
+        (name = "ingestion", description = "Data ingestion endpoints"),
+        (name = "query", description = "Spatiotemporal search and retrieval"),
+        (name = "analytics", description = "Temporal analytics (velocity, drift, change points, prediction)"),
+        (name = "system", description = "Health checks and operational endpoints"),
+    )
+)]
+pub struct ApiDoc;

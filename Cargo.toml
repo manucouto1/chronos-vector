@@ -10,12 +10,15 @@ members = [
   "crates/cvx-api",
   "crates/cvx-server",
 ]
+exclude = [
+  "crates/cvx-python",
+]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 authors = ["Manuel Couto Pintos"]
-license = "MIT OR Apache-2.0"
+license-file = "LICENSE"
 rust-version = "1.88.0"
 repository = "https://github.com/manucouto1/chronos-vector"
 
@@ -39,7 +42,29 @@ postcard = { version = "1", features = ["alloc"] }
 pulp = { version = "0.22", features = ["macro"] }
 
 # Collections
-smallvec = { version = "1", features = ["union"] }
+smallvec = { version = "1", features = ["union", "serde"] }
+
+# Random
+rand = "0.9"
+
+# Bitmaps
+roaring = "0.10"
+
+# Storage
+rocksdb = "0.23"
+
+# gRPC
+tonic = "0.13"
+prost = "0.13"
+tokio-stream = { version = "0.1", features = ["sync"] }
+
+# HTTP / API
+axum = "0.8"
+serde_json = "1"
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
@@ -47,6 +72,12 @@ tokio = { version = "1", features = ["full"] }
 # Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# PyTorch (TorchScript inference)
+tch = "0.23"
+
+# Python bindings
+pyo3 = { version = "0.24", features = ["extension-module"] }
 
 # Testing
 proptest = "1"

@@ -4,20 +4,24 @@ description = "Tiered storage engine (hot/warm/cold) with WAL and compaction"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license-file.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 
 [features]
-default = ["hot-storage"]
-hot-storage = []
+default = ["hot-storage", "warm-storage", "cold-storage"]
+hot-storage = ["rocksdb"]
 warm-storage = []
 cold-storage = []
 
 [dependencies]
 cvx-core = { workspace = true }
+parking_lot = { workspace = true }
+postcard = { workspace = true }
 serde = { workspace = true }
-thiserror = { workspace = true }
+serde_json = "1"
+rocksdb = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+tempfile = "3"

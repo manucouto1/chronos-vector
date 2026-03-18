@@ -4,7 +4,7 @@ description = "Dual-protocol API gateway (REST + gRPC) for ChronosVector"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license-file.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 
@@ -12,15 +12,33 @@ repository.workspace = true
 default = ["rest-api"]
 rest-api = []
 grpc-api = []
+torch-backend = ["cvx-query/torch-backend"]
 
 [dependencies]
 cvx-core = { workspace = true }
-cvx-query = { workspace = true }
+cvx-analytics = { workspace = true }
+cvx-index = { workspace = true }
 cvx-ingest = { workspace = true }
+cvx-query = { workspace = true }
+cvx-storage = { workspace = true }
+axum = { workspace = true }
+prost = { workspace = true }
 serde = { workspace = true }
-thiserror = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tonic = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
+parking_lot = { workspace = true }
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true }
 
 [dev-dependencies]
+http-body-util = "0.1"
 proptest = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
