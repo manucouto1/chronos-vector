@@ -4,7 +4,7 @@ description = "Temporal index engine (ST-HNSW) with time-decay edges and SIMD di
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license-file.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

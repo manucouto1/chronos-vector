@@ -4,7 +4,7 @@ description = "ChronosVector server binary — bootstrap, config, and runtime"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license-file.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

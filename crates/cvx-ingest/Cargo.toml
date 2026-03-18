@@ -4,7 +4,7 @@ description = "Data ingestion pipeline with delta encoding and schema validation
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license-file.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 
