@@ -130,6 +130,21 @@ pub enum TemporalQuery {
         /// Window size in microseconds.
         window_us: i64,
     },
+    /// Causal search: semantic kNN + temporal edge context (RFC-010).
+    CausalSearch {
+        /// Query vector.
+        vector: Vec<f32>,
+        /// Number of results.
+        k: usize,
+        /// Temporal filter.
+        filter: TemporalFilter,
+        /// Semantic vs temporal weight.
+        alpha: f32,
+        /// Reference timestamp.
+        query_timestamp: i64,
+        /// Steps of temporal context (forward and backward).
+        temporal_context: usize,
+    },
     /// Cohort drift analysis across multiple entities.
     CohortDrift {
         /// Entity identifiers in the cohort.
@@ -172,6 +187,23 @@ pub enum QueryResult {
     TemporalJoin(Vec<TemporalJoinResultEntry>),
     /// Cohort drift report.
     CohortDrift(CohortDriftResult),
+    /// Causal search results.
+    CausalSearch(Vec<CausalSearchResultEntry>),
+}
+
+/// A causal search result with temporal context.
+#[derive(Debug, Clone)]
+pub struct CausalSearchResultEntry {
+    /// Node ID.
+    pub node_id: u32,
+    /// Distance score.
+    pub score: f32,
+    /// Entity ID.
+    pub entity_id: u64,
+    /// Temporal successors: (node_id, timestamp).
+    pub successors: Vec<(u32, i64)>,
+    /// Temporal predecessors: (node_id, timestamp).
+    pub predecessors: Vec<(u32, i64)>,
 }
 
 /// A convergence window from a temporal join query.

@@ -1228,6 +1228,117 @@ pub struct EntitySummaryResponse {
     pub summary: String,
 }
 
+// ─── Causal search (RFC-010) ─────────────────────────────────────────
+
+/// Causal search request.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CausalSearchRequest {
+    /// Query vector.
+    pub vector: Vec<f32>,
+    /// Number of results.
+    #[serde(default = "default_k")]
+    pub k: usize,
+    /// Temporal filter.
+    #[serde(default)]
+    pub filter: QueryFilter,
+    /// Semantic vs temporal weight.
+    #[serde(default = "default_alpha")]
+    pub alpha: f32,
+    /// Reference timestamp.
+    #[serde(default)]
+    pub query_timestamp: i64,
+    /// Steps of temporal context forward and backward.
+    #[serde(default = "default_temporal_context")]
+    pub temporal_context: usize,
+}
+
+fn default_temporal_context() -> usize {
+    5
+}
+
+/// A temporal context entry.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TemporalContextEntry {
+    /// Node ID.
+    pub node_id: u32,
+    /// Timestamp.
+    pub timestamp: i64,
+}
+
+/// A causal search result with temporal context.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CausalSearchEntry {
+    /// Node ID.
+    pub node_id: u32,
+    /// Entity ID.
+    pub entity_id: u64,
+    /// Distance score.
+    pub score: f32,
+    /// What happened NEXT.
+    pub successors: Vec<TemporalContextEntry>,
+    /// What happened BEFORE.
+    pub predecessors: Vec<TemporalContextEntry>,
+}
+
+/// Causal search response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CausalSearchResponse {
+    /// Results with temporal context.
+    pub results: Vec<CausalSearchEntry>,
+}
+
+/// Causal search: semantic neighbors + temporal before/after context.
+#[utoipa::path(
+    post,
+    path = "/v1/causal-search",
+    request_body = CausalSearchRequest,
+    responses(
+        (status = 200, description = "Causal search results", body = CausalSearchResponse),
+    ),
+    tag = "query"
+)]
+pub async fn causal_search(
+    State(state): State<SharedState>,
+    Json(req): Json<CausalSearchRequest>,
+) -> Result<Json<CausalSearchResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let filter: TemporalFilter = req.filter.into();
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::CausalSearch {
+            vector: req.vector,
+            k: req.k,
+            filter,
+            alpha: req.alpha,
+            query_timestamp: req.query_timestamp,
+            temporal_context: req.temporal_context,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::CausalSearch(entries) = result {
+        Ok(Json(CausalSearchResponse {
+            results: entries
+                .into_iter()
+                .map(|e| CausalSearchEntry {
+                    node_id: e.node_id,
+                    entity_id: e.entity_id,
+                    score: e.score,
+                    successors: e.successors.into_iter()
+                        .map(|(nid, ts)| TemporalContextEntry { node_id: nid, timestamp: ts })
+                        .collect(),
+                    predecessors: e.predecessors.into_iter()
+                        .map(|(nid, ts)| TemporalContextEntry { node_id: nid, timestamp: ts })
+                        .collect(),
+                })
+                .collect(),
+        }))
+    } else {
+        unreachable!()
+    }
+}
+
+// ─── LLM-optimized composite endpoints (RFC-009) ────────────────────
+
 /// Anomaly scan request.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AnomalyScanRequest {

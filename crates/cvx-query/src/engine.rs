@@ -183,6 +183,15 @@ pub fn execute_query(
             t2,
             top_n,
         } => do_cohort_drift(index, &entity_ids, t1, t2, top_n),
+
+        TemporalQuery::CausalSearch {
+            vector,
+            k,
+            filter,
+            alpha,
+            query_timestamp,
+            temporal_context,
+        } => do_causal_search(index, &vector, k, filter, alpha, query_timestamp, temporal_context),
     }
 }
 
@@ -593,6 +602,65 @@ fn do_analogy(
         .map(|(&b, (&a2, &a1))| b + (a2 - a1))
         .collect();
     Ok(QueryResult::Analogy(result))
+}
+
+/// Causal search: kNN + temporal context via trajectory walk.
+///
+/// Works with ANY TemporalIndexAccess (not just TemporalGraphIndex).
+/// For full hybrid beam search, use TemporalGraphIndex directly.
+fn do_causal_search(
+    index: &dyn TemporalIndexAccess,
+    vector: &[f32],
+    k: usize,
+    filter: TemporalFilter,
+    alpha: f32,
+    query_timestamp: i64,
+    temporal_context: usize,
+) -> Result<QueryResult, QueryError> {
+    let results = index.search_raw(vector, k, filter, alpha, query_timestamp);
+
+    let causal: Vec<CausalSearchResultEntry> = results
+        .into_iter()
+        .map(|(node_id, score)| {
+            let entity_id = index.entity_id(node_id);
+            let ts = index.timestamp(node_id);
+
+            // Get entity's full trajectory to find temporal neighbors
+            let traj = index.trajectory(entity_id, TemporalFilter::All);
+
+            // Find this node's position in the trajectory
+            let pos = traj.iter().position(|&(_, nid)| nid == node_id);
+
+            let (successors, predecessors) = match pos {
+                Some(p) => {
+                    let succ: Vec<(u32, i64)> = traj[p + 1..]
+                        .iter()
+                        .take(temporal_context)
+                        .map(|&(t, nid)| (nid, t))
+                        .collect();
+                    let pred: Vec<(u32, i64)> = traj[..p]
+                        .iter()
+                        .rev()
+                        .take(temporal_context)
+                        .map(|&(t, nid)| (nid, t))
+                        .rev()
+                        .collect();
+                    (succ, pred)
+                }
+                None => (Vec::new(), Vec::new()),
+            };
+
+            CausalSearchResultEntry {
+                node_id,
+                score,
+                entity_id,
+                successors,
+                predecessors,
+            }
+        })
+        .collect();
+
+    Ok(QueryResult::CausalSearch(causal))
 }
 
 #[cfg(test)]
