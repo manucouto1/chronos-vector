@@ -755,6 +755,247 @@ fn anchor_summary(
     map
 }
 
+// ─── RFC-007: Advanced Temporal Primitives ──────────────────────────
+
+/// Compute cohort-level drift analysis.
+///
+/// Args:
+///     trajectories: List of (entity_id, trajectory) where trajectory = [(timestamp, vector), ...].
+///     t1: Start timestamp.
+///     t2: End timestamp.
+///     top_n: Number of top dimensions to report (default 5).
+///
+/// Returns:
+///     Dict with n_entities, mean_drift_l2, median_drift_l2, std_drift_l2,
+///     centroid_l2, centroid_cosine, dispersion_t1, dispersion_t2,
+///     dispersion_change, convergence_score, top_dimensions, outliers.
+#[pyfunction]
+#[pyo3(signature = (trajectories, t1, t2, top_n=5))]
+fn cohort_drift(
+    trajectories: Vec<(u64, Vec<(i64, Vec<f32>)>)>,
+    t1: i64,
+    t2: i64,
+    top_n: usize,
+) -> PyResult<std::collections::HashMap<String, pyo3::PyObject>> {
+    use pyo3::IntoPyObject;
+
+    let owned_refs: Vec<Vec<(i64, &[f32])>> = trajectories
+        .iter()
+        .map(|(_, traj)| traj.iter().map(|(t, v)| (*t, v.as_slice())).collect())
+        .collect();
+
+    let input: Vec<(u64, &[(i64, &[f32])])> = trajectories
+        .iter()
+        .zip(owned_refs.iter())
+        .map(|((eid, _), refs)| (*eid, refs.as_slice()))
+        .collect();
+
+    let report = cvx_analytics::cohort::cohort_drift(&input, t1, t2, top_n)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+    Python::with_gil(|py| {
+        let mut map = std::collections::HashMap::new();
+        map.insert("n_entities".into(), report.n_entities.into_pyobject(py)?.into_any().unbind());
+        map.insert("mean_drift_l2".into(), report.mean_drift_l2.into_pyobject(py)?.into_any().unbind());
+        map.insert("median_drift_l2".into(), report.median_drift_l2.into_pyobject(py)?.into_any().unbind());
+        map.insert("std_drift_l2".into(), report.std_drift_l2.into_pyobject(py)?.into_any().unbind());
+        map.insert("centroid_l2".into(), report.centroid_drift.l2_magnitude.into_pyobject(py)?.into_any().unbind());
+        map.insert("centroid_cosine".into(), report.centroid_drift.cosine_drift.into_pyobject(py)?.into_any().unbind());
+        map.insert("dispersion_t1".into(), report.dispersion_t1.into_pyobject(py)?.into_any().unbind());
+        map.insert("dispersion_t2".into(), report.dispersion_t2.into_pyobject(py)?.into_any().unbind());
+        map.insert("dispersion_change".into(), report.dispersion_change.into_pyobject(py)?.into_any().unbind());
+        map.insert("convergence_score".into(), report.convergence_score.into_pyobject(py)?.into_any().unbind());
+        map.insert("top_dimensions".into(), report.top_dimensions.into_pyobject(py)?.into_any().unbind());
+        let outliers: Vec<(u64, f32, f32, f32)> = report.outliers.into_iter()
+            .map(|o| (o.entity_id, o.drift_magnitude, o.z_score, o.drift_direction_alignment))
+            .collect();
+        map.insert("outliers".into(), outliers.into_pyobject(py)?.into_any().unbind());
+        Ok(map)
+    })
+}
+
+/// Find time windows where two entities are semantically close.
+///
+/// Args:
+///     traj_a: Trajectory of entity A as [(timestamp, vector), ...].
+///     traj_b: Trajectory of entity B.
+///     epsilon: Distance threshold for convergence.
+///     window_us: Sliding window size in microseconds.
+///
+/// Returns:
+///     List of (start, end, mean_distance, min_distance, points_a, points_b).
+#[pyfunction]
+fn temporal_join(
+    traj_a: Vec<(i64, Vec<f32>)>,
+    traj_b: Vec<(i64, Vec<f32>)>,
+    epsilon: f32,
+    window_us: i64,
+) -> PyResult<Vec<(i64, i64, f32, f32, usize, usize)>> {
+    let a: Vec<(i64, &[f32])> = traj_a.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+    let b: Vec<(i64, &[f32])> = traj_b.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+
+    cvx_analytics::temporal_join::temporal_join(&a, &b, epsilon, window_us)
+        .map(|results| {
+            results
+                .into_iter()
+                .map(|r| (r.start, r.end, r.mean_distance, r.min_distance, r.points_a, r.points_b))
+                .collect()
+        })
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
+/// Discover recurring motifs (patterns) in a trajectory via Matrix Profile.
+///
+/// Args:
+///     trajectory: List of (timestamp, vector) tuples.
+///     window: Subsequence window size (number of time steps).
+///     max_motifs: Maximum number of motifs to return (default 5).
+///     exclusion_zone: Fraction of window for non-trivial matches (default 0.5).
+///
+/// Returns:
+///     List of dicts with 'canonical_index', 'occurrences', 'period', 'mean_match_distance'.
+#[pyfunction]
+#[pyo3(signature = (trajectory, window, max_motifs=5, exclusion_zone=0.5))]
+fn discover_motifs(
+    trajectory: Vec<(i64, Vec<f32>)>,
+    window: usize,
+    max_motifs: usize,
+    exclusion_zone: f32,
+) -> PyResult<Vec<std::collections::HashMap<String, pyo3::PyObject>>> {
+    use pyo3::IntoPyObject;
+
+    let traj: Vec<(i64, &[f32])> = trajectory.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+
+    let motifs = cvx_analytics::motifs::discover_motifs(&traj, window, max_motifs, exclusion_zone)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+    Python::with_gil(|py| {
+        motifs
+            .into_iter()
+            .map(|m| {
+                let mut map = std::collections::HashMap::new();
+                map.insert("canonical_index".into(), m.canonical_index.into_pyobject(py)?.into_any().unbind());
+                let occs: Vec<(usize, i64, f32)> = m.occurrences.into_iter()
+                    .map(|o| (o.start_index, o.timestamp, o.distance))
+                    .collect();
+                map.insert("occurrences".into(), occs.into_pyobject(py)?.into_any().unbind());
+                map.insert("period".into(), m.period.into_pyobject(py)?.into_any().unbind());
+                map.insert("mean_match_distance".into(), m.mean_match_distance.into_pyobject(py)?.into_any().unbind());
+                Ok(map)
+            })
+            .collect()
+    })
+}
+
+/// Discover anomalous subsequences (discords) via Matrix Profile.
+///
+/// Args:
+///     trajectory: List of (timestamp, vector) tuples.
+///     window: Subsequence window size.
+///     max_discords: Maximum number of discords to return (default 5).
+///
+/// Returns:
+///     List of (start_index, timestamp, nn_distance).
+#[pyfunction]
+#[pyo3(signature = (trajectory, window, max_discords=5))]
+fn discover_discords(
+    trajectory: Vec<(i64, Vec<f32>)>,
+    window: usize,
+    max_discords: usize,
+) -> PyResult<Vec<(usize, i64, f32)>> {
+    let traj: Vec<(i64, &[f32])> = trajectory.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+
+    cvx_analytics::motifs::discover_discords(&traj, window, max_discords)
+        .map(|results| {
+            results
+                .into_iter()
+                .map(|d| (d.start_index, d.timestamp, d.nn_distance))
+                .collect()
+        })
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
+/// Test Granger causality between two embedding trajectories.
+///
+/// Args:
+///     traj_a: Trajectory of entity A as [(timestamp, vector), ...].
+///     traj_b: Trajectory of entity B.
+///     max_lag: Maximum lag to test (default 5).
+///     significance: P-value threshold (default 0.05).
+///
+/// Returns:
+///     Dict with 'direction', 'optimal_lag', 'f_statistic', 'p_value', 'effect_size'.
+#[pyfunction]
+#[pyo3(signature = (traj_a, traj_b, max_lag=5, significance=0.05))]
+fn granger_causality(
+    traj_a: Vec<(i64, Vec<f32>)>,
+    traj_b: Vec<(i64, Vec<f32>)>,
+    max_lag: usize,
+    significance: f64,
+) -> PyResult<std::collections::HashMap<String, pyo3::PyObject>> {
+    use pyo3::IntoPyObject;
+
+    let a: Vec<(i64, &[f32])> = traj_a.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+    let b: Vec<(i64, &[f32])> = traj_b.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+
+    let result = cvx_analytics::granger::granger_causality(&a, &b, max_lag, significance)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+    Python::with_gil(|py| {
+        let mut map = std::collections::HashMap::new();
+        let direction = match result.direction {
+            cvx_analytics::granger::GrangerDirection::AToB => "a_to_b",
+            cvx_analytics::granger::GrangerDirection::BToA => "b_to_a",
+            cvx_analytics::granger::GrangerDirection::Bidirectional => "bidirectional",
+            cvx_analytics::granger::GrangerDirection::None => "none",
+        };
+        map.insert("direction".into(), direction.into_pyobject(py)?.into_any().unbind());
+        map.insert("optimal_lag".into(), result.optimal_lag.into_pyobject(py)?.into_any().unbind());
+        map.insert("f_statistic".into(), result.f_statistic.into_pyobject(py)?.into_any().unbind());
+        map.insert("p_value".into(), result.p_value.into_pyobject(py)?.into_any().unbind());
+        map.insert("effect_size".into(), result.effect_size.into_pyobject(py)?.into_any().unbind());
+        Ok(map)
+    })
+}
+
+/// Compute counterfactual trajectory analysis.
+///
+/// Given pre-change and post-change trajectory segments, extrapolates the
+/// pre-change linear trend and measures divergence from actual post-change data.
+///
+/// Args:
+///     pre_change: Trajectory before change point [(timestamp, vector), ...].
+///     post_change: Trajectory after change point.
+///     change_point: Timestamp of the detected change.
+///
+/// Returns:
+///     Dict with 'total_divergence', 'max_divergence_value', 'max_divergence_time',
+///     'divergence_curve' as list of (timestamp, distance).
+#[pyfunction]
+fn counterfactual_trajectory(
+    pre_change: Vec<(i64, Vec<f32>)>,
+    post_change: Vec<(i64, Vec<f32>)>,
+    change_point: i64,
+) -> PyResult<std::collections::HashMap<String, pyo3::PyObject>> {
+    use pyo3::IntoPyObject;
+
+    let pre: Vec<(i64, &[f32])> = pre_change.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+    let post: Vec<(i64, &[f32])> = post_change.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+
+    let result = cvx_analytics::counterfactual::counterfactual_trajectory(&pre, &post, change_point)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+    Python::with_gil(|py| {
+        let mut map = std::collections::HashMap::new();
+        map.insert("total_divergence".into(), result.total_divergence.into_pyobject(py)?.into_any().unbind());
+        map.insert("max_divergence_value".into(), result.max_divergence_value.into_pyobject(py)?.into_any().unbind());
+        map.insert("max_divergence_time".into(), result.max_divergence_time.into_pyobject(py)?.into_any().unbind());
+        let curve: Vec<(i64, f32)> = result.divergence_curve;
+        map.insert("divergence_curve".into(), curve.into_pyobject(py)?.into_any().unbind());
+        Ok(map)
+    })
+}
+
 /// ChronosVector Python module.
 #[pymodule]
 fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -776,5 +1017,12 @@ fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hellinger_distance, m)?)?;
     m.add_function(wrap_pyfunction!(project_to_anchors, m)?)?;
     m.add_function(wrap_pyfunction!(anchor_summary, m)?)?;
+    // RFC-007: Advanced Temporal Primitives
+    m.add_function(wrap_pyfunction!(cohort_drift, m)?)?;
+    m.add_function(wrap_pyfunction!(temporal_join, m)?)?;
+    m.add_function(wrap_pyfunction!(discover_motifs, m)?)?;
+    m.add_function(wrap_pyfunction!(discover_discords, m)?)?;
+    m.add_function(wrap_pyfunction!(granger_causality, m)?)?;
+    m.add_function(wrap_pyfunction!(counterfactual_trajectory, m)?)?;
     Ok(())
 }
