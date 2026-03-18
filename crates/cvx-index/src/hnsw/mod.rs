@@ -35,6 +35,7 @@
 
 pub mod concurrent;
 pub mod optimized;
+pub mod partitioned;
 pub mod temporal;
 
 pub use concurrent::ConcurrentTemporalHnsw;

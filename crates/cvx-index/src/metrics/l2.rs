@@ -23,6 +23,7 @@ use super::simd_ops::l2_squared_simd;
 /// let b = vec![0.0, 1.0];
 /// assert!((d.distance(&a, &b) - 2.0).abs() < 1e-5); // (1-0)^2 + (0-1)^2 = 2
 /// ```
+#[derive(Clone, Copy)]
 pub struct L2Distance;
 
 impl DistanceMetric for L2Distance {

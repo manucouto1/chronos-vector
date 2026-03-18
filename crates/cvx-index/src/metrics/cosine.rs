@@ -21,6 +21,7 @@ use super::simd_ops::{dot_product_simd, norm_squared_simd};
 /// let b = vec![1.0, 0.0];
 /// assert!(d.distance(&a, &b) < 1e-5); // same direction → 0.0
 /// ```
+#[derive(Clone, Copy)]
 pub struct CosineDistance;
 
 impl DistanceMetric for CosineDistance {

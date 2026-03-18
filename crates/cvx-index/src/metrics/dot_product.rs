@@ -23,6 +23,7 @@ use super::simd_ops::dot_product_simd;
 /// let b = vec![1.0, 0.0];
 /// assert!(d.distance(&a, &b) < 0.0); // same direction → negative (= similar)
 /// ```
+#[derive(Clone, Copy)]
 pub struct DotProductDistance;
 
 impl DistanceMetric for DotProductDistance {
