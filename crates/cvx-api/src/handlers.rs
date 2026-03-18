@@ -284,6 +284,52 @@ pub struct PredictionResponse {
     pub method: String,
 }
 
+/// Temporal join request.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct TemporalJoinRequest {
+    /// First entity.
+    pub entity_a: u64,
+    /// Second entity.
+    pub entity_b: u64,
+    /// Distance threshold for convergence.
+    pub epsilon: f32,
+    /// Window size in days.
+    #[serde(default = "default_window_days")]
+    pub window_days: f64,
+}
+
+fn default_window_days() -> f64 {
+    7.0
+}
+
+/// A convergence window entry.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TemporalJoinEntry {
+    /// Start timestamp.
+    pub start: i64,
+    /// End timestamp.
+    pub end: i64,
+    /// Mean distance during convergence.
+    pub mean_distance: f32,
+    /// Minimum distance.
+    pub min_distance: f32,
+    /// Points from entity A.
+    pub points_a: usize,
+    /// Points from entity B.
+    pub points_b: usize,
+}
+
+/// Temporal join response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TemporalJoinResponse {
+    /// Entity A.
+    pub entity_a: u64,
+    /// Entity B.
+    pub entity_b: u64,
+    /// Convergence windows.
+    pub windows: Vec<TemporalJoinEntry>,
+}
+
 /// Cohort drift request.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CohortDriftRequest {
@@ -697,6 +743,54 @@ pub async fn analogy(
 
     if let cvx_query::types::QueryResult::Analogy(vec) = result {
         Ok(Json(AnalogyResponse { vector: vec }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Temporal join: find convergence windows between two entities.
+#[utoipa::path(
+    post,
+    path = "/v1/temporal-join",
+    request_body = TemporalJoinRequest,
+    responses(
+        (status = 200, description = "Convergence windows", body = TemporalJoinResponse),
+        (status = 404, description = "Entity not found", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn temporal_join(
+    State(state): State<SharedState>,
+    Json(req): Json<TemporalJoinRequest>,
+) -> Result<Json<TemporalJoinResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let window_us = (req.window_days * 86_400.0 * 1_000_000.0) as i64;
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::TemporalJoin {
+            entity_a: req.entity_a,
+            entity_b: req.entity_b,
+            epsilon: req.epsilon,
+            window_us,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::TemporalJoin(joins) = result {
+        Ok(Json(TemporalJoinResponse {
+            entity_a: req.entity_a,
+            entity_b: req.entity_b,
+            windows: joins
+                .into_iter()
+                .map(|j| TemporalJoinEntry {
+                    start: j.start,
+                    end: j.end,
+                    mean_distance: j.mean_distance,
+                    min_distance: j.min_distance,
+                    points_a: j.points_a,
+                    points_b: j.points_b,
+                })
+                .collect(),
+        }))
     } else {
         unreachable!()
     }

@@ -83,6 +83,17 @@ pub enum TemporalQuery {
         /// Target timestamp.
         t3: i64,
     },
+    /// Temporal join: find convergence windows between two entities.
+    TemporalJoin {
+        /// First entity.
+        entity_a: u64,
+        /// Second entity.
+        entity_b: u64,
+        /// Distance threshold for convergence.
+        epsilon: f32,
+        /// Window size in microseconds.
+        window_us: i64,
+    },
     /// Cohort drift analysis across multiple entities.
     CohortDrift {
         /// Entity identifiers in the cohort.
@@ -113,8 +124,27 @@ pub enum QueryResult {
     Drift(DriftResult),
     /// Analogy result.
     Analogy(Vec<f32>),
+    /// Temporal join results.
+    TemporalJoin(Vec<TemporalJoinResultEntry>),
     /// Cohort drift report.
     CohortDrift(CohortDriftResult),
+}
+
+/// A convergence window from a temporal join query.
+#[derive(Debug, Clone)]
+pub struct TemporalJoinResultEntry {
+    /// Start of the convergence window.
+    pub start: i64,
+    /// End of the convergence window.
+    pub end: i64,
+    /// Mean distance during convergence.
+    pub mean_distance: f32,
+    /// Minimum distance during convergence.
+    pub min_distance: f32,
+    /// Points from entity A in window.
+    pub points_a: usize,
+    /// Points from entity B in window.
+    pub points_b: usize,
 }
 
 /// Cohort drift analysis result.

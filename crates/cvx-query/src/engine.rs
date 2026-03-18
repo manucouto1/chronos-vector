@@ -9,6 +9,7 @@ use cvx_core::{StorageBackend, TemporalIndexAccess};
 use cvx_analytics::calculus;
 use cvx_analytics::cohort;
 use cvx_analytics::ode;
+use cvx_analytics::temporal_join;
 use cvx_analytics::pelt::{self, PeltConfig};
 
 use crate::types::*;
@@ -142,6 +143,13 @@ pub fn execute_query(
             t3,
         } => do_analogy(index, entity_a, t1, t2, entity_b, t3),
 
+        TemporalQuery::TemporalJoin {
+            entity_a,
+            entity_b,
+            epsilon,
+            window_us,
+        } => do_temporal_join(index, entity_a, entity_b, epsilon, window_us),
+
         TemporalQuery::CohortDrift {
             entity_ids,
             t1,
@@ -271,6 +279,47 @@ fn do_drift_quant(
         cosine_drift: report.cosine_drift,
         top_dimensions: report.top_dimensions,
     }))
+}
+
+fn do_temporal_join(
+    index: &dyn TemporalIndexAccess,
+    entity_a: u64,
+    entity_b: u64,
+    epsilon: f32,
+    window_us: i64,
+) -> Result<QueryResult, QueryError> {
+    let (td_a, vecs_a) = build_traj(index, entity_a, TemporalFilter::All);
+    let (td_b, vecs_b) = build_traj(index, entity_b, TemporalFilter::All);
+
+    if td_a.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_a));
+    }
+    if td_b.is_empty() {
+        return Err(QueryError::EntityNotFound(entity_b));
+    }
+
+    let traj_a = to_slices(&td_a, &vecs_a);
+    let traj_b = to_slices(&td_b, &vecs_b);
+
+    let joins = temporal_join::temporal_join(&traj_a, &traj_b, epsilon, window_us)
+        .map_err(|_| QueryError::InsufficientData {
+            needed: 1,
+            have: 0,
+        })?;
+
+    Ok(QueryResult::TemporalJoin(
+        joins
+            .into_iter()
+            .map(|j| TemporalJoinResultEntry {
+                start: j.start,
+                end: j.end,
+                mean_distance: j.mean_distance,
+                min_distance: j.min_distance,
+                points_a: j.points_a,
+                points_b: j.points_b,
+            })
+            .collect(),
+    ))
 }
 
 fn do_cohort_drift(
