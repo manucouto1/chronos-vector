@@ -104,6 +104,7 @@ export default defineConfig({
 						{ label: 'RFC-003: Neural ODE (TorchScript)', slug: 'rfc/rfc-003' },
 						{ label: 'RFC-004: Semantic Regions', slug: 'rfc/rfc-004' },
 						{ label: 'RFC-005: Query Capabilities', slug: 'rfc/rfc-005' },
+						{ label: 'RFC-006: Anchor Projection', slug: 'rfc/rfc-006', badge: { text: 'New', variant: 'success' } },
 					],
 				},
 				{
