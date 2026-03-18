@@ -16,7 +16,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Manuel Couto Pintos"]
 license-file = "LICENSE"
@@ -85,11 +85,11 @@ proptest = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 # Workspace crates
-cvx-core = { version = "0.1.0", path = "crates/cvx-core" }
-cvx-index = { version = "0.1.0", path = "crates/cvx-index" }
-cvx-storage = { version = "0.1.0", path = "crates/cvx-storage" }
-cvx-ingest = { version = "0.1.0", path = "crates/cvx-ingest" }
-cvx-analytics = { version = "0.1.0", path = "crates/cvx-analytics" }
-cvx-query = { version = "0.1.0", path = "crates/cvx-query" }
-cvx-api = { version = "0.1.0", path = "crates/cvx-api" }
-cvx-server = { version = "0.1.0", path = "crates/cvx-server" }
+cvx-core = { version = "0.1.1", path = "crates/cvx-core" }
+cvx-index = { version = "0.1.1", path = "crates/cvx-index" }
+cvx-storage = { version = "0.1.1", path = "crates/cvx-storage" }
+cvx-ingest = { version = "0.1.1", path = "crates/cvx-ingest" }
+cvx-analytics = { version = "0.1.1", path = "crates/cvx-analytics" }
+cvx-query = { version = "0.1.1", path = "crates/cvx-query" }
+cvx-api = { version = "0.1.1", path = "crates/cvx-api" }
+cvx-server = { version = "0.1.1", path = "crates/cvx-server" }
