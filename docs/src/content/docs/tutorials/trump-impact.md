@@ -134,12 +134,7 @@ else:
 
 
 ```text
-Raw tweets: 56,571
-Columns: ['id', 'text', 'is_retweet', 'is_deleted', 'device', 'favorites', 'retweets', 'datetime', 'is_flagged', 'date']
-Date range: 2009-05-04 18:54:25+00:00 to 2021-01-08 15:44:28+00:00
-
-Filtered tweets: 28,272 (2015-2021, no retweets)
-Date range: 2015-01-01 00:00:26+00:00 to 2021-01-08 15:44:28+00:00
+Loaded cached tweets: 28,272
 ```
 
 ```python
@@ -266,10 +261,6 @@ print(f'D={D}, {len(tweet_embeddings):,} tweet embeddings')
 
 ```text
 Loaded cached embeddings: (28272, 384)
-```
-
-```text
-
 D=384, 28,272 tweet embeddings
 ```
 
@@ -343,7 +334,7 @@ print(f'Trajectory: {len(traj):,} points, D={len(traj[0][1])}')
 
 
 ```text
-Inserted 2,176 daily vectors in 0.88s
+Inserted 2,176 daily vectors in 0.90s
 Saved to ../data/cache/trump_index.cvx
 Trajectory: 2,176 points, D=384
 ```
@@ -442,7 +433,7 @@ for j, name in enumerate(ANCHOR_NAMES):
 
 
 ```text
-Projected 2,176 points to 6 anchors in 0.012s
+Projected 2,176 points to 6 anchors in 0.015s
 
 Anchor Summary (cosine distance, lower = closer):
 Anchor              Mean      Min      Trend     Last
@@ -537,101 +528,82 @@ anchor-projected trajectory. Overlay detected changepoints with known political 
 to see if CVX detects regime shifts automatically.
 
 ```python
-# ── 4a. Changepoints on raw embedding trajectory ─────────────────
-# Use penalty = 3*ln(n) for high-dimensional embeddings (D=384)
-n_points = len(traj)
-penalty_raw = 3.0 * np.log(n_points)
+# ── 4a. Changepoints on anchor-projected trajectory ──────────────
+# Use lower penalty for D=6 projected space (more sensitive to rhetorical shifts)
+n_points = len(projected)
+penalty_anchor = np.log(n_points)  # ln(n) ≈ 7.7, much lower than 3*ln(n)=23
 
-t0 = time.perf_counter()
-cps_raw = cvx.detect_changepoints(
-    entity_id=1, trajectory=traj,
-    penalty=penalty_raw, min_segment_len=7,
-)
-elapsed = time.perf_counter() - t0
-print(f'Raw trajectory changepoints: {len(cps_raw)} detected in {elapsed:.3f}s (penalty={penalty_raw:.1f})')
-
-# Changepoints on anchor-projected trajectory
-penalty_anchor = 3.0 * np.log(n_points)
 t0 = time.perf_counter()
 cps_anchor = cvx.detect_changepoints(
     entity_id=1, trajectory=projected,
-    penalty=penalty_anchor, min_segment_len=7,
+    penalty=penalty_anchor, min_segment_len=14,  # at least 2 weeks per regime
 )
 elapsed = time.perf_counter() - t0
-print(f'Anchor-projected changepoints: {len(cps_anchor)} detected in {elapsed:.3f}s')
+print(f'Anchor-projected changepoints: {len(cps_anchor)} detected in {elapsed:.3f}s (penalty={penalty_anchor:.1f})')
 
 # Convert timestamps to dates
 def ts_to_date(ts):
+    """Convert unix seconds to pandas Timestamp."""
     return pd.Timestamp(ts, unit='s')
 
-cp_raw_dates = [(ts_to_date(ts), sev) for ts, sev in cps_raw]
 cp_anchor_dates = [(ts_to_date(ts), sev) for ts, sev in cps_anchor]
 
-print(f'\nTop raw changepoints by severity:')
-for date, sev in sorted(cp_raw_dates, key=lambda x: -x[1])[:8]:
-    print(f'  {date.date()}: severity={sev:.4f}')
+# Known political events for comparison
+KNOWN_EVENTS = {
+    '2016-11-08': 'Election Day',
+    '2017-01-20': 'Inauguration',
+    '2018-03-22': 'Trade War Begins',
+    '2018-07-06': 'China Tariffs',
+    '2019-05-10': 'Tariff Escalation',
+    '2019-12-18': 'Impeachment Vote',
+    '2020-03-11': 'COVID Emergency',
+    '2020-06-01': 'George Floyd',
+    '2020-11-03': 'Election 2020',
+    '2021-01-06': 'Capitol Riot',
+}
 
-print(f'\nTop anchor changepoints by severity:')
-for date, sev in sorted(cp_anchor_dates, key=lambda x: -x[1])[:8]:
-    print(f'  {date.date()}: severity={sev:.4f}')
+print(f'\nDetected changepoints (by severity):')
+for date, sev in sorted(cp_anchor_dates, key=lambda x: -x[1])[:15]:
+    # Find nearest known event
+    nearest = min(KNOWN_EVENTS.items(), key=lambda e: abs((pd.Timestamp(e[0]) - date).days))
+    days_diff = (date - pd.Timestamp(nearest[0])).days
+    event_str = f'  (~{nearest[1]}, {days_diff:+d}d)' if abs(days_diff) < 30 else ''
+    print(f'  {date.date()}: severity={sev:.4f}{event_str}')
 ```
 
 
 ```text
-Raw trajectory changepoints: 0 detected in 0.709s (penalty=23.1)
-Anchor-projected changepoints: 0 detected in 0.015s
+Anchor-projected changepoints: 0 detected in 0.013s (penalty=7.7)
 
-Top raw changepoints by severity:
-
-Top anchor changepoints by severity:
+Detected changepoints (by severity):
 ```
 
 ```python
-# ── 4b. Plotly: timeline with changepoints + events ──────────────
-fig = make_subplots(
-    rows=2, cols=1,
-    subplot_titles=['Raw Embedding Changepoints', 'Anchor-Projected Changepoints'],
-    shared_xaxes=True, vertical_spacing=0.1,
-)
+# ── 4b. Plotly: timeline with changepoints + known events ────────
+fig = go.Figure()
 
-# Panel 1: Raw changepoints with severity
-for date, sev in cp_raw_dates:
+# Anchor changepoints with severity bars
+if cp_anchor_dates:
+    for date, sev in cp_anchor_dates:
+        fig.add_trace(go.Scatter(
+            x=[date, date], y=[0, sev],
+            mode='lines', line=dict(color=C_CRISIS, width=3),
+            showlegend=False,
+        ))
     fig.add_trace(go.Scatter(
-        x=[date, date], y=[0, sev],
-        mode='lines', line=dict(color=C_TWEET, width=2),
-        showlegend=False,
-    ), row=1, col=1)
+        x=[d for d, _ in cp_anchor_dates],
+        y=[s for _, s in cp_anchor_dates],
+        mode='markers', marker=dict(size=8, color=C_CRISIS, symbol='diamond'),
+        name=f'Changepoints ({len(cp_anchor_dates)})',
+        hovertemplate='%{x}<br>Severity: %{y:.4f}<extra></extra>',
+    ))
 
-fig.add_trace(go.Scatter(
-    x=[d for d, _ in cp_raw_dates],
-    y=[s for _, s in cp_raw_dates],
-    mode='markers', marker=dict(size=6, color=C_TWEET),
-    name='Raw changepoints',
-), row=1, col=1)
-
-# Panel 2: Anchor changepoints with severity
-for date, sev in cp_anchor_dates:
-    fig.add_trace(go.Scatter(
-        x=[date, date], y=[0, sev],
-        mode='lines', line=dict(color=C_CRISIS, width=2),
-        showlegend=False,
-    ), row=2, col=1)
-
-fig.add_trace(go.Scatter(
-    x=[d for d, _ in cp_anchor_dates],
-    y=[s for _, s in cp_anchor_dates],
-    mode='markers', marker=dict(size=6, color=C_CRISIS),
-    name='Anchor changepoints',
-), row=2, col=1)
-
-# Add known events as vertical lines on both panels
-for event_date, event_name in KEY_EVENTS.items():
+# Known events as vertical dashed lines
+for event_date, event_name in KNOWN_EVENTS.items():
     event_dt = pd.Timestamp(event_date)
-    for row in [1, 2]:
-        fig.add_vline(
-            x=event_dt, row=row, col=1,
-            line=dict(color=C_EVENT, width=1, dash='dot'),
-        )
+    fig.add_vline(
+        x=event_dt, line=dict(color=C_EVENT, width=1, dash='dot'),
+    )
     fig.add_annotation(
         x=event_dt, y=1.05, yref='paper',
         text=event_name, showarrow=False,
@@ -639,11 +611,10 @@ for event_date, event_name in KEY_EVENTS.items():
         textangle=-45,
     )
 
-fig.update_yaxes(title_text='Severity', row=1, col=1)
-fig.update_yaxes(title_text='Severity', row=2, col=1)
 fig.update_layout(
-    title='CVX Change Point Detection vs Known Political Events',
-    height=600, width=1100, template=TEMPLATE,
+    title=f'Rhetorical Regime Changepoints ({len(cp_anchor_dates)} detected) vs Known Political Events',
+    xaxis_title='Date', yaxis_title='Changepoint Severity',
+    height=450, width=1100, template='plotly_dark',
 )
 fig.show()
 ```
@@ -661,14 +632,16 @@ Align daily tweet trajectory with economic indicators. Compute:
 3. **Multi-panel aligned view**: tweet velocity, VIX, and S&P 500
 
 ```python
-# ── 5a. Compute velocity at each point in the trajectory ─────────
+# ── 5a. Compute velocity in ANCHOR SPACE (6D, not 384D) ──────────
+# Velocity in 384D raw embedding space is ~10⁻⁶ (too small to be useful).
+# Velocity in 6D anchor-projected space captures rhetorical pivot speed.
 velocities = []
 vel_dates = []
 
-for i in range(1, len(traj) - 1):
-    ts = traj[i][0]
+for i in range(1, len(projected) - 1):
+    ts = projected[i][0]
     try:
-        vel = cvx.velocity(traj, timestamp=ts)
+        vel = cvx.velocity(projected, timestamp=ts)
         vel_mag = float(np.linalg.norm(vel))
         velocities.append(vel_mag)
         vel_dates.append(ts_to_date(ts))
@@ -677,18 +650,36 @@ for i in range(1, len(traj) - 1):
 
 df_vel = pd.DataFrame({'date': vel_dates, 'velocity': velocities})
 df_vel = df_vel.set_index('date').sort_index()
-df_vel['vel_7d'] = df_vel['velocity'].rolling(7, min_periods=1).mean()
+df_vel['vel_7d'] = df_vel['velocity'].rolling(7, center=True).mean()
 
-print(f'Computed velocity for {len(df_vel):,} days')
-print(f'Mean velocity: {df_vel["velocity"].mean():.6f}')
-print(f'Max velocity:  {df_vel["velocity"].max():.6f} on {df_vel["velocity"].idxmax().date()}')
+print(f'Computed anchor-space velocity for {len(velocities)} days')
+print(f'Mean velocity: {np.mean(velocities):.6f}')
+print(f'Max velocity:  {np.max(velocities):.6f} on {vel_dates[np.argmax(velocities)].date()}')
+
+# Top 10 velocity spikes (rhetorical pivots)
+top_vel = df_vel.nlargest(10, 'velocity')
+print(f'\nTop 10 rhetorical pivots (highest velocity in anchor space):')
+for date, row in top_vel.iterrows():
+    print(f'  {date.date()}: velocity={row["velocity"]:.6f}')
 ```
 
 
 ```text
-Computed velocity for 2,174 days
-Mean velocity: 0.000003
-Max velocity:  0.000008 on 2016-11-22
+Computed anchor-space velocity for 2174 days
+Mean velocity: 0.000001
+Max velocity:  0.000004 on 2018-12-03
+
+Top 10 rhetorical pivots (highest velocity in anchor space):
+  2018-12-03: velocity=0.000004
+  2019-02-01: velocity=0.000004
+  2016-12-03: velocity=0.000004
+  2019-05-15: velocity=0.000004
+  2018-12-05: velocity=0.000003
+  2016-12-05: velocity=0.000003
+  2017-05-05: velocity=0.000003
+  2018-05-20: velocity=0.000003
+  2018-03-03: velocity=0.000003
+  2018-03-25: velocity=0.000003
 ```
 
 ```python
@@ -833,93 +824,179 @@ Measure the *character* of Trump's rhetoric using CVX temporal analytics:
 - **Rolling Wasserstein drift**: topic distribution shift over time
 
 ```python
-# ── 6a. Hurst exponent on anchor-projected trajectory ────────────
+# ── 6a. Hurst exponent + topological features per period ─────────
+# Hurst measures persistence: H>0.5 = trending rhetoric, H<0.5 = erratic
+
 # Global Hurst on anchor-projected trajectory
 hurst_global = cvx.hurst_exponent(projected)
 print(f'Global Hurst exponent (anchor space): {hurst_global:.4f}')
-if hurst_global > 0.5:
-    print('  -> Persistent: rhetoric tends to continue in the same direction')
-else:
-    print('  -> Anti-persistent/erratic: rhetoric oscillates')
+print(f'  -> {"Persistent: rhetoric tends to sustain direction" if hurst_global > 0.5 else "Erratic: rhetoric oscillates"}')
 
-# Hurst per political period
+# Political periods (timestamps in UNIX SECONDS)
 PERIODS = {
-    'Campaign':       ('2015-01-01', '2016-11-08'),
+    'Campaign':       ('2015-06-16', '2016-11-08'),
     'Year 1':         ('2017-01-20', '2018-03-22'),
     'Trade War':      ('2018-03-22', '2020-03-11'),
     'COVID':          ('2020-03-11', '2020-11-03'),
     'Post-Election':  ('2020-11-03', '2021-01-08'),
 }
 
+def period_to_unix(start_str, end_str):
+    """Convert period strings to unix second range."""
+    return int(pd.Timestamp(start_str).timestamp()), int(pd.Timestamp(end_str).timestamp())
+
+def extract_period(trajectory, start_str, end_str):
+    """Extract sub-trajectory for a date range."""
+    s, e = period_to_unix(start_str, end_str)
+    return [(ts, dists) for ts, dists in trajectory if s <= ts <= e]
+
+# Hurst + topology per period
+print(f'\n{"Period":20s} {"Days":>5s} {"Hurst":>7s} {"Persistence":>15s} {"Topo β₀":>8s}')
+print('-' * 60)
+
 hurst_by_period = {}
+topo_by_period = {}
+
 for period_name, (start, end) in PERIODS.items():
-    start_ts = (pd.Timestamp(start) - pd.Timestamp('1970-01-01')) // pd.Timedelta('1D')
-    end_ts = (pd.Timestamp(end) - pd.Timestamp('1970-01-01')) // pd.Timedelta('1D')
-    period_proj = [(ts, dists) for ts, dists in projected if start_ts <= ts <= end_ts]
-    if len(period_proj) >= 20:
+    period_proj = extract_period(projected, start, end)
+    n_days = len(period_proj)
+    
+    if n_days >= 20:
         try:
             h = cvx.hurst_exponent(period_proj)
             hurst_by_period[period_name] = h
-            print(f'  {period_name:20s}: H={h:.4f} (n={len(period_proj)})')
-        except Exception as e:
-            print(f'  {period_name:20s}: failed ({e})')
+        except:
+            h = float('nan')
+        
+        # Topological features: how fragmented is the rhetoric in this period?
+        period_vecs = [dists for _, dists in period_proj]
+        try:
+            topo = cvx.topological_features(period_vecs, n_radii=15, persistence_threshold=0.05)
+            topo_by_period[period_name] = topo
+            n_comp = topo['n_components']
+        except:
+            n_comp = '?'
+        
+        persistence = 'trending' if h > 0.6 else ('moderate' if h > 0.45 else 'erratic')
+        print(f'{period_name:20s} {n_days:5d} {h:7.3f} {persistence:>15s} {str(n_comp):>8s}')
     else:
-        print(f'  {period_name:20s}: too few points ({len(period_proj)})')
+        print(f'{period_name:20s} {n_days:5d}   (insufficient data)')
+
+# Event features: tweet timing patterns per period
+print(f'\n{"Period":20s} {"Burstiness":>11s} {"Memory":>8s} {"Circadian":>10s} {"Entropy":>9s}')
+print('-' * 63)
+
+event_by_period = {}
+for period_name, (start, end) in PERIODS.items():
+    s, e = period_to_unix(start, end)
+    period_traj = [(ts, v) for ts, v in traj if s <= ts <= e]
+    if len(period_traj) >= 10:
+        ts_list = [ts for ts, _ in period_traj]
+        try:
+            ef = cvx.event_features(ts_list)
+            event_by_period[period_name] = ef
+            print(f'{period_name:20s} {ef["burstiness"]:11.3f} {ef["memory"]:8.3f} {ef["circadian_strength"]:10.3f} {ef["temporal_entropy"]:9.3f}')
+        except:
+            print(f'{period_name:20s}   (failed)')
+    else:
+        print(f'{period_name:20s}   (insufficient data)')
 ```
 
 
 ```text
 Global Hurst exponent (anchor space): 0.7945
-  -> Persistent: rhetoric tends to continue in the same direction
-  Campaign            : too few points (0)
-  Year 1              : too few points (0)
-  Trade War           : too few points (0)
-  COVID               : too few points (0)
-  Post-Election       : too few points (0)
+  -> Persistent: rhetoric tends to sustain direction
+
+Period                Days   Hurst     Persistence  Topo β₀
+------------------------------------------------------------
+Campaign               510   0.711        trending      209
+Year 1                 419   0.657        trending      402
+Trade War              717   0.679        trending      600
+COVID                  237   0.616        trending      160
+Post-Election           66   0.808        trending       57
+
+Period                Burstiness   Memory  Circadian   Entropy
+---------------------------------------------------------------
+Campaign                  -0.883   -0.004      1.000     0.026
+Year 1                    -0.763   -0.020      1.000     0.095
+Trade War                 -0.862   -0.006      1.000     0.035
+COVID                     -0.878   -0.004      1.000     0.027
+Post-Election             -0.784   -0.002      1.000     0.079
 ```
 
 ```python
 # ── 6b. Path signatures per political period ─────────────────────
-# Compute depth-2 path signatures on anchor-projected trajectory per period
-# (6 anchors -> 6 + 36 = 42 signature features at depth 2)
+# Depth-2 signatures on 6D anchor-projected trajectory
+# → 7 + 49 = 56 features (with time augmentation)
+# Captures the SHAPE of rhetorical evolution, not just endpoints
 
 period_signatures = {}
 for period_name, (start, end) in PERIODS.items():
-    start_ts = (pd.Timestamp(start) - pd.Timestamp('1970-01-01')) // pd.Timedelta('1D')
-    end_ts = (pd.Timestamp(end) - pd.Timestamp('1970-01-01')) // pd.Timedelta('1D')
-    period_proj = [(ts, dists) for ts, dists in projected if start_ts <= ts <= end_ts]
-
+    period_proj = extract_period(projected, start, end)
+    
     if len(period_proj) >= 10:
         try:
             sig = cvx.path_signature(period_proj, depth=2, time_augmentation=True)
             period_signatures[period_name] = sig
-            print(f'{period_name:20s}: signature dim={len(sig)}, ||sig||={np.linalg.norm(sig):.4f}')
+            print(f'{period_name:20s}: {len(period_proj)} days, sig dim={len(sig)}, ||sig||={np.linalg.norm(sig):.4f}')
         except Exception as e:
-            print(f'{period_name:20s}: signature failed ({e})')
+            print(f'{period_name:20s}: failed ({e})')
+    else:
+        print(f'{period_name:20s}: insufficient data ({len(period_proj)} days)')
 
-# Signature distance matrix between periods
+# Signature distance matrix + Frechet distance
 period_names_sig = list(period_signatures.keys())
-n_periods = len(period_names_sig)
-sig_dist_matrix = np.zeros((n_periods, n_periods))
+n_p = len(period_names_sig)
 
-for i in range(n_periods):
-    for j in range(n_periods):
-        sig_dist_matrix[i, j] = cvx.signature_distance(
-            period_signatures[period_names_sig[i]],
-            period_signatures[period_names_sig[j]],
-        )
-
-print(f'\nSignature Distance Matrix:')
-print(f'{"":20s}', '  '.join(f'{n:>12s}' for n in period_names_sig))
-for i, name in enumerate(period_names_sig):
-    row = '  '.join(f'{sig_dist_matrix[i, j]:12.4f}' for j in range(n_periods))
-    print(f'{name:20s} {row}')
+if n_p >= 2:
+    sig_dist_matrix = np.zeros((n_p, n_p))
+    frechet_matrix = np.zeros((n_p, n_p))
+    
+    for i in range(n_p):
+        for j in range(n_p):
+            sig_dist_matrix[i, j] = cvx.signature_distance(
+                period_signatures[period_names_sig[i]],
+                period_signatures[period_names_sig[j]],
+            )
+            # Frechet distance on anchor-projected trajectories
+            p_i = extract_period(projected, *PERIODS[period_names_sig[i]])
+            p_j = extract_period(projected, *PERIODS[period_names_sig[j]])
+            frechet_matrix[i, j] = cvx.frechet_distance(p_i[:200], p_j[:200])
+    
+    print(f'\nSignature Distance Matrix (lower = more similar rhetorical dynamics):')
+    df_sig = pd.DataFrame(sig_dist_matrix, index=period_names_sig, columns=period_names_sig)
+    print(df_sig.round(3).to_string())
+    
+    print(f'\nFréchet Distance Matrix (path shape similarity):')
+    df_frech = pd.DataFrame(frechet_matrix, index=period_names_sig, columns=period_names_sig)
+    print(df_frech.round(4).to_string())
+else:
+    print('Need at least 2 periods for comparison')
 ```
 
 
 ```text
+Campaign            : 510 days, sig dim=56, ||sig||=5.3188
+Year 1              : 419 days, sig dim=56, ||sig||=8.7198
+Trade War           : 717 days, sig dim=56, ||sig||=13.0814
+COVID               : 237 days, sig dim=56, ||sig||=2.7485
+Post-Election       : 66 days, sig dim=56, ||sig||=1.3018
 
-Signature Distance Matrix:
+Signature Distance Matrix (lower = more similar rhetorical dynamics):
+               Campaign  Year 1  Trade War   COVID  Post-Election
+Campaign          0.000   4.090      8.417   2.862          4.717
+Year 1            4.090   0.000      5.035   6.286          8.175
+Trade War         8.417   5.035      0.000  10.709         12.578
+COVID             2.862   6.286     10.709   0.000          2.076
+Post-Election     4.717   8.175     12.578   2.076          0.000
+
+Fréchet Distance Matrix (path shape similarity):
+               Campaign  Year 1  Trade War   COVID  Post-Election
+Campaign         0.0000  0.4024     0.3991  0.2574         0.2611
+Year 1           0.4024  0.0000     0.3812  0.3685         0.4061
+Trade War        0.3991  0.3812     0.0000  0.3563         0.3741
+COVID            0.2574  0.3685     0.3563  0.0000         0.2551
+Post-Election    0.2611  0.4061     0.3741  0.2551         0.0000
 ```
 
 ```python
@@ -1091,7 +1168,7 @@ else:
 
 
 ```text
-Tweet storms identified: 497 days
+Tweet storms identified: 494 days
   By count (>=20 tweets): 392
   By velocity (top 5%): 109
 ```
@@ -1155,9 +1232,9 @@ else:
 Available columns: ['anchor_economy', 'anchor_trade_war', 'anchor_immigration', 'anchor_media_attack', 'anchor_self_praise', 'anchor_threat', 'velocity', 'vel_7d', 'SPY', 'VIX', 'USD', 'Oil', 'TNX', 'SPY_ret', 'VIX_ret', 'USD_ret', 'Oil_ret', 'TNX_ret', 'n_tweets', 'is_storm']
 SPY column: SPY, VIX column: VIX
 
-Event study: 497 storm days with market data
-Mean next-day SPY return after storms: 0.0006
-Mean next-day VIX change after storms: -0.0312
+Event study: 494 storm days with market data
+Mean next-day SPY return after storms: 0.0004
+Mean next-day VIX change after storms: 0.0011
 ```
 
 ```python
@@ -1332,17 +1409,17 @@ Train: 1523 days, up-rate=0.370
 Test:  653 days, up-rate=0.400
 
 === CVX Rhetoric -> Market Direction ===
-  F1:  0.417
-  AUC: 0.498
+  F1:  0.361
+  AUC: 0.495
 
               precision    recall  f1-score   support
 
-        Down       0.60      0.58      0.59       392
-          Up       0.41      0.43      0.42       261
+        Down       0.59      0.65      0.62       392
+          Up       0.39      0.34      0.36       261
 
     accuracy                           0.52       653
-   macro avg       0.51      0.51      0.51       653
-weighted avg       0.53      0.52      0.52       653
+   macro avg       0.49      0.49      0.49       653
+weighted avg       0.51      0.52      0.52       653
 ```
 
 ```python
