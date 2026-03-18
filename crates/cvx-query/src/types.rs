@@ -83,6 +83,17 @@ pub enum TemporalQuery {
         /// Target timestamp.
         t3: i64,
     },
+    /// Cohort drift analysis across multiple entities.
+    CohortDrift {
+        /// Entity identifiers in the cohort.
+        entity_ids: Vec<u64>,
+        /// Start timestamp.
+        t1: i64,
+        /// End timestamp.
+        t2: i64,
+        /// Number of top dimensions to report.
+        top_n: usize,
+    },
 }
 
 /// Query result types.
@@ -102,6 +113,50 @@ pub enum QueryResult {
     Drift(DriftResult),
     /// Analogy result.
     Analogy(Vec<f32>),
+    /// Cohort drift report.
+    CohortDrift(CohortDriftResult),
+}
+
+/// Cohort drift analysis result.
+#[derive(Debug, Clone)]
+pub struct CohortDriftResult {
+    /// Number of entities analyzed.
+    pub n_entities: usize,
+    /// Mean L2 drift across the cohort.
+    pub mean_drift_l2: f32,
+    /// Median L2 drift.
+    pub median_drift_l2: f32,
+    /// Standard deviation of drift magnitudes.
+    pub std_drift_l2: f32,
+    /// Centroid L2 drift magnitude.
+    pub centroid_l2_magnitude: f32,
+    /// Centroid cosine drift.
+    pub centroid_cosine_drift: f32,
+    /// Dispersion at t1.
+    pub dispersion_t1: f32,
+    /// Dispersion at t2.
+    pub dispersion_t2: f32,
+    /// Dispersion change (positive = diverging).
+    pub dispersion_change: f32,
+    /// Convergence score (0 = random, 1 = same direction).
+    pub convergence_score: f32,
+    /// Top changed dimensions: (index, absolute_change).
+    pub top_dimensions: Vec<(usize, f32)>,
+    /// Outlier entities.
+    pub outliers: Vec<CohortOutlierResult>,
+}
+
+/// An outlier entity in cohort drift analysis.
+#[derive(Debug, Clone)]
+pub struct CohortOutlierResult {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Individual drift magnitude.
+    pub drift_magnitude: f32,
+    /// Z-score relative to cohort.
+    pub z_score: f32,
+    /// Alignment with cohort mean drift direction.
+    pub drift_direction_alignment: f32,
 }
 
 /// A single kNN result.

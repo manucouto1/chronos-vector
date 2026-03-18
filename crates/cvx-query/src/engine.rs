@@ -7,6 +7,7 @@ use cvx_core::types::TemporalFilter;
 use cvx_core::{StorageBackend, TemporalIndexAccess};
 
 use cvx_analytics::calculus;
+use cvx_analytics::cohort;
 use cvx_analytics::ode;
 use cvx_analytics::pelt::{self, PeltConfig};
 
@@ -140,6 +141,13 @@ pub fn execute_query(
             entity_b,
             t3,
         } => do_analogy(index, entity_a, t1, t2, entity_b, t3),
+
+        TemporalQuery::CohortDrift {
+            entity_ids,
+            t1,
+            t2,
+            top_n,
+        } => do_cohort_drift(index, &entity_ids, t1, t2, top_n),
     }
 }
 
@@ -262,6 +270,75 @@ fn do_drift_quant(
         l2_magnitude: report.l2_magnitude,
         cosine_drift: report.cosine_drift,
         top_dimensions: report.top_dimensions,
+    }))
+}
+
+fn do_cohort_drift(
+    index: &dyn TemporalIndexAccess,
+    entity_ids: &[u64],
+    t1: i64,
+    t2: i64,
+    top_n: usize,
+) -> Result<QueryResult, QueryError> {
+    // Build trajectories for all entities
+    let mut traj_data: Vec<(Vec<(i64, u32)>, Vec<Vec<f32>>)> = Vec::new();
+    let mut valid_ids: Vec<u64> = Vec::new();
+
+    for &eid in entity_ids {
+        let (td, vecs) = build_traj(index, eid, TemporalFilter::All);
+        if !td.is_empty() {
+            traj_data.push((td, vecs));
+            valid_ids.push(eid);
+        }
+    }
+
+    if valid_ids.len() < 2 {
+        return Err(QueryError::InsufficientData {
+            needed: 2,
+            have: valid_ids.len(),
+        });
+    }
+
+    // Build slice-based trajectories for the cohort function
+    let slice_trajs: Vec<Vec<(i64, &[f32])>> = traj_data
+        .iter()
+        .map(|(td, vecs)| to_slices(td, vecs))
+        .collect();
+
+    let input: Vec<(u64, &[(i64, &[f32])])> = valid_ids
+        .iter()
+        .zip(slice_trajs.iter())
+        .map(|(&eid, st)| (eid, st.as_slice()))
+        .collect();
+
+    let report = cohort::cohort_drift(&input, t1, t2, top_n)
+        .map_err(|_| QueryError::InsufficientData {
+            needed: 2,
+            have: valid_ids.len(),
+        })?;
+
+    Ok(QueryResult::CohortDrift(CohortDriftResult {
+        n_entities: report.n_entities,
+        mean_drift_l2: report.mean_drift_l2,
+        median_drift_l2: report.median_drift_l2,
+        std_drift_l2: report.std_drift_l2,
+        centroid_l2_magnitude: report.centroid_drift.l2_magnitude,
+        centroid_cosine_drift: report.centroid_drift.cosine_drift,
+        dispersion_t1: report.dispersion_t1,
+        dispersion_t2: report.dispersion_t2,
+        dispersion_change: report.dispersion_change,
+        convergence_score: report.convergence_score,
+        top_dimensions: report.top_dimensions,
+        outliers: report
+            .outliers
+            .into_iter()
+            .map(|o| CohortOutlierResult {
+                entity_id: o.entity_id,
+                drift_magnitude: o.drift_magnitude,
+                z_score: o.z_score,
+                drift_direction_alignment: o.drift_direction_alignment,
+            })
+            .collect(),
     }))
 }
 
@@ -527,6 +604,43 @@ mod tests {
         } else {
             panic!("expected Analogy result");
         }
+    }
+
+    #[test]
+    fn cohort_drift_via_engine() {
+        let engine = setup_engine(5, 20, 4);
+        let result = engine
+            .execute(TemporalQuery::CohortDrift {
+                entity_ids: vec![0, 1, 2, 3, 4],
+                t1: 0,
+                t2: 19_000_000,
+                top_n: 3,
+            })
+            .unwrap();
+
+        if let QueryResult::CohortDrift(report) = result {
+            assert_eq!(report.n_entities, 5);
+            assert!(report.mean_drift_l2 > 0.0);
+            assert!(report.top_dimensions.len() <= 3);
+            assert!(
+                report.convergence_score > 0.0,
+                "entities with similar drift patterns should show some convergence"
+            );
+        } else {
+            panic!("expected CohortDrift result");
+        }
+    }
+
+    #[test]
+    fn cohort_drift_insufficient_entities() {
+        let engine = setup_engine(1, 10, 4);
+        let result = engine.execute(TemporalQuery::CohortDrift {
+            entity_ids: vec![0],
+            t1: 0,
+            t2: 9_000_000,
+            top_n: 3,
+        });
+        assert!(result.is_err());
     }
 
     #[test]

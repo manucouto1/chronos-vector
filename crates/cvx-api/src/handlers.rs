@@ -284,6 +284,62 @@ pub struct PredictionResponse {
     pub method: String,
 }
 
+/// Cohort drift request.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CohortDriftRequest {
+    /// Entity identifiers in the cohort.
+    pub entity_ids: Vec<u64>,
+    /// Start timestamp.
+    pub t1: i64,
+    /// End timestamp.
+    pub t2: i64,
+    /// Number of top dimensions (default 5).
+    #[serde(default = "default_top_n")]
+    pub top_n: usize,
+}
+
+/// Cohort drift response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CohortDriftResponse {
+    /// Number of entities analyzed.
+    pub n_entities: usize,
+    /// Mean L2 drift magnitude.
+    pub mean_drift_l2: f32,
+    /// Median L2 drift magnitude.
+    pub median_drift_l2: f32,
+    /// Standard deviation of drift magnitudes.
+    pub std_drift_l2: f32,
+    /// Centroid L2 drift.
+    pub centroid_l2_magnitude: f32,
+    /// Centroid cosine drift.
+    pub centroid_cosine_drift: f32,
+    /// Dispersion at t1.
+    pub dispersion_t1: f32,
+    /// Dispersion at t2.
+    pub dispersion_t2: f32,
+    /// Dispersion change (positive = diverging).
+    pub dispersion_change: f32,
+    /// Convergence score (0 = random, 1 = all same direction).
+    pub convergence_score: f32,
+    /// Top changed dimensions.
+    pub top_dimensions: Vec<DimensionChange>,
+    /// Outlier entities.
+    pub outliers: Vec<CohortOutlierEntry>,
+}
+
+/// An outlier entity in cohort drift analysis.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CohortOutlierEntry {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Individual drift magnitude.
+    pub drift_magnitude: f32,
+    /// Z-score relative to cohort.
+    pub z_score: f32,
+    /// Alignment with cohort drift direction.
+    pub drift_direction_alignment: f32,
+}
+
 /// Analogy request.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AnalogyRequest {
@@ -641,6 +697,65 @@ pub async fn analogy(
 
     if let cvx_query::types::QueryResult::Analogy(vec) = result {
         Ok(Json(AnalogyResponse { vector: vec }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Cohort drift analysis across multiple entities.
+#[utoipa::path(
+    post,
+    path = "/v1/cohort/drift",
+    request_body = CohortDriftRequest,
+    responses(
+        (status = 200, description = "Cohort drift report", body = CohortDriftResponse),
+        (status = 400, description = "Insufficient data", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn cohort_drift(
+    State(state): State<SharedState>,
+    Json(req): Json<CohortDriftRequest>,
+) -> Result<Json<CohortDriftResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::CohortDrift {
+            entity_ids: req.entity_ids,
+            t1: req.t1,
+            t2: req.t2,
+            top_n: req.top_n,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::CohortDrift(report) = result {
+        Ok(Json(CohortDriftResponse {
+            n_entities: report.n_entities,
+            mean_drift_l2: report.mean_drift_l2,
+            median_drift_l2: report.median_drift_l2,
+            std_drift_l2: report.std_drift_l2,
+            centroid_l2_magnitude: report.centroid_l2_magnitude,
+            centroid_cosine_drift: report.centroid_cosine_drift,
+            dispersion_t1: report.dispersion_t1,
+            dispersion_t2: report.dispersion_t2,
+            dispersion_change: report.dispersion_change,
+            convergence_score: report.convergence_score,
+            top_dimensions: report
+                .top_dimensions
+                .into_iter()
+                .map(|(index, change)| DimensionChange { index, change })
+                .collect(),
+            outliers: report
+                .outliers
+                .into_iter()
+                .map(|o| CohortOutlierEntry {
+                    entity_id: o.entity_id,
+                    drift_magnitude: o.drift_magnitude,
+                    z_score: o.z_score,
+                    drift_direction_alignment: o.drift_direction_alignment,
+                })
+                .collect(),
+        }))
     } else {
         unreachable!()
     }
