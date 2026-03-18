@@ -83,6 +83,13 @@ pub enum TemporalQuery {
         /// Target timestamp.
         t3: i64,
     },
+    /// Counterfactual trajectory analysis.
+    Counterfactual {
+        /// Entity identifier.
+        entity_id: u64,
+        /// Change point timestamp.
+        change_point: i64,
+    },
     /// Granger causality test between two entities.
     GrangerCausality {
         /// First entity (potential cause).
@@ -153,6 +160,8 @@ pub enum QueryResult {
     Drift(DriftResult),
     /// Analogy result.
     Analogy(Vec<f32>),
+    /// Counterfactual result.
+    Counterfactual(CounterfactualQueryResult),
     /// Granger causality result.
     Granger(GrangerCausalityResult),
     /// Discovered motifs.
@@ -180,6 +189,23 @@ pub struct TemporalJoinResultEntry {
     pub points_a: usize,
     /// Points from entity B in window.
     pub points_b: usize,
+}
+
+/// Counterfactual analysis result for query layer.
+#[derive(Debug, Clone)]
+pub struct CounterfactualQueryResult {
+    /// Change point timestamp.
+    pub change_point: i64,
+    /// Total divergence (area under curve).
+    pub total_divergence: f64,
+    /// Timestamp of maximum divergence.
+    pub max_divergence_time: i64,
+    /// Maximum divergence value.
+    pub max_divergence_value: f32,
+    /// Divergence curve: `(timestamp, distance)`.
+    pub divergence_curve: Vec<(i64, f32)>,
+    /// Method used.
+    pub method: String,
 }
 
 /// Granger causality test result.

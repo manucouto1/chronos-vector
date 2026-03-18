@@ -8,6 +8,7 @@ use cvx_core::{StorageBackend, TemporalIndexAccess};
 
 use cvx_analytics::calculus;
 use cvx_analytics::cohort;
+use cvx_analytics::counterfactual;
 use cvx_analytics::granger;
 use cvx_analytics::motifs;
 use cvx_analytics::ode;
@@ -144,6 +145,11 @@ pub fn execute_query(
             entity_b,
             t3,
         } => do_analogy(index, entity_a, t1, t2, entity_b, t3),
+
+        TemporalQuery::Counterfactual {
+            entity_id,
+            change_point,
+        } => do_counterfactual(index, entity_id, change_point),
 
         TemporalQuery::GrangerCausality {
             entity_a,
@@ -299,6 +305,50 @@ fn do_drift_quant(
         l2_magnitude: report.l2_magnitude,
         cosine_drift: report.cosine_drift,
         top_dimensions: report.top_dimensions,
+    }))
+}
+
+fn do_counterfactual(
+    index: &dyn TemporalIndexAccess,
+    entity_id: u64,
+    change_point: i64,
+) -> Result<QueryResult, QueryError> {
+    let (td_pre, vecs_pre) =
+        build_traj(index, entity_id, TemporalFilter::Before(change_point));
+    let (td_post, vecs_post) =
+        build_traj(index, entity_id, TemporalFilter::After(change_point));
+
+    if td_pre.len() < 2 {
+        return Err(QueryError::InsufficientData {
+            needed: 2,
+            have: td_pre.len(),
+        });
+    }
+    if td_post.is_empty() {
+        return Err(QueryError::InsufficientData {
+            needed: 1,
+            have: 0,
+        });
+    }
+
+    let pre = to_slices(&td_pre, &vecs_pre);
+    let post = to_slices(&td_post, &vecs_post);
+
+    let result =
+        counterfactual::counterfactual_trajectory(&pre, &post, change_point).map_err(|_| {
+            QueryError::InsufficientData {
+                needed: 2,
+                have: td_pre.len(),
+            }
+        })?;
+
+    Ok(QueryResult::Counterfactual(CounterfactualQueryResult {
+        change_point,
+        total_divergence: result.total_divergence,
+        max_divergence_time: result.max_divergence_time,
+        max_divergence_value: result.max_divergence_value,
+        divergence_curve: result.divergence_curve,
+        method: format!("{:?}", result.method),
     }))
 }
 

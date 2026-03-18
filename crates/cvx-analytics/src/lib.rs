@@ -14,6 +14,7 @@ pub mod backend;
 pub mod bocpd;
 pub mod calculus;
 pub mod cohort;
+pub mod counterfactual;
 pub mod explain;
 pub mod fisher_rao;
 pub mod granger;

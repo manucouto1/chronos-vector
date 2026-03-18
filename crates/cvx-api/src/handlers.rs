@@ -284,6 +284,41 @@ pub struct PredictionResponse {
     pub method: String,
 }
 
+/// Counterfactual request params.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CounterfactualParams {
+    /// Change point timestamp.
+    pub change_point: i64,
+}
+
+/// Divergence point in the counterfactual analysis.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DivergenceEntry {
+    /// Timestamp.
+    pub timestamp: i64,
+    /// Distance between actual and counterfactual.
+    pub distance: f32,
+}
+
+/// Counterfactual response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CounterfactualResponse {
+    /// Entity identifier.
+    pub entity_id: u64,
+    /// Change point timestamp.
+    pub change_point: i64,
+    /// Total divergence (area under curve).
+    pub total_divergence: f64,
+    /// Timestamp of maximum divergence.
+    pub max_divergence_time: i64,
+    /// Maximum divergence value.
+    pub max_divergence_value: f32,
+    /// Divergence curve.
+    pub divergence_curve: Vec<DivergenceEntry>,
+    /// Method used.
+    pub method: String,
+}
+
 /// Granger causality request.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct GrangerRequest {
@@ -850,6 +885,56 @@ pub async fn analogy(
 
     if let cvx_query::types::QueryResult::Analogy(vec) = result {
         Ok(Json(AnalogyResponse { vector: vec }))
+    } else {
+        unreachable!()
+    }
+}
+
+/// Counterfactual trajectory analysis.
+#[utoipa::path(
+    get,
+    path = "/v1/entities/{id}/counterfactual",
+    params(
+        ("id" = u64, Path, description = "Entity identifier"),
+        ("change_point" = i64, Query, description = "Change point timestamp"),
+    ),
+    responses(
+        (status = 200, description = "Counterfactual analysis", body = CounterfactualResponse),
+        (status = 400, description = "Insufficient data", body = ErrorResponse),
+    ),
+    tag = "analytics"
+)]
+pub async fn counterfactual(
+    State(state): State<SharedState>,
+    Path(entity_id): Path<u64>,
+    axum::extract::Query(params): axum::extract::Query<CounterfactualParams>,
+) -> Result<Json<CounterfactualResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let result = cvx_query::engine::execute_query(
+        &state.index,
+        cvx_query::types::TemporalQuery::Counterfactual {
+            entity_id,
+            change_point: params.change_point,
+        },
+    )
+    .map_err(query_err)?;
+
+    if let cvx_query::types::QueryResult::Counterfactual(cf) = result {
+        Ok(Json(CounterfactualResponse {
+            entity_id,
+            change_point: cf.change_point,
+            total_divergence: cf.total_divergence,
+            max_divergence_time: cf.max_divergence_time,
+            max_divergence_value: cf.max_divergence_value,
+            divergence_curve: cf
+                .divergence_curve
+                .into_iter()
+                .map(|(t, d)| DivergenceEntry {
+                    timestamp: t,
+                    distance: d,
+                })
+                .collect(),
+            method: cf.method,
+        }))
     } else {
         unreachable!()
     }
