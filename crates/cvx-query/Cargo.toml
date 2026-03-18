@@ -4,7 +4,7 @@ description = "Query execution engine with eight temporal query types"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license-file.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

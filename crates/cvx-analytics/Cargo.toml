@@ -4,7 +4,7 @@ description = "Temporal analytics: Neural ODE, change point detection, and vecto
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license-file.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 

@@ -1,7 +1,7 @@
 # ChronosVector (CVX)
 
 [![CI](https://github.com/manucouto1/chronos-vector/actions/workflows/ci.yml/badge.svg)](https://github.com/manucouto1/chronos-vector/actions/workflows/ci.yml)
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
+[![License: Elastic-2.0](https://img.shields.io/badge/license-Elastic--2.0-blue.svg)](LICENSE)
 [![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 
 A high-performance temporal vector database that treats time as a geometric dimension of embedding space. ChronosVector answers not just "what is similar?" but "what *was* similar, what *changed*, and what *will be* similar?"
@@ -119,9 +119,6 @@ stochastic analytics, interpretability, multi-scale alignment, temporal ML, and 
 
 ## License
 
-Licensed under either of
+Licensed under the [Elastic License 2.0](LICENSE).
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT License ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
+Free to use for research, education, and internal purposes. Commercial use as a managed service requires a separate license. See [LICENSE](LICENSE) for details.
