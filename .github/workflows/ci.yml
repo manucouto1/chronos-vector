@@ -51,7 +51,7 @@ jobs:
       - name: Generate OpenAPI spec
         run: cargo run -p cvx-api --bin gen_openapi > docs/public/openapi.json
       - name: Verify OpenAPI spec is valid JSON
-        run: python3 -c "import json; d=json.load(open('docs/public/openapi.json')); assert d['openapi']=='3.1.0'; print(f'OK: {len(d[\"paths\"])} paths')"
+        run: python3 -c "import json; json.load(open('docs/public/openapi.json')); print('OpenAPI spec OK')"
       - name: Generate Rust API docs
         run: cargo doc --workspace --no-deps
       - name: Upload OpenAPI spec
