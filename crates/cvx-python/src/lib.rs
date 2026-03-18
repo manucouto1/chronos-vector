@@ -700,6 +700,61 @@ fn wasserstein_drift(
     cvx_analytics::wasserstein::wasserstein_drift(&dist_a, &dist_b, &centroid_refs, n_projections)
 }
 
+/// Project a trajectory into anchor-relative coordinates.
+///
+/// For a trajectory in ℝᴰ and K anchor vectors, produces a new trajectory in ℝᴷ
+/// where dimension k = distance(point, anchor_k).
+///
+/// The output can be fed into any CVX analytics function (velocity, hurst_exponent,
+/// detect_changepoints, path_signature) for anchor-relative analysis.
+///
+/// Args:
+///     trajectory: List of (timestamp, vector) tuples.
+///     anchors: List of anchor vectors (same dimensionality as trajectory vectors).
+///     metric: Distance metric — "cosine" (default, range [0,1]) or "l2".
+///
+/// Returns:
+///     List of (timestamp, distances) where distances[k] = dist(point, anchor_k).
+#[pyfunction]
+#[pyo3(signature = (trajectory, anchors, metric="cosine"))]
+fn project_to_anchors(
+    trajectory: Vec<(i64, Vec<f32>)>,
+    anchors: Vec<Vec<f32>>,
+    metric: &str,
+) -> PyResult<Vec<(i64, Vec<f32>)>> {
+    let traj: Vec<(i64, &[f32])> = trajectory.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+    let anchor_refs: Vec<&[f32]> = anchors.iter().map(|a| a.as_slice()).collect();
+    let m = match metric {
+        "cosine" => cvx_analytics::anchor::AnchorMetric::Cosine,
+        "l2" => cvx_analytics::anchor::AnchorMetric::L2,
+        _ => return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("Unknown metric '{metric}'. Use 'cosine' or 'l2'.")
+        )),
+    };
+    Ok(cvx_analytics::anchor::project_to_anchors(&traj, &anchor_refs, m))
+}
+
+/// Compute summary statistics of anchor proximity over a projected trajectory.
+///
+/// Args:
+///     projected: Output from project_to_anchors().
+///
+/// Returns:
+///     Dict with keys: mean, min, trend, last (each a list of K floats).
+///     trend[k] < 0 means the entity is approaching anchor k over time.
+#[pyfunction]
+fn anchor_summary(
+    projected: Vec<(i64, Vec<f32>)>,
+) -> std::collections::HashMap<String, Vec<f32>> {
+    let summary = cvx_analytics::anchor::anchor_summary(&projected);
+    let mut map = std::collections::HashMap::new();
+    map.insert("mean".into(), summary.mean);
+    map.insert("min".into(), summary.min);
+    map.insert("trend".into(), summary.trend);
+    map.insert("last".into(), summary.last);
+    map
+}
+
 /// ChronosVector Python module.
 #[pymodule]
 fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -719,5 +774,7 @@ fn chronos_vector(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(topological_features, m)?)?;
     m.add_function(wrap_pyfunction!(fisher_rao_distance, m)?)?;
     m.add_function(wrap_pyfunction!(hellinger_distance, m)?)?;
+    m.add_function(wrap_pyfunction!(project_to_anchors, m)?)?;
+    m.add_function(wrap_pyfunction!(anchor_summary, m)?)?;
     Ok(())
 }
