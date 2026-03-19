@@ -5,91 +5,110 @@ description: "Experimental evaluation of CVX episodic trace memory on embodied a
 
 ## Hypothesis
 
-**H1**: An LLM agent augmented with retrieved expert trajectories (via CVX episodic memory) will produce more detailed and expert-aligned action plans than the same agent with no context or random trajectories.
+**H1**: An LLM agent augmented with retrieved expert trajectories will produce plans more similar to expert solutions than zero-shot or random trajectory injection.
 
-**H2**: Semantic retrieval selects trajectories from similar task types (e.g., "clean mug" retrieves "clean plate", not "examine lamp"), producing more transferable procedural knowledge than random selection.
+**H2**: Semantic retrieval (CVX or flat cosine) selects more useful trajectories than random selection.
 
 ## Experimental Setup
 
-| Component | Choice | Rationale |
-|-----------|--------|-----------|
-| **Dataset** | AgentInstruct ALFWorld split (336 GPT-4 expert trajectories) | Real expert demonstrations, parsed from conversation format |
-| **LLM** | qwen2.5-coder:7b-instruct (Ollama) | Open-weight, reproducible local inference |
-| **Embedding model** | all-MiniLM-L6-v2 (D=384) | Consistent with E1 |
-| **Memory backend** | CVX TemporalIndex (M=16, ef=100) | Episode encoding: `entity_id = ep_idx << 16 \| step_idx` |
-| **Retrieval** | top-k=3, reward ≥ 0.7 filter | Only retrieve successful trajectories |
-
-### Dataset Characteristics
-
-| Property | Value |
-|----------|-------|
-| Total episodes | 336 |
-| Successful (expert) | 336/336 (100%) |
-| Task types | put (158), clean (68), cool (49), examine (37), heat (24) |
-| Steps/episode | min=3, median=10, max=35 |
-
-### Episode Encoding
-
-Each ALFWorld trajectory step is stored as a temporal vector:
-- **Text**: `"Task: {task} | Action: {action} | Obs: {observation}"`
-- **Timestamp**: `ep_idx * 10000 + step_idx`
-- **Entity ID**: `ep_idx << 16 | step_idx`
+| Component | Choice |
+|-----------|--------|
+| **Dataset** | AgentInstruct ALFWorld split (336 GPT-4 expert trajectories) |
+| **LLM** | qwen2.5-coder:7b-instruct (Ollama) |
+| **Embedding model** | all-MiniLM-L6-v2 (D=384) |
+| **Memory backend** | CVX TemporalIndex (M=16, ef=100) |
+| **Retrieval** | top-k=3, leave-one-out evaluation |
 
 ### Conditions
 
-| Condition | Context Provided | Controls For |
-|-----------|-----------------|--------------|
-| **NoMemory** | None (zero-shot) | Baseline planning ability |
-| **RandomTrajectory** | 3 random expert trajectories | Effect of any trajectory examples |
-| **CVX-Episodic** | 3 most similar expert trajectories via CVX | Value of semantic retrieval |
+| Condition | Description |
+|-----------|-------------|
+| **NoMemory** | Zero-shot |
+| **RandomTrajectory** | k random expert trajectories |
+| **FlatCosine** | k most similar by numpy cosine |
+| **CVX-Episodic** | k most similar via CVX temporal search |
+
+### Metrics
+
+| Metric | Description | Range |
+|--------|-------------|-------|
+| **Semantic Similarity** | Cosine sim between plan and expert trajectory embeddings | [0, 1] |
+| **Action Overlap** | Fraction of expert action verbs present in plan | [0, 1] |
+| **Object Recall** | Fraction of expert objects mentioned in plan | [0, 1] |
+| **Step Ratio** | plan_steps / expert_steps | [0, ∞) |
 
 ### Evaluation Protocol
 
-- **Metric**: Mean plan steps and expert alignment ratio (plan_steps / expert_steps)
-- **n=30**: First 30 episodes evaluated across all conditions
-- **Temperature**: 0.0 (deterministic)
-- **Note**: Without a live ALFWorld environment, we measure plan granularity rather than task completion. A ratio closer to 1.0 indicates plans with expert-level detail.
+- **n=99** episodes, stratified by task type (put: 47, clean: 20, cool: 14, examine: 11, heat: 7)
+- **Leave-one-out**: Each episode excluded from its own retrieval
+- **T=0**, deterministic generation
 
 ## Results
 
 ### Primary Metrics
 
-| Condition | Mean Steps | Expert Mean | Ratio (plan/expert) |
-|-----------|-----------|-------------|---------------------|
-| NoMemory | 6.4 | 14.0 | **0.45** |
-| RandomTrajectory | 6.6 | 14.0 | **0.47** |
-| CVX-Episodic | 8.1 | 14.0 | **0.58** |
+| Condition | Semantic Sim | Action Overlap | Object Recall | Step Ratio |
+|-----------|-------------|----------------|--------------|-----------|
+| NoMemory | 0.600 | 0.60 | 0.10 | 0.56 |
+| RandomTrajectory | 0.612 | 0.78 | 0.17 | 0.72 |
+| **FlatCosine** | **0.700** | **0.88** | **0.30** | 0.74 |
+| **CVX-Episodic** | **0.708** | **0.88** | **0.28** | 0.74 |
 
-### Retrieval Quality
+### Statistical Tests (Wilcoxon Signed-Rank, one-sided)
 
-Sample retrieval for "find two laptop and put them in bed":
+**Semantic Similarity:**
 
-| Rank | Episode | Similarity | Task |
-|------|---------|-----------|------|
-| 1 | #0 | 0.240 | find two laptop and put them in bed |
-| 2 | #259 | 0.307 | put two laptop in bed |
-| 3 | #45 | 0.493 | find two book and put them in bed |
+| Comparison | Δ | W | p | Sig |
+|-----------|---|---|---|-----|
+| CVX vs NoMemory | +0.108 | 4521 | <0.0001 | *** |
+| CVX vs Random | +0.096 | 4035 | <0.0001 | *** |
+| CVX vs FlatCosine | +0.008 | 1071 | 0.254 | ns |
+| Flat vs NoMemory | +0.100 | 4389 | <0.0001 | *** |
+| Flat vs Random | +0.088 | 3968 | <0.0001 | *** |
 
-Retrieval correctly identifies semantically related tasks (same objects, same locations, same action types).
+**Object Recall:**
+
+| Comparison | Δ | W | p | Sig |
+|-----------|---|---|---|-----|
+| CVX vs NoMemory | +0.187 | 332 | <0.0001 | *** |
+| CVX vs Random | +0.110 | 162 | 0.003 | ** |
+| CVX vs FlatCosine | -0.016 | 4 | 0.844 | ns |
+| Flat vs NoMemory | +0.203 | 385 | <0.0001 | *** |
+| Flat vs Random | +0.126 | 158 | 0.001 | *** |
+
+### Retrieval Overlap
+
+CVX and FlatCosine retrieve **67% overlapping episodes**. Unlike E1 (96.7%), here CVX and flat search diverge meaningfully — CVX searches over action-observation embeddings (multi-step), while flat cosine searches task descriptions only.
 
 ## Findings
 
-1. **CVX-Episodic generates 26% more detailed plans than zero-shot** (8.1 vs 6.4 steps). When the agent sees how similar tasks were solved with 10-14 steps, it produces more granular action sequences rather than collapsing steps.
+1. **Semantic retrieval significantly outperforms zero-shot and random** (p<0.0001 on both semantic similarity and object recall). This is the central positive result.
 
-2. **Random trajectories provide minimal benefit** (+0.2 steps, ratio 0.47 vs 0.45). Unrelated trajectories (e.g., showing "examine lamp" when the task is "clean mug") don't transfer useful procedural knowledge.
+2. **CVX-Episodic ≈ FlatCosine** (Δ=+0.008 semantic sim, p=0.254 ns). The two retrieval methods produce statistically indistinguishable results, despite 33% different retrievals.
 
-3. **Semantic retrieval finds genuinely similar tasks.** The retrieval correctly groups by task structure: "find X and put in Y" retrieves other "find/put" tasks with related objects. This validates CVX's search operating on the action-observation embedding space.
+3. **Object recall is the most discriminating metric** — semantic retrieval triples it (0.10 → 0.28–0.30). When the agent sees expert trajectories with the right objects and locations, it names them in its own plan.
 
-4. **Gap to expert remains large** (ratio 0.58 vs 1.0). The 7B model underspecifies plans even with examples — likely a model capacity issue rather than a retrieval failure.
+4. **Action vocabulary improves sharply** (0.60 → 0.88) — retrieved trajectories teach the model the ALFWorld action format (go to X, take Y, put Y in/on Z).
 
-## Limitations & Threats to Validity
+5. **Random trajectories help modestly** — they teach action format but not task-specific content, explaining the gap to semantic retrieval.
 
-- **No environment execution**: The primary limitation — we measure plan length, not task completion rate. Plan length is a proxy: more detailed plans are not necessarily correct plans. Full evaluation requires the `alfworld` simulator.
-- **All episodes are successful**: With reward=1.0 for all trajectories, the reward filter is vacuous. A mixed-quality corpus would better demonstrate the value of reward-filtered retrieval.
-- **n=30**: Small evaluation set. Full 336-episode leave-one-out evaluation would be more rigorous.
-- **Single model**: A larger model (e.g., 70B) might produce expert-length plans even without retrieval (ceiling effect).
-- **Plan length ≠ plan quality**: A plan with 14 steps could be wrong in different ways than a plan with 6 steps. Step count measures verbosity as much as correctness.
+## Interpretation
+
+Unlike E1 (code generation, null result), E2 shows **clear value for semantic retrieval in embodied planning**. The difference likely stems from:
+
+- **Action sequences are task-dependent**: "clean mug" requires sink → fridge, while "heat egg" requires microwave. Random trajectories may demonstrate wrong action sequences.
+- **Object grounding matters**: The right retrieved trajectory names the objects and locations relevant to the current task.
+- **Code generation is more format-dependent**: Any Python example teaches function structure; ALFWorld tasks require specific procedural knowledge.
+
+The CVX vs FlatCosine null result suggests that at this scale (336 episodes), exact nearest neighbors matter more than the search method used to find them.
+
+## Limitations
+
+- **No environment execution**: Plans are evaluated against expert trajectories, not by running them in ALFWorld. A correct plan that differs from the expert could score low.
+- **All episodes are successful**: With 100% success rate, reward filtering is vacuous. A mixed corpus would better test this feature.
+- **Single T=0 pass**: No confidence intervals (but Wilcoxon operates per-problem).
+- **Metric validity**: Semantic similarity and action overlap are proxies for plan quality, not task completion.
 
 ## CVX Features Exercised
 
-`TemporalIndex`, `insert`, `search`, `save`/`load`, episode encoding, reward-filtered retrieval (structural — all rewards are 1.0 in this dataset).
+`TemporalIndex`, `insert`, `search`, `save`/`load`, episode encoding, reward-filtered retrieval.
