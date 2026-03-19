@@ -7,7 +7,11 @@
 mod change_point;
 mod delta_entry;
 mod embedding_space;
+/// Episode encoding for episodic trace memory.
+pub mod episode_encoding;
 mod entity_timeline;
+/// Metadata predicates for search filtering.
+pub mod metadata_filter;
 mod scored_result;
 mod temporal_filter;
 mod temporal_point;
@@ -17,6 +21,7 @@ pub use change_point::ChangePoint;
 pub use delta_entry::DeltaEntry;
 pub use embedding_space::EmbeddingSpace;
 pub use entity_timeline::EntityTimeline;
+pub use metadata_filter::{MetadataFilter, MetadataPredicate};
 pub use scored_result::ScoredResult;
 pub use temporal_filter::TemporalFilter;
 pub use temporal_point::TemporalPoint;

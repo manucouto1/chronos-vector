@@ -35,6 +35,6 @@ pub use traits::{
     TemporalIndexAccess, VectorSpace,
 };
 pub use types::{
-    ChangePoint, CpdMethod, DeltaEntry, DenseVector, EntityTimeline, ScoredResult, TemporalFilter,
-    TemporalPoint,
+    ChangePoint, CpdMethod, DeltaEntry, DenseVector, EntityTimeline, MetadataFilter,
+    MetadataPredicate, ScoredResult, TemporalFilter, TemporalPoint,
 };

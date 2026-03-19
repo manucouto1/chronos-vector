@@ -98,6 +98,7 @@ impl<I: TemporalIndexAccess> McpServer<I> {
             "cvx_compare_entities" => self.tool_compare_entities(&arguments),
             "cvx_cohort_analysis" => self.tool_cohort_analysis(&arguments),
             "cvx_forecast" => self.tool_forecast(&arguments),
+            "cvx_causal_search" => self.tool_causal_search(&arguments),
             "cvx_ingest" => ToolCallResult::error("cvx_ingest requires mutable access; use the REST API for ingestion."),
             _ => ToolCallResult::error(format!("unknown tool: {tool_name}")),
         };
@@ -480,6 +481,57 @@ impl<I: TemporalIndexAccess> McpServer<I> {
             Err(e) => ToolCallResult::error(format!("query error: {e}")),
         }
     }
+
+    fn tool_causal_search(&self, args: &serde_json::Value) -> ToolCallResult {
+        let vector: Vec<f32> = match args.get("vector").and_then(|v| {
+            v.as_array().map(|a| a.iter().filter_map(|x| x.as_f64().map(|f| f as f32)).collect())
+        }) {
+            Some(v) => v,
+            None => return ToolCallResult::error("missing or invalid 'vector' parameter"),
+        };
+
+        let k = args.get("k").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
+        let temporal_context = args.get("temporal_context").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
+        let alpha = args.get("alpha").and_then(|v| v.as_f64()).unwrap_or(0.8) as f32;
+
+        let query = cvx_query::types::TemporalQuery::CausalSearch {
+            vector,
+            k,
+            filter: TemporalFilter::All,
+            alpha,
+            query_timestamp: 0,
+            temporal_context,
+        };
+
+        match cvx_query::engine::execute_query(&self.index, query) {
+            Ok(cvx_query::types::QueryResult::CausalSearch(entries)) => {
+                let results: Vec<serde_json::Value> = entries.iter().map(|e| {
+                    json!({
+                        "entity_id": e.entity_id,
+                        "score": e.score,
+                        "successors": e.successors.iter()
+                            .map(|(nid, ts)| json!({"node_id": nid, "timestamp": ts}))
+                            .collect::<Vec<_>>(),
+                        "predecessors": e.predecessors.iter()
+                            .map(|(nid, ts)| json!({"node_id": nid, "timestamp": ts}))
+                            .collect::<Vec<_>>(),
+                    })
+                }).collect();
+
+                let summary = format!(
+                    "Found {} matches with temporal context (±{} steps).",
+                    entries.len(), temporal_context
+                );
+
+                ToolCallResult::text(serde_json::to_string_pretty(&json!({
+                    "results": results,
+                    "summary": summary,
+                })).unwrap())
+            }
+            Ok(_) => ToolCallResult::error("unexpected result type"),
+            Err(e) => ToolCallResult::error(format!("query error: {e}")),
+        }
+    }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────
@@ -529,7 +581,7 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&resp).unwrap();
 
         let tools = parsed["result"]["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 8);
+        assert_eq!(tools.len(), 9);
     }
 
     #[test]

@@ -16,6 +16,7 @@ pub fn all_tools() -> Vec<ToolDefinition> {
         cvx_compare_entities(),
         cvx_cohort_analysis(),
         cvx_forecast(),
+        cvx_causal_search(),
         cvx_ingest(),
     ]
 }
@@ -234,6 +235,43 @@ fn cvx_forecast() -> ToolDefinition {
     }
 }
 
+fn cvx_causal_search() -> ToolDefinition {
+    ToolDefinition {
+        name: "cvx_causal_search".to_string(),
+        description: "Find semantically similar content and show what happened before and after. \
+            Returns search results enriched with temporal context (predecessor and successor states). \
+            Use when the user asks 'what happened next to entities like this?' or needs \
+            to understand temporal sequences around a semantic match."
+            .to_string(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "vector": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "description": "Query vector (embedding)."
+                },
+                "k": {
+                    "type": "integer",
+                    "default": 5,
+                    "description": "Number of results."
+                },
+                "temporal_context": {
+                    "type": "integer",
+                    "default": 5,
+                    "description": "Number of steps forward/backward to include."
+                },
+                "alpha": {
+                    "type": "number",
+                    "default": 0.8,
+                    "description": "Semantic (1.0) vs temporal (0.0) weight."
+                }
+            },
+            "required": ["vector"]
+        }),
+    }
+}
+
 fn cvx_ingest() -> ToolDefinition {
     ToolDefinition {
         name: "cvx_ingest".to_string(),
@@ -272,7 +310,7 @@ mod tests {
 
     #[test]
     fn all_tools_count() {
-        assert_eq!(all_tools().len(), 8);
+        assert_eq!(all_tools().len(), 9);
     }
 
     #[test]

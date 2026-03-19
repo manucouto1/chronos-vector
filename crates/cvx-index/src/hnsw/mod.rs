@@ -34,6 +34,7 @@
 //! ```
 
 pub mod concurrent;
+pub mod metadata_store;
 pub mod optimized;
 pub mod partitioned;
 pub mod streaming;
