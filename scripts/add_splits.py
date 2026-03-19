@@ -238,12 +238,13 @@ if __name__ == "__main__":
     # Process both original and mental_ parquets
     print("eRisk (pool 2017+2018, 80/20 train/val, 2022 test):")
     add_erisk_splits()
-    # Also apply to mental_ version if it exists
-    mental = Path("data/embeddings/erisk_mental_embeddings.parquet")
-    if mental.exists():
-        print(f"\n  Also applying to {mental}...")
-        split_map = build_erisk_split_map(Path("data/eRisk"))
-        add_splits_to_parquet(mental, split_map)
+    # Also apply to v2 (mental_ and minilm_) parquets
+    split_map = build_erisk_split_map(Path("data/eRisk"))
+    for variant in ["mental", "minilm"]:
+        vpath = Path(f"data/embeddings/erisk_{variant}_embeddings.parquet")
+        if vpath.exists():
+            print(f"\n  Applying splits to {vpath}...")
+            add_splits_to_parquet(vpath, split_map)
 
     print("\nRSDD (pool train+val files, 80/20, testing file = test):")
     add_rsdd_splits()
@@ -251,13 +252,17 @@ if __name__ == "__main__":
     print("\nCLPsych (user-level stratified 70/15/15):")
     add_clpsych_splits()
 
-    # Apply to mental_ versions
+    # Apply to mental_ and minilm_ versions for other datasets
     for ds in ["clpsych", "rsdd"]:
-        mental = Path(f"data/embeddings/{ds}_mental_embeddings.parquet")
-        if mental.exists():
-            print(f"\n  Also applying splits to {mental}...")
-            df_orig = pd.read_parquet(f"data/embeddings/{ds}_embeddings.parquet")
-            split_map_ds = dict(zip(df_orig["user_id"],df_orig["split"]))
-            add_splits_to_parquet(mental, split_map_ds)
+        orig = Path(f"data/embeddings/{ds}_embeddings.parquet")
+        if not orig.exists():
+            continue
+        df_orig = pd.read_parquet(orig, columns=["user_id", "split"])
+        split_map_ds = dict(zip(df_orig["user_id"], df_orig["split"]))
+        for variant in ["mental", "minilm"]:
+            vpath = Path(f"data/embeddings/{ds}_{variant}_embeddings.parquet")
+            if vpath.exists():
+                print(f"\n  Applying splits to {vpath}...")
+                add_splits_to_parquet(vpath, split_map_ds)
 
     print("\nDone.")
