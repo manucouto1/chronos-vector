@@ -140,6 +140,35 @@ pub trait TemporalIndexAccess: Send + Sync {
     ) -> Vec<(i64, Vec<f32>)> {
         Vec::new()
     }
+
+    /// Get metadata for a node. Returns empty map if not available.
+    fn metadata(&self, _node_id: u32) -> std::collections::HashMap<String, String> {
+        std::collections::HashMap::new()
+    }
+
+    /// Search with metadata filtering (post-filter on search results).
+    /// Default: ignores metadata filter and delegates to search_raw.
+    fn search_with_metadata(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+        metadata_filter: &crate::types::MetadataFilter,
+    ) -> Vec<(u32, f32)> {
+        if metadata_filter.is_empty() {
+            return self.search_raw(query, k, filter, alpha, query_timestamp);
+        }
+        // Over-fetch and post-filter
+        let overfetch = k * 4;
+        let candidates = self.search_raw(query, overfetch, filter, alpha, query_timestamp);
+        candidates
+            .into_iter()
+            .filter(|&(nid, _)| metadata_filter.matches(&self.metadata(nid)))
+            .take(k)
+            .collect()
+    }
 }
 
 /// Index backend for approximate nearest neighbor search.

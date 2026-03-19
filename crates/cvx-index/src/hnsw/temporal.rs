@@ -57,6 +57,8 @@ pub struct TemporalHnsw<D: DistanceMetric> {
     /// Global temporal range for normalization
     min_timestamp: i64,
     max_timestamp: i64,
+    /// Optional per-node metadata store.
+    metadata_store: Option<super::metadata_store::MetadataStore>,
 }
 
 impl<D: DistanceMetric> TemporalHnsw<D> {
@@ -69,6 +71,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             entity_index: BTreeMap::new(),
             min_timestamp: i64::MAX,
             max_timestamp: i64::MIN,
+            metadata_store: None,
         }
     }
 
@@ -138,7 +141,58 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         self.min_timestamp = self.min_timestamp.min(timestamp);
         self.max_timestamp = self.max_timestamp.max(timestamp);
 
+        // Store metadata (empty if store not enabled)
+        if let Some(ref mut store) = self.metadata_store {
+            store.push_empty();
+        }
+
         node_id
+    }
+
+    /// Insert a temporal point with metadata.
+    pub fn insert_with_metadata(
+        &mut self,
+        entity_id: u64,
+        timestamp: i64,
+        vector: &[f32],
+        metadata: std::collections::HashMap<String, String>,
+    ) -> u32 {
+        // Enable metadata store on first metadata insert
+        if self.metadata_store.is_none() {
+            let mut store = super::metadata_store::MetadataStore::new();
+            // Backfill empty entries for existing nodes
+            for _ in 0..self.graph.len() {
+                store.push_empty();
+            }
+            self.metadata_store = Some(store);
+        }
+
+        let node_id = self.graph.len() as u32;
+        self.graph.insert(node_id, vector);
+        self.timestamps.push(timestamp);
+        self.entity_ids.push(entity_id);
+
+        self.entity_index
+            .entry(entity_id)
+            .or_default()
+            .push((timestamp, node_id));
+
+        self.min_timestamp = self.min_timestamp.min(timestamp);
+        self.max_timestamp = self.max_timestamp.max(timestamp);
+
+        if let Some(ref mut store) = self.metadata_store {
+            store.push(metadata);
+        }
+
+        node_id
+    }
+
+    /// Get metadata for a node. Returns empty map if metadata store not enabled.
+    pub fn node_metadata(&self, node_id: u32) -> std::collections::HashMap<String, String> {
+        self.metadata_store
+            .as_ref()
+            .map(|s| s.get(node_id).clone())
+            .unwrap_or_default()
     }
 
     /// Build a Roaring Bitmap of node IDs matching the temporal filter.
@@ -422,6 +476,8 @@ struct TemporalSnapshot {
     entity_index: BTreeMap<u64, Vec<(i64, u32)>>,
     min_timestamp: i64,
     max_timestamp: i64,
+    #[serde(default)]
+    metadata_store: Option<super::metadata_store::MetadataStore>,
 }
 
 impl<D: DistanceMetric> TemporalHnsw<D> {
@@ -437,6 +493,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             entity_index: self.entity_index.clone(),
             min_timestamp: self.min_timestamp,
             max_timestamp: self.max_timestamp,
+            metadata_store: self.metadata_store.clone(),
         };
 
         let bytes = postcard::to_allocvec(&snapshot).map_err(std::io::Error::other)?;
@@ -464,6 +521,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             entity_index: snapshot.entity_index,
             min_timestamp: snapshot.min_timestamp,
             max_timestamp: snapshot.max_timestamp,
+            metadata_store: snapshot.metadata_store,
         })
     }
 }
@@ -521,6 +579,34 @@ impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for TemporalHnsw<D> {
         alpha: f32,
     ) -> Vec<(i64, Vec<f32>)> {
         self.region_trajectory(entity_id, level, window_days, alpha)
+    }
+
+    fn metadata(&self, node_id: u32) -> std::collections::HashMap<String, String> {
+        self.node_metadata(node_id)
+    }
+
+    fn search_with_metadata(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+        metadata_filter: &cvx_core::types::MetadataFilter,
+    ) -> Vec<(u32, f32)> {
+        if metadata_filter.is_empty() {
+            return self.search(query, k, filter, alpha, query_timestamp);
+        }
+        // Over-fetch and post-filter using the metadata store directly
+        let overfetch = k * 4;
+        let candidates = self.search(query, overfetch, filter, alpha, query_timestamp);
+        match &self.metadata_store {
+            Some(store) => store.filter_results(&candidates, metadata_filter)
+                .into_iter()
+                .take(k)
+                .collect(),
+            None => candidates.into_iter().take(k).collect(),
+        }
     }
 }
 
@@ -930,5 +1016,92 @@ mod tests {
         let results = index.search(&[1.0, 0.0, 0.0], 2, TemporalFilter::All, 1.0, 0);
         assert_eq!(results[0].0, 0);
         assert_eq!(results[1].0, 1);
+    }
+
+    // ─── Metadata integration ───────────────────────────────────────
+
+    #[test]
+    fn insert_with_metadata_stores_and_retrieves() {
+        let config = HnswConfig::default();
+        let mut index = TemporalHnsw::new(config, L2Distance);
+
+        let mut meta = std::collections::HashMap::new();
+        meta.insert("reward".to_string(), "0.8".to_string());
+        meta.insert("step_index".to_string(), "0".to_string());
+
+        let id = index.insert_with_metadata(1, 1000, &[1.0, 0.0, 0.0], meta);
+
+        let retrieved = index.node_metadata(id);
+        assert_eq!(retrieved.get("reward").unwrap(), "0.8");
+        assert_eq!(retrieved.get("step_index").unwrap(), "0");
+    }
+
+    #[test]
+    fn insert_with_metadata_enables_store_lazily() {
+        let config = HnswConfig::default();
+        let mut index = TemporalHnsw::new(config, L2Distance);
+
+        // First insert without metadata
+        index.insert(1, 1000, &[1.0, 0.0, 0.0]);
+
+        // Second insert with metadata — should enable store and backfill
+        let mut meta = std::collections::HashMap::new();
+        meta.insert("reward".to_string(), "0.9".to_string());
+        let id = index.insert_with_metadata(2, 2000, &[0.0, 1.0, 0.0], meta);
+
+        // First node should have empty metadata
+        assert!(index.node_metadata(0).is_empty());
+        // Second node should have metadata
+        assert_eq!(index.node_metadata(id).get("reward").unwrap(), "0.9");
+    }
+
+    #[test]
+    fn search_with_metadata_filter() {
+        use cvx_core::TemporalIndexAccess;
+        use cvx_core::types::MetadataFilter;
+
+        let config = HnswConfig { m: 16, ef_construction: 100, ef_search: 50, ..Default::default() };
+        let mut index = TemporalHnsw::new(config, L2Distance);
+
+        // Insert 10 points: 5 with reward >= 0.5, 5 with reward < 0.5
+        for i in 0..10u64 {
+            let mut meta = std::collections::HashMap::new();
+            meta.insert("reward".to_string(), format!("{}", i as f64 * 0.1));
+            meta.insert("step_index".to_string(), "0".to_string());
+            index.insert_with_metadata(i, i as i64 * 1000, &[i as f32, 0.0, 0.0], meta);
+        }
+
+        // Search with metadata filter: reward >= 0.5
+        let filter = MetadataFilter::new().gte("reward", 0.5);
+        let results = index.search_with_metadata(
+            &[7.0, 0.0, 0.0], 5, TemporalFilter::All, 1.0, 0, &filter,
+        );
+
+        // All results should have reward >= 0.5
+        for &(nid, _) in &results {
+            let meta = index.node_metadata(nid);
+            let reward: f64 = meta.get("reward").unwrap().parse().unwrap();
+            assert!(reward >= 0.5, "node {nid} has reward {reward} < 0.5");
+        }
+        assert!(!results.is_empty(), "should find some results");
+    }
+
+    #[test]
+    fn search_with_empty_metadata_filter_matches_all() {
+        use cvx_core::TemporalIndexAccess;
+        use cvx_core::types::MetadataFilter;
+
+        let config = HnswConfig::default();
+        let mut index = TemporalHnsw::new(config, L2Distance);
+
+        for i in 0..5u64 {
+            index.insert(i, i as i64 * 1000, &[i as f32, 0.0]);
+        }
+
+        let filter = MetadataFilter::new();
+        let results = index.search_with_metadata(
+            &[2.0, 0.0], 3, TemporalFilter::All, 1.0, 0, &filter,
+        );
+        assert_eq!(results.len(), 3);
     }
 }
