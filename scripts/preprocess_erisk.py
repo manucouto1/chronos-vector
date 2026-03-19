@@ -18,8 +18,29 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
-def parse_erisk_xml(xml_path: Path) -> list[dict]:
-    """Parse a single eRisk XML file, returning (user_id, writings)."""
+def detect_edition(xml_path: Path) -> str:
+    """Detect eRisk edition year from directory structure."""
+    path_str = str(xml_path)
+    if "2017" in path_str:
+        if "train" in path_str.lower():
+            return "e2017train"
+        return "e2017test"
+    elif "2018" in path_str:
+        return "e2018"
+    elif "2022" in path_str:
+        return "e2022"
+    return "eunknown"
+
+
+def parse_erisk_xml(xml_path: Path, edition_prefix: str = "") -> list[dict]:
+    """Parse a single eRisk XML file, returning (user_id, writings).
+
+    Args:
+        edition_prefix: If non-empty, prepend to user_id to avoid collisions
+            between editions (e.g., 'e2018_' + 'subject1093' → 'e2018_subject1093').
+            This is critical because user_ids are NOT persistent across editions —
+            the same ID in different years refers to different individuals.
+    """
     records = []
     try:
         tree = ET.parse(xml_path)
@@ -27,7 +48,8 @@ def parse_erisk_xml(xml_path: Path) -> list[dict]:
 
         # Extract subject ID from <ID> tag or filename
         id_el = root.find(".//ID")
-        subject_id = id_el.text.strip() if id_el is not None and id_el.text else xml_path.stem.split("_chunk")[0]
+        raw_id = id_el.text.strip() if id_el is not None and id_el.text else xml_path.stem.split("_chunk")[0]
+        subject_id = f"{edition_prefix}_{raw_id}" if edition_prefix else raw_id
 
         for writing in root.findall(".//WRITING"):
             title_el = writing.find("TITLE")
@@ -79,7 +101,8 @@ def process_erisk_dir(base_dir: Path) -> list[dict]:
     seen_user_records = {}  # user_id -> set of (timestamp, text_hash) to deduplicate
 
     for xml_path in sorted(base_dir.rglob("*.xml")):
-        records = parse_erisk_xml(xml_path)
+        edition = detect_edition(xml_path)
+        records = parse_erisk_xml(xml_path, edition_prefix=edition)
         for r in records:
             uid = r["user_id"]
             dedup_key = (r["timestamp"], hash(r["text"][:100]))

@@ -164,6 +164,6 @@ cd notebooks && jupyter notebook B3_trump_impact.ipynb
 
 ## Further Reading
 
-- [Theoretical Foundations](/research/foundations/) — Temporal embedding theory and anchor projection
-- [Use Cases & Applications](/research/use-cases/) — Domain overview including NLP and finance
-- [Path Signatures](/research/path-signatures/) — Signature theory for trajectory fingerprinting
+- [Theoretical Foundations](/chronos-vector/research/foundations/) — Temporal embedding theory and anchor projection
+- [Use Cases & Applications](/chronos-vector/research/use-cases/) — Domain overview including NLP and finance
+- [Path Signatures](/chronos-vector/research/path-signatures/) — Signature theory for trajectory fingerprinting

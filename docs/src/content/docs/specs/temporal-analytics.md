@@ -83,7 +83,7 @@ where $C$ is the segment cost and $\beta$ is the penalty per change point.
 
 ## Path Signatures
 
-*Based on rough path theory (Lyons, 1998). See [Path Signatures](/research/path-signatures) for full mathematical treatment.*
+*Based on rough path theory (Lyons, 1998). See [Path Signatures](/chronos-vector/research/path-signatures) for full mathematical treatment.*
 
 ### `cvx.path_signature(trajectory, depth=2, time_augmentation=False)`
 
@@ -231,7 +231,7 @@ Implemented via Union-Find on the pairwise distance graph (single-linkage equiva
 
 ## Anchor Projection
 
-*See [RFC-006: Anchor Projection](/rfc/rfc-006) for design rationale and clinical validation.*
+*See [RFC-006: Anchor Projection](/chronos-vector/rfc/rfc-006) for design rationale and clinical validation.*
 
 ### `cvx.project_to_anchors(trajectory, anchors, metric='cosine')`
 

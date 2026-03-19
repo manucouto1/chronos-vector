@@ -47,8 +47,8 @@ jupyter notebook notebooks/T_MLOps_Drift.ipynb
 
 No external data required — generates synthetic data.
 
-See the [full tutorial with Plotly plots](/tutorials/mlops-drift).
+See the [full tutorial with Plotly plots](/chronos-vector/tutorials/mlops-drift).
 
 ---
 
-[← Back to White Paper](/research/white-paper)
+[← Back to White Paper](/chronos-vector/research/white-paper)

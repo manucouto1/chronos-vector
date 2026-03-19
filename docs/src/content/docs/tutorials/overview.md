@@ -27,10 +27,10 @@ Each tutorial applies this framework to a different domain, demonstrating that t
 
 | Tutorial | Domain | Data | Key Insight | Status |
 |----------|--------|------|-------------|--------|
-| [Mental Health Explorer](/tutorials/b1-explorer) | Clinical NLP | eRisk (D=768) | 13 CVX temporal features → F1=0.60 (AUC=0.64); early detection at 10% of posts | Available |
-| [Clinical Anchoring](/tutorials/b2-clinical-anchoring) | Clinical NLP | eRisk (D=768) | DSM-5 anchor projection: F1=0.744 (AUC=0.886) on temporal split, early detection at 10% | Available |
-| [MAP-Elites Archive](/tutorials/map-elites) | Quality-Diversity | Synthetic (D=20) | HNSW replaces CVT with adaptive niches; archive topology reveals exploration structure | Available |
-| [MLOps Drift Detection](/tutorials/mlops-drift) | Production ML | Synthetic (D=64) | 5 independent drift signals detect gradual and sudden distribution shifts | Available |
+| [Mental Health Explorer](/chronos-vector/tutorials/b1-explorer) | Clinical NLP | eRisk (D=768) | 13 CVX temporal features → F1=0.60 (AUC=0.64); early detection at 10% of posts | Available |
+| [Clinical Anchoring](/chronos-vector/tutorials/b2-clinical-anchoring) | Clinical NLP | eRisk (D=768) | DSM-5 anchor projection: F1=0.744 (AUC=0.886) on temporal split, early detection at 10% | Available |
+| [MAP-Elites Archive](/chronos-vector/tutorials/map-elites) | Quality-Diversity | Synthetic (D=20) | HNSW replaces CVT with adaptive niches; archive topology reveals exploration structure | Available |
+| [MLOps Drift Detection](/chronos-vector/tutorials/mlops-drift) | Production ML | Synthetic (D=64) | 5 independent drift signals detect gradual and sudden distribution shifts | Available |
 
 ### Planned
 
@@ -61,10 +61,10 @@ The Mental Health tutorial requires the eRisk dataset (see [Research Protocol 00
 
 ## From Examples to Tutorials
 
-The [Examples](/examples/overview) section provides a **quick API reference** for each of CVX's 17 functions with concise code snippets. The tutorials below go deeper: each is a complete, executable analysis that follows the 7-level framework above, showing real outputs, interactive visualizations, and domain-specific interpretation.
+The [Examples](/chronos-vector/examples/overview) section provides a **quick API reference** for each of CVX's 17 functions with concise code snippets. The tutorials below go deeper: each is a complete, executable analysis that follows the 7-level framework above, showing real outputs, interactive visualizations, and domain-specific interpretation.
 
 | Need | Go to |
 |------|-------|
-| "How do I call `path_signature()`?" | [Examples → API Reference](/examples/overview) |
-| "How does path signature analysis work on real data?" | [Tutorials](/tutorials/overview) |
-| "What functions does CVX have for distributional analysis?" | [Temporal Analytics Toolkit](/specs/temporal-analytics) |
+| "How do I call `path_signature()`?" | [Examples → API Reference](/chronos-vector/examples/overview) |
+| "How does path signature analysis work on real data?" | [Tutorials](/chronos-vector/tutorials/overview) |
+| "What functions does CVX have for distributional analysis?" | [Temporal Analytics Toolkit](/chronos-vector/specs/temporal-analytics) |

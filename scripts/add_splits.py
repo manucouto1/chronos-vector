@@ -63,13 +63,31 @@ def build_erisk_split_map(erisk_dir: Path) -> dict[str, str]:
     train_uids, val_uids = train_test_split(
         uids, test_size=0.2, stratify=labels, random_state=SEED)
 
+    # ⚠ IMPORTANT: user_ids are NOT persistent across eRisk editions.
+    # 'subject1093' in 2018 and 'subject1093' in 2022 are DIFFERENT people.
+    # IDs collide because each edition assigns its own sequential subject IDs.
+    # The preprocessing script (preprocess_erisk.py) should prefix user_ids
+    # with the edition year to avoid mixing different people's data.
+    overlap = set(pool_users.keys()) & test_users
+    if overlap:
+        print(f"  ⚠ {len(overlap)} user_id COLLISIONS between editions (different people, same ID)")
+        print(f"    These are different individuals. Consider re-preprocessing with edition prefixes.")
+        print(f"    Current behavior: 2022 test assignment takes priority (pool entries dropped)")
+
     split_map = {}
     for u in train_uids:
-        split_map[u] = "train"
+        if u not in test_users:
+            split_map[u] = "train"
     for u in val_uids:
-        split_map[u] = "val"
+        if u not in test_users:
+            split_map[u] = "val"
     for u in test_users:
         split_map[u] = "test"
+
+    n_train = sum(1 for v in split_map.values() if v == "train")
+    n_val = sum(1 for v in split_map.values() if v == "val")
+    n_test = sum(1 for v in split_map.values() if v == "test")
+    print(f"  Split: train={n_train}, val={n_val}, test={n_test}")
 
     return split_map
 
