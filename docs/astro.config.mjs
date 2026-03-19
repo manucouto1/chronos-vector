@@ -109,6 +109,8 @@ export default defineConfig({
 						{ label: 'RFC-007: Temporal Primitives', slug: 'rfc/rfc-007', badge: { text: 'Done', variant: 'success' } },
 						{ label: 'RFC-008: Index Architecture', slug: 'rfc/rfc-008', badge: { text: 'Done', variant: 'success' } },
 						{ label: 'RFC-009: LLM Integration', slug: 'rfc/rfc-009', badge: { text: 'Done', variant: 'success' } },
+						{ label: 'RFC-010: Temporal Graph', slug: 'rfc/rfc-010', badge: { text: 'Done', variant: 'success' } },
+						{ label: 'RFC-011: Anchor Invariance', slug: 'rfc/rfc-011', badge: { text: 'Done', variant: 'success' } },
 					],
 				},
 				{
