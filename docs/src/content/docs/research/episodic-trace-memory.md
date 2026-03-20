@@ -49,13 +49,32 @@ metadata:   {episode_id, step_index, reward, action_type, outcome_text}
 | `detect_changepoints()` | Identifying episodes with unexpected pivots |
 | Episode encoding (`encode_entity_id`) | Mapping episode:step → u64 entity_id |
 
-## Proposed Benchmarks
+## Experimental Results
 
-| Benchmark | Domain | Baseline | CVX Expected |
-|-----------|--------|----------|-------------|
-| ALFWorld task completion | Embodied | 39% (GPT-4o no memory) | 60-75% (reward-filtered retrieval) |
-| Procedural memory MAP | Retrieval quality | BM25/SentenceBERT | Higher on unseen vocabulary queries |
-| LoCoMo QA F1 | Long-term conversation | 29.6 (standard RAG) | Improvement on temporal/multi-hop QA |
+Three benchmarks validate the episodic trace memory hypothesis:
+
+### E1: Code Generation (HumanEval) — [Results](/chronos-vector/research/e1-episodic-coding-results)
+
+Static retrieval on 384 MBPP episodes. **Finding: CVX ≈ FlatCosine ≈ Random** (all ~77% pass@1). For code generation, few-shot formatting matters more than retrieval quality. Static retrieval does not exercise CVX's temporal features.
+
+### E2: Embodied Planning (ALFWorld) — [Results](/chronos-vector/research/e2-episodic-alfworld-results)
+
+Static plan generation from 336 expert trajectories. **Finding: Semantic retrieval >> Random >> Zero-shot** (p<0.0001), but CVX ≈ FlatCosine. Without an interactive loop, the temporal structure adds no value over plain cosine search.
+
+### E3: Interactive Agent (ALFWorld) — [Results](/chronos-vector/research/e3-interactive-alfworld-results)
+
+**The key result.** Real environment execution with step-by-step CVX queries.
+
+| Condition | Task Completion |
+|-----------|----------------|
+| NoMemory | 1/30 = 3.3% |
+| **CVX-Causal** | **6/30 = 20.0%** |
+
+**6x improvement** when the query is the agent's actual environment state (not a task description). CVX finds similar mid-episode states in expert memory and returns what happened next — something a flat store cannot do because it has no step ordering or episode structure.
+
+### Key Insight
+
+CVX's temporal features (episode encoding, step ordering, continuation extraction) add value **only in interactive settings** where the query evolves at each step. Static retrieval reduces CVX to a vector store, where it matches numpy brute-force. The interactive agent loop is the natural deployment pattern for episodic trace memory.
 
 ## References
 
