@@ -278,7 +278,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "chronos-vector"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cvx-analytics",
  "cvx-core",
@@ -479,7 +479,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-analytics"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "cvx-core",
@@ -496,7 +496,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "cvx-analytics",
@@ -524,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "postcard",
  "proptest",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-index"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "cvx-core",
@@ -554,7 +554,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-ingest"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cvx-core",
  "cvx-index",
@@ -565,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cvx-analytics",
  "cvx-core",
@@ -580,7 +580,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-query"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "cvx-analytics",
@@ -594,7 +594,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "cvx-storage"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cvx-core",
  "parking_lot",
