@@ -29,7 +29,7 @@ pub fn encode_entity_id(episode_id: u64, step_index: u32) -> u64 {
         "episode_id {episode_id} exceeds 48-bit limit"
     );
     assert!(
-        step_index <= MAX_STEP_INDEX as u32,
+        step_index <= MAX_STEP_INDEX,
         "step_index {step_index} exceeds 16-bit limit"
     );
     (episode_id << 16) | (step_index as u64)
@@ -53,7 +53,7 @@ pub fn episode_start(episode_id: u64) -> u64 {
 /// `[start, end]` inclusive. Use with `TemporalFilter` or entity lookups.
 pub fn episode_range(episode_id: u64) -> (u64, u64) {
     let start = encode_entity_id(episode_id, 0);
-    let end = encode_entity_id(episode_id, MAX_STEP_INDEX as u32);
+    let end = encode_entity_id(episode_id, MAX_STEP_INDEX);
     (start, end)
 }
 
@@ -87,7 +87,7 @@ mod tests {
         assert_eq!(ep_s, 42);
         assert_eq!(st_s, 0);
         assert_eq!(ep_e, 42);
-        assert_eq!(st_e, MAX_STEP_INDEX as u32);
+        assert_eq!(st_e, MAX_STEP_INDEX);
     }
 
     #[test]
@@ -99,10 +99,10 @@ mod tests {
 
     #[test]
     fn max_values() {
-        let id = encode_entity_id(MAX_EPISODE_ID, MAX_STEP_INDEX as u32);
+        let id = encode_entity_id(MAX_EPISODE_ID, MAX_STEP_INDEX);
         let (ep, st) = decode_entity_id(id);
         assert_eq!(ep, MAX_EPISODE_ID);
-        assert_eq!(st, MAX_STEP_INDEX as u32);
+        assert_eq!(st, MAX_STEP_INDEX);
     }
 
     #[test]
@@ -114,6 +114,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "exceeds 16-bit")]
     fn step_overflow_panics() {
-        encode_entity_id(0, MAX_STEP_INDEX as u32 + 1);
+        encode_entity_id(0, MAX_STEP_INDEX + 1);
     }
 }

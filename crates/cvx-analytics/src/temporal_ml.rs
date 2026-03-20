@@ -288,6 +288,7 @@ fn compute_scale_drift(trajectory: &[(i64, &[f32])], bucket_width: i64) -> f32 {
 }
 
 #[cfg(test)]
+#[allow(clippy::needless_range_loop)]
 mod tests {
     use super::*;
 

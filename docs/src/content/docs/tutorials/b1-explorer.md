@@ -15,7 +15,7 @@ natively inside the index.
 |---------|-------------------|
 | Ingestion & Performance | `bulk_insert`, `enable_quantization` |
 | 3D Trajectory Explorer | `trajectory`, `search` |
-| HNSW Hierarchy & Regions | `regions`, `region_members` |
+| HNSW Hierarchy & Regions | `regions`, `region_members`, `region_assignments` |
 | Temporal Calculus | `velocity`, `drift`, `hurst_exponent`, `detect_changepoints` |
 | Point Process Analysis | `event_features` |
 | Distributional Distances | `region_trajectory`, `wasserstein_drift`, `fisher_rao_distance`, `hellinger_distance` |

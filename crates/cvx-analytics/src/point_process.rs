@@ -181,8 +181,8 @@ pub fn extract_event_features(timestamps: &[i64]) -> Result<EventFeatures, Point
             sin_sum += phase.sin();
             cos_sum += phase.cos();
         }
-        let amplitude = ((sin_sum / n as f64).powi(2) + (cos_sum / n as f64).powi(2)).sqrt();
-        amplitude // Range [0, 1], higher = stronger circadian pattern
+
+        ((sin_sum / n as f64).powi(2) + (cos_sum / n as f64).powi(2)).sqrt() // Range [0, 1], higher = stronger circadian pattern
     };
 
     Ok(EventFeatures {

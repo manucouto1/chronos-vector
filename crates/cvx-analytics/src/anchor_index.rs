@@ -14,7 +14,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::anchor::{project_to_anchors, AnchorMetric};
+use crate::anchor::{AnchorMetric, project_to_anchors};
 use crate::calculus::{drift_magnitude_l2, drift_report};
 use cvx_core::types::TemporalFilter;
 
@@ -178,11 +178,7 @@ impl AnchorSpaceIndex {
     }
 
     /// Retrieve trajectory in anchor space for an entity.
-    pub fn trajectory(
-        &self,
-        entity_id: u64,
-        filter: TemporalFilter,
-    ) -> Vec<(i64, Vec<f32>)> {
+    pub fn trajectory(&self, entity_id: u64, filter: TemporalFilter) -> Vec<(i64, Vec<f32>)> {
         let Some(entries) = self.entity_index.get(&entity_id) else {
             return Vec::new();
         };
@@ -229,12 +225,7 @@ impl AnchorSpaceIndex {
     }
 
     /// Compute drift in anchor space between two timestamps.
-    pub fn anchor_drift(
-        &self,
-        entity_id: u64,
-        t1: i64,
-        t2: i64,
-    ) -> Option<AnchorDriftReport> {
+    pub fn anchor_drift(&self, entity_id: u64, t1: i64, t2: i64) -> Option<AnchorDriftReport> {
         let entries = self.entity_index.get(&entity_id)?;
 
         // Find nearest point to t1 and t2
@@ -324,8 +315,7 @@ impl AnchorSpaceIndex {
             timestamps: self.timestamps.clone(),
             entity_index: self.entity_index.clone(),
         };
-        let bytes = postcard::to_allocvec(&snapshot)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let bytes = postcard::to_allocvec(&snapshot).map_err(std::io::Error::other)?;
         std::fs::write(path, bytes)
     }
 
@@ -407,8 +397,16 @@ mod tests {
         let proj = index.projected_vector(id);
         assert_eq!(proj.len(), 2);
         // [1,0,0] is cosine distance 0 from anchor [1,0,0] and 1 from [0,1,0]
-        assert!(proj[0] < 0.01, "should be close to anchor 0, got {}", proj[0]);
-        assert!((proj[1] - 1.0).abs() < 0.01, "should be far from anchor 1, got {}", proj[1]);
+        assert!(
+            proj[0] < 0.01,
+            "should be close to anchor 0, got {}",
+            proj[0]
+        );
+        assert!(
+            (proj[1] - 1.0).abs() < 0.01,
+            "should be far from anchor 1, got {}",
+            proj[1]
+        );
     }
 
     // ─── Search ─────────────────────────────────────────────────
@@ -439,7 +437,7 @@ mod tests {
         let results = index.search(&[5.0, 0.0], 10, TemporalFilter::Range(3000, 7000));
         for &(nid, _) in &results {
             let ts = index.timestamp(nid);
-            assert!(ts >= 3000 && ts <= 7000, "ts {ts} outside range");
+            assert!((3000..=7000).contains(&ts), "ts {ts} outside range");
         }
     }
 
@@ -462,7 +460,10 @@ mod tests {
         // Top 2 should be entities 1 and 2 (from different models!)
         let model_0 = results.iter().any(|&(nid, _)| index.source_model(nid) == 0);
         let model_1 = results.iter().any(|&(nid, _)| index.source_model(nid) == 1);
-        assert!(model_0 && model_1, "search should return results from both models");
+        assert!(
+            model_0 && model_1,
+            "search should return results from both models"
+        );
     }
 
     // ─── Trajectory ─────────────────────────────────────────────
@@ -510,7 +511,10 @@ mod tests {
         index.insert_projected(1, 2000, vec![0.5, 0.5, 0.5], 0);
 
         let report = index.anchor_drift(1, 1000, 2000).unwrap();
-        assert!(report.per_anchor_delta[0] < 0.0, "should be approaching anchor 0");
+        assert!(
+            report.per_anchor_delta[0] < 0.0,
+            "should be approaching anchor 0"
+        );
         assert_eq!(report.dominant_anchor, 0);
         assert!(report.l2_magnitude > 0.0);
     }

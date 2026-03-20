@@ -162,7 +162,7 @@ async fn query_with_temporal_filter() {
     assert_eq!(results.len(), 4);
     for r in results {
         let ts = r["timestamp"].as_i64().unwrap();
-        assert!(ts >= 2000 && ts <= 5000, "timestamp {ts} out of range");
+        assert!((2000..=5000).contains(&ts), "timestamp {ts} out of range");
     }
 }
 

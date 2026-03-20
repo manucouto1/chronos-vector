@@ -372,6 +372,32 @@ impl TemporalIndex {
             .collect()
     }
 
+    /// Assign all nodes to their regions in a single O(N) pass.
+    ///
+    /// Much faster than calling `region_members()` per region — one scan
+    /// instead of K scans (where K = number of regions).
+    ///
+    /// Args:
+    ///     level: HNSW level for region granularity (default 3).
+    ///     start: Optional start timestamp for temporal filtering.
+    ///     end: Optional end timestamp for temporal filtering.
+    ///
+    /// Returns:
+    ///     Dict mapping hub_id → list of (entity_id, timestamp).
+    #[pyo3(signature = (level=3, start=None, end=None))]
+    fn region_assignments(
+        &self,
+        level: usize,
+        start: Option<i64>,
+        end: Option<i64>,
+    ) -> std::collections::HashMap<u32, Vec<(u64, i64)>> {
+        let filter = match (start, end) {
+            (Some(s), Some(e)) => TemporalFilter::Range(s, e),
+            _ => TemporalFilter::All,
+        };
+        self.inner.region_assignments(level, filter)
+    }
+
     /// Compute smoothed region-distribution trajectory for an entity.
     ///
     /// Tracks how the user's posts distribute across semantic regions

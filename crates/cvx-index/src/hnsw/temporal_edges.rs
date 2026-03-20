@@ -174,7 +174,7 @@ mod tests {
         let mut layer = TemporalEdgeLayer::new();
 
         // Entity A: 5 sequential points
-        layer.register(0, None);    // first point
+        layer.register(0, None); // first point
         layer.register(1, Some(0)); // second
         layer.register(2, Some(1)); // third
         layer.register(3, Some(2)); // fourth
@@ -204,12 +204,12 @@ mod tests {
         // Interleaved inserts from 2 entities:
         // Entity A: nodes 0, 2, 4
         // Entity B: nodes 1, 3, 5
-        layer.register(0, None);       // A first
-        layer.register(1, None);       // B first
-        layer.register(2, Some(0));    // A second (links to A's last = 0)
-        layer.register(3, Some(1));    // B second (links to B's last = 1)
-        layer.register(4, Some(2));    // A third (links to A's last = 2)
-        layer.register(5, Some(3));    // B third (links to B's last = 3)
+        layer.register(0, None); // A first
+        layer.register(1, None); // B first
+        layer.register(2, Some(0)); // A second (links to A's last = 0)
+        layer.register(3, Some(1)); // B second (links to B's last = 1)
+        layer.register(4, Some(2)); // A third (links to A's last = 2)
+        layer.register(5, Some(3)); // B third (links to B's last = 3)
 
         // Entity A chain: 0 → 2 → 4
         assert_eq!(layer.successor(0), Some(2));

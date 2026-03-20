@@ -114,12 +114,7 @@ pub fn matrix_profile(
 }
 
 /// Euclidean distance between two subsequences of the trajectory.
-fn subsequence_distance(
-    trajectory: &[(i64, &[f32])],
-    i: usize,
-    j: usize,
-    window: usize,
-) -> f32 {
+fn subsequence_distance(trajectory: &[(i64, &[f32])], i: usize, j: usize, window: usize) -> f32 {
     let mut sum_sq = 0.0f64;
     for step in 0..window {
         let vi = trajectory[i + step].1;
@@ -216,8 +211,8 @@ pub fn discover_motifs(
         for occ in &occurrences {
             let start = occ.start_index.saturating_sub(excl);
             let end = (occ.start_index + excl).min(n_subs);
-            for idx in start..end {
-                used[idx] = true;
+            for flag in used.iter_mut().take(end).skip(start) {
+                *flag = true;
             }
         }
 
@@ -293,8 +288,8 @@ pub fn discover_discords(
         // Mark exclusion zone
         let start = candidate.saturating_sub(excl);
         let end = (candidate + excl).min(n_subs);
-        for idx in start..end {
-            used[idx] = true;
+        for flag in used.iter_mut().take(end).skip(start) {
+            *flag = true;
         }
     }
 
@@ -331,9 +326,7 @@ fn detect_period(occurrences: &[MotifOccurrence]) -> Option<usize> {
 
     // Check regularity: all gaps within 20% of median
     let tolerance = (median_gap as f64 * 0.2).max(1.0) as usize;
-    let is_regular = gaps
-        .iter()
-        .all(|&g| g.abs_diff(median_gap) <= tolerance);
+    let is_regular = gaps.iter().all(|&g| g.abs_diff(median_gap) <= tolerance);
 
     if is_regular { Some(median_gap) } else { None }
 }
@@ -341,6 +334,7 @@ fn detect_period(occurrences: &[MotifOccurrence]) -> Option<usize> {
 // ─── Tests ──────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::needless_range_loop)]
 mod tests {
     use super::*;
 
@@ -411,9 +405,8 @@ mod tests {
     #[test]
     fn matrix_profile_identical_subsequences() {
         // Trajectory where positions 0-2 and 5-7 are identical
-        let mut owned: Vec<(i64, Vec<f32>)> = (0..10)
-            .map(|i| (i as i64 * 1000, vec![i as f32]))
-            .collect();
+        let mut owned: Vec<(i64, Vec<f32>)> =
+            (0..10).map(|i| (i as i64 * 1000, vec![i as f32])).collect();
 
         // Make positions 5,6,7 identical to 0,1,2
         owned[5].1 = vec![0.0];
@@ -452,9 +445,10 @@ mod tests {
 
         // The canonical should be at one of the planted positions (10, 40, 70)
         let planted = [10usize, 40, 70];
-        let found_planted = best.occurrences.iter().any(|o| {
-            planted.iter().any(|&p| o.start_index.abs_diff(p) <= 2)
-        });
+        let found_planted = best
+            .occurrences
+            .iter()
+            .any(|o| planted.iter().any(|&p| o.start_index.abs_diff(p) <= 2));
         assert!(
             found_planted,
             "should find at least one planted position, got indices: {:?}",
@@ -488,9 +482,8 @@ mod tests {
     #[test]
     fn motifs_stationary_trajectory() {
         // Constant trajectory — everything is a motif
-        let owned: Vec<(i64, Vec<f32>)> = (0..30)
-            .map(|i| (i as i64 * 1000, vec![1.0, 2.0]))
-            .collect();
+        let owned: Vec<(i64, Vec<f32>)> =
+            (0..30).map(|i| (i as i64 * 1000, vec![1.0, 2.0])).collect();
         let traj = as_refs(&owned);
 
         let motifs = discover_motifs(&traj, 5, 3, 0.5).unwrap();
@@ -518,9 +511,8 @@ mod tests {
     #[test]
     fn discords_planted_anomaly() {
         let dim = 2;
-        let mut owned: Vec<(i64, Vec<f32>)> = (0..50)
-            .map(|i| (i as i64 * 1000, vec![1.0; dim]))
-            .collect();
+        let mut owned: Vec<(i64, Vec<f32>)> =
+            (0..50).map(|i| (i as i64 * 1000, vec![1.0; dim])).collect();
 
         // Plant an anomaly at position 25
         for step in 25..30 {
@@ -549,9 +541,7 @@ mod tests {
     #[test]
     fn discords_constant_trajectory() {
         // Constant trajectory — no real discords
-        let owned: Vec<(i64, Vec<f32>)> = (0..30)
-            .map(|i| (i as i64 * 1000, vec![1.0]))
-            .collect();
+        let owned: Vec<(i64, Vec<f32>)> = (0..30).map(|i| (i as i64 * 1000, vec![1.0])).collect();
         let traj = as_refs(&owned);
 
         let discords = discover_discords(&traj, 5, 3).unwrap();
@@ -580,10 +570,26 @@ mod tests {
     #[test]
     fn period_regular_spacing() {
         let occs = vec![
-            MotifOccurrence { start_index: 10, timestamp: 10000, distance: 0.0 },
-            MotifOccurrence { start_index: 30, timestamp: 30000, distance: 0.1 },
-            MotifOccurrence { start_index: 50, timestamp: 50000, distance: 0.1 },
-            MotifOccurrence { start_index: 70, timestamp: 70000, distance: 0.05 },
+            MotifOccurrence {
+                start_index: 10,
+                timestamp: 10000,
+                distance: 0.0,
+            },
+            MotifOccurrence {
+                start_index: 30,
+                timestamp: 30000,
+                distance: 0.1,
+            },
+            MotifOccurrence {
+                start_index: 50,
+                timestamp: 50000,
+                distance: 0.1,
+            },
+            MotifOccurrence {
+                start_index: 70,
+                timestamp: 70000,
+                distance: 0.05,
+            },
         ];
         let period = detect_period(&occs);
         assert_eq!(period, Some(20));
@@ -592,9 +598,21 @@ mod tests {
     #[test]
     fn period_irregular_spacing() {
         let occs = vec![
-            MotifOccurrence { start_index: 5, timestamp: 5000, distance: 0.0 },
-            MotifOccurrence { start_index: 10, timestamp: 10000, distance: 0.1 },
-            MotifOccurrence { start_index: 50, timestamp: 50000, distance: 0.1 },
+            MotifOccurrence {
+                start_index: 5,
+                timestamp: 5000,
+                distance: 0.0,
+            },
+            MotifOccurrence {
+                start_index: 10,
+                timestamp: 10000,
+                distance: 0.1,
+            },
+            MotifOccurrence {
+                start_index: 50,
+                timestamp: 50000,
+                distance: 0.1,
+            },
         ];
         let period = detect_period(&occs);
         assert!(period.is_none(), "irregular gaps should return None");
@@ -603,8 +621,16 @@ mod tests {
     #[test]
     fn period_too_few_occurrences() {
         let occs = vec![
-            MotifOccurrence { start_index: 0, timestamp: 0, distance: 0.0 },
-            MotifOccurrence { start_index: 10, timestamp: 10000, distance: 0.1 },
+            MotifOccurrence {
+                start_index: 0,
+                timestamp: 0,
+                distance: 0.0,
+            },
+            MotifOccurrence {
+                start_index: 10,
+                timestamp: 10000,
+                distance: 0.1,
+            },
         ];
         assert!(detect_period(&occs).is_none());
     }
@@ -613,25 +639,27 @@ mod tests {
 
     #[test]
     fn subseq_distance_identical() {
-        let owned: Vec<(i64, Vec<f32>)> = (0..10)
-            .map(|i| (i as i64, vec![1.0, 2.0]))
-            .collect();
+        let owned: Vec<(i64, Vec<f32>)> = (0..10).map(|i| (i as i64, vec![1.0, 2.0])).collect();
         let traj = as_refs(&owned);
         let dist = subsequence_distance(&traj, 0, 5, 3);
-        assert!(dist < 1e-6, "identical subsequences should have ~0 distance");
+        assert!(
+            dist < 1e-6,
+            "identical subsequences should have ~0 distance"
+        );
     }
 
     #[test]
     fn subseq_distance_different() {
-        let mut owned: Vec<(i64, Vec<f32>)> = (0..10)
-            .map(|i| (i as i64, vec![0.0]))
-            .collect();
+        let mut owned: Vec<(i64, Vec<f32>)> = (0..10).map(|i| (i as i64, vec![0.0])).collect();
         // Make positions 5,6,7 = [10.0]
         for i in 5..8 {
             owned[i].1 = vec![10.0];
         }
         let traj = as_refs(&owned);
         let dist = subsequence_distance(&traj, 0, 5, 3);
-        assert!(dist > 1.0, "different subsequences should have large distance");
+        assert!(
+            dist > 1.0,
+            "different subsequences should have large distance"
+        );
     }
 }

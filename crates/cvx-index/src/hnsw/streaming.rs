@@ -59,9 +59,7 @@ struct BufferedPoint {
 
 impl HotBuffer {
     fn new() -> Self {
-        Self {
-            points: Vec::new(),
-        }
+        Self { points: Vec::new() }
     }
 
     fn push(&mut self, entity_id: u64, timestamp: i64, vector: Vec<f32>, global_id: u32) {
@@ -200,12 +198,14 @@ impl<D: DistanceMetric + Clone> StreamingTemporalHnsw<D> {
         query_timestamp: i64,
     ) -> Vec<(u32, f32)> {
         // Search compacted index
-        let mut results =
-            self.compacted
-                .search(query, k, filter.clone(), alpha, query_timestamp);
+        let mut results = self
+            .compacted
+            .search(query, k, filter, alpha, query_timestamp);
 
         // Search hot buffer (brute-force)
-        let buffer_results = self.buffer.brute_force_search(query, k, &filter, &self.metric);
+        let buffer_results = self
+            .buffer
+            .brute_force_search(query, k, &filter, &self.metric);
         results.extend(buffer_results);
 
         // Merge: sort by score, take top k
@@ -216,7 +216,7 @@ impl<D: DistanceMetric + Clone> StreamingTemporalHnsw<D> {
 
     /// Retrieve trajectory across buffer and compacted index.
     pub fn trajectory(&self, entity_id: u64, filter: TemporalFilter) -> Vec<(i64, u32)> {
-        let mut traj = self.compacted.trajectory(entity_id, filter.clone());
+        let mut traj = self.compacted.trajectory(entity_id, filter);
         let buffer_traj = self.buffer.trajectory(entity_id, &filter);
         traj.extend(buffer_traj);
         traj.sort_by_key(|&(ts, _)| ts);
@@ -519,7 +519,10 @@ mod tests {
             index.insert(i % 3, i as i64 * 1000, &[i as f32]);
         }
 
-        assert!(index.compaction_count() >= 3, "should compact multiple times");
+        assert!(
+            index.compaction_count() >= 3,
+            "should compact multiple times"
+        );
         assert_eq!(index.len(), 20);
     }
 }

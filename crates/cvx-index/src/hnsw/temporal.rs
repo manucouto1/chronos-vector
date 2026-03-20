@@ -443,6 +443,9 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
     ///
     /// Returns `(node_id, entity_id, timestamp)` for all points in the region.
     /// This is the "SELECT * FROM points WHERE region = R" equivalent.
+    ///
+    /// **Performance warning**: This does a full scan of all nodes. For multiple regions,
+    /// use `region_assignments()` instead (single scan for all regions).
     pub fn region_members(
         &self,
         region_hub: u32,
@@ -464,6 +467,33 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             }
         }
         members
+    }
+
+    /// Assign ALL nodes to their regions in a single pass, optionally time-filtered.
+    ///
+    /// Returns a HashMap from hub_id → Vec<(entity_id, timestamp)>.
+    /// This is O(N) — one full scan instead of O(N × K) for K `region_members` calls.
+    pub fn region_assignments(
+        &self,
+        level: usize,
+        filter: TemporalFilter,
+    ) -> std::collections::HashMap<u32, Vec<(u64, i64)>> {
+        let mut assignments: std::collections::HashMap<u32, Vec<(u64, i64)>> =
+            std::collections::HashMap::new();
+
+        for node_id in 0..self.graph.len() as u32 {
+            let ts = self.timestamps[node_id as usize];
+            if !filter.matches(ts) {
+                continue;
+            }
+            let vec = self.graph.vector(node_id);
+            if let Some(hub) = self.graph.assign_region(vec, level) {
+                let eid = self.entity_ids[node_id as usize];
+                assignments.entry(hub).or_default().push((eid, ts));
+            }
+        }
+
+        assignments
     }
 }
 
@@ -601,7 +631,8 @@ impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for TemporalHnsw<D> {
         let overfetch = k * 4;
         let candidates = self.search(query, overfetch, filter, alpha, query_timestamp);
         match &self.metadata_store {
-            Some(store) => store.filter_results(&candidates, metadata_filter)
+            Some(store) => store
+                .filter_results(&candidates, metadata_filter)
                 .into_iter()
                 .take(k)
                 .collect(),
@@ -699,7 +730,7 @@ mod tests {
         assert_eq!(results.len(), 2);
         for &(id, _) in &results {
             let ts = index.timestamp(id);
-            assert!(ts >= 1500 && ts <= 3500, "timestamp {ts} out of range");
+            assert!((1500..=3500).contains(&ts), "timestamp {ts} out of range");
         }
     }
 
@@ -937,7 +968,7 @@ mod tests {
         // timestamps 1000, 1100, ..., 3000 → 21 points
         assert_eq!(traj.len(), 21);
         for &(ts, _) in &traj {
-            assert!(ts >= 1000 && ts <= 3000);
+            assert!((1000..=3000).contains(&ts));
         }
     }
 
@@ -1060,7 +1091,12 @@ mod tests {
         use cvx_core::TemporalIndexAccess;
         use cvx_core::types::MetadataFilter;
 
-        let config = HnswConfig { m: 16, ef_construction: 100, ef_search: 50, ..Default::default() };
+        let config = HnswConfig {
+            m: 16,
+            ef_construction: 100,
+            ef_search: 50,
+            ..Default::default()
+        };
         let mut index = TemporalHnsw::new(config, L2Distance);
 
         // Insert 10 points: 5 with reward >= 0.5, 5 with reward < 0.5
@@ -1073,9 +1109,8 @@ mod tests {
 
         // Search with metadata filter: reward >= 0.5
         let filter = MetadataFilter::new().gte("reward", 0.5);
-        let results = index.search_with_metadata(
-            &[7.0, 0.0, 0.0], 5, TemporalFilter::All, 1.0, 0, &filter,
-        );
+        let results =
+            index.search_with_metadata(&[7.0, 0.0, 0.0], 5, TemporalFilter::All, 1.0, 0, &filter);
 
         // All results should have reward >= 0.5
         for &(nid, _) in &results {
@@ -1084,6 +1119,124 @@ mod tests {
             assert!(reward >= 0.5, "node {nid} has reward {reward} < 0.5");
         }
         assert!(!results.is_empty(), "should find some results");
+    }
+
+    // ─── Region assignments ──────────────────────────────────────────
+
+    /// Build an index with enough points so that level-1 hubs exist.
+    fn make_region_index() -> TemporalHnsw<L2Distance> {
+        let config = HnswConfig {
+            m: 4,
+            ef_construction: 50,
+            ef_search: 50,
+            ..Default::default()
+        };
+        let mut index = TemporalHnsw::new(config, L2Distance);
+        let mut rng = rand::rng();
+        // 200 points across 4 entities, timestamps 0..199_000
+        for i in 0..200u64 {
+            let v: Vec<f32> = (0..8).map(|_| rand::Rng::random::<f32>(&mut rng)).collect();
+            let entity = i % 4;
+            index.insert(entity, i as i64 * 1000, &v);
+        }
+        index
+    }
+
+    #[test]
+    fn region_assignments_covers_all_nodes() {
+        let index = make_region_index();
+        let level = 1;
+        let assignments = index.region_assignments(level, TemporalFilter::All);
+
+        let total: usize = assignments.values().map(|v| v.len()).sum();
+        assert_eq!(
+            total,
+            index.len(),
+            "sum of all region member counts ({total}) must equal index size ({})",
+            index.len()
+        );
+    }
+
+    #[test]
+    fn region_assignments_consistent_with_regions_counts() {
+        let index = make_region_index();
+        let level = 1;
+        let regions = index.regions(level);
+        let assignments = index.region_assignments(level, TemporalFilter::All);
+
+        for &(hub_id, _, count) in &regions {
+            let assigned_count = assignments.get(&hub_id).map_or(0, |v| v.len());
+            assert_eq!(
+                assigned_count, count,
+                "region hub {hub_id}: region_assignments has {assigned_count} members but regions() reports {count}"
+            );
+        }
+    }
+
+    #[test]
+    fn region_assignments_temporal_filter_reduces_count() {
+        let index = make_region_index();
+        let level = 1;
+
+        let all = index.region_assignments(level, TemporalFilter::All);
+        let total_all: usize = all.values().map(|v| v.len()).sum();
+
+        // Filter to middle 50% of timestamps (50_000..150_000)
+        let filtered = index.region_assignments(level, TemporalFilter::Range(50_000, 150_000));
+        let total_filtered: usize = filtered.values().map(|v| v.len()).sum();
+
+        assert!(
+            total_filtered < total_all,
+            "Range filter should reduce total members: filtered={total_filtered}, all={total_all}"
+        );
+
+        // Verify every member in filtered results has a timestamp within the range
+        for members in filtered.values() {
+            for &(_eid, ts) in members {
+                assert!(
+                    (50_000..=150_000).contains(&ts),
+                    "filtered result has timestamp {ts} outside [50000, 150000]"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn region_assignments_each_member_in_exactly_one_region() {
+        let index = make_region_index();
+        let level = 1;
+        let assignments = index.region_assignments(level, TemporalFilter::All);
+
+        // Collect (entity_id, timestamp) across all regions and check for duplicates
+        let mut seen = std::collections::HashSet::new();
+        let mut total = 0usize;
+        for members in assignments.values() {
+            for &(eid, ts) in members {
+                total += 1;
+                let _inserted = seen.insert((eid, ts));
+                // Note: same (eid, ts) can appear if entity has multiple nodes at same ts,
+                // so we count total instead and verify it matches index.len()
+            }
+        }
+
+        // Each node_id maps to exactly one region, so total must equal index size
+        assert_eq!(
+            total,
+            index.len(),
+            "total assigned members ({total}) != index size ({}); a node appeared in multiple or no regions",
+            index.len()
+        );
+
+        // Additionally, no hub should appear in two different regions' keys that don't exist at level
+        let hubs: std::collections::HashSet<u32> = assignments.keys().copied().collect();
+        let level_hubs: std::collections::HashSet<u32> =
+            index.graph().nodes_at_level(level).into_iter().collect();
+        for hub in &hubs {
+            assert!(
+                level_hubs.contains(hub),
+                "assignment hub {hub} is not a level-{level} node"
+            );
+        }
     }
 
     #[test]
@@ -1099,9 +1252,8 @@ mod tests {
         }
 
         let filter = MetadataFilter::new();
-        let results = index.search_with_metadata(
-            &[2.0, 0.0], 3, TemporalFilter::All, 1.0, 0, &filter,
-        );
+        let results =
+            index.search_with_metadata(&[2.0, 0.0], 3, TemporalFilter::All, 1.0, 0, &filter);
         assert_eq!(results.len(), 3);
     }
 }

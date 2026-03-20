@@ -52,14 +52,15 @@ The `<type>` prefix matches the conventional commit type for consistency.
 ```
 1. git checkout develop
 2. git pull origin develop
-3. git checkout -b feat/my-feature
-4. ... develop, commit with conventional commits ...
-5. git push origin feat/my-feature
-6. Open PR: feat/my-feature → develop
-7. CI runs (fmt, clippy, build, test, docs-site, commit lint)
-8. Code review
-9. Squash merge to develop (PR title becomes the commit message)
-10. Delete feature branch
+3. git config core.hooksPath .githooks   # once per clone
+4. git checkout -b feat/my-feature
+5. ... develop, commit with conventional commits ...
+6. git push origin feat/my-feature
+7. Open PR: feat/my-feature → develop
+8. CI runs (fmt, clippy, build, test, docs-site, commit lint)
+9. Code review
+10. Squash merge to develop (PR title becomes the commit message)
+11. Delete feature branch
 ```
 
 ### Workflow: Release
@@ -90,6 +91,25 @@ The `<type>` prefix matches the conventional commit type for consistency.
 6. After merge, tag v0.1.1
 7. Merge main back to develop
 ```
+
+---
+
+## Development Setup
+
+After cloning the repository, activate the local git hooks:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This enables two hooks:
+
+| Hook | What it checks | CI equivalent |
+|------|---------------|---------------|
+| `pre-commit` | `cargo fmt --check` + `cargo clippy -Dwarnings` | `check` job |
+| `commit-msg` | Conventional commit format | `committed` linter |
+
+The hooks let you catch format and lint errors **before** pushing, so you can iterate locally without waiting for CI. The same checks still run in CI as a safety net.
 
 ---
 
