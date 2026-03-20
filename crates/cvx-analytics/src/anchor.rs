@@ -110,8 +110,8 @@ pub fn anchor_summary(projected: &[(i64, Vec<f32>)]) -> AnchorSummary {
         }
     }
 
-    for j in 0..k {
-        mean[j] /= n as f32;
+    for item in mean.iter_mut().take(k) {
+        *item /= n as f32;
     }
 
     if let Some((_, d)) = projected.last() {

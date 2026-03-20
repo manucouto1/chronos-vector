@@ -1,7 +1,7 @@
 //! MCP server: handles JSON-RPC messages and dispatches tool calls.
 
-use cvx_core::types::TemporalFilter;
 use cvx_core::TemporalIndexAccess;
+use cvx_core::types::TemporalFilter;
 use serde_json::json;
 
 use crate::protocol::*;
@@ -81,14 +81,8 @@ impl<I: TemporalIndexAccess> McpServer<I> {
         id: &serde_json::Value,
         params: &serde_json::Value,
     ) -> JsonRpcResponse {
-        let tool_name = params
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let arguments = params
-            .get("arguments")
-            .cloned()
-            .unwrap_or(json!({}));
+        let tool_name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
 
         let result = match tool_name {
             "cvx_search" => self.tool_search(&arguments),
@@ -98,7 +92,10 @@ impl<I: TemporalIndexAccess> McpServer<I> {
             "cvx_compare_entities" => self.tool_compare_entities(&arguments),
             "cvx_cohort_analysis" => self.tool_cohort_analysis(&arguments),
             "cvx_forecast" => self.tool_forecast(&arguments),
-            "cvx_ingest" => ToolCallResult::error("cvx_ingest requires mutable access; use the REST API for ingestion."),
+            "cvx_causal_search" => self.tool_causal_search(&arguments),
+            "cvx_ingest" => ToolCallResult::error(
+                "cvx_ingest requires mutable access; use the REST API for ingestion.",
+            ),
             _ => ToolCallResult::error(format!("unknown tool: {tool_name}")),
         };
 
@@ -109,7 +106,11 @@ impl<I: TemporalIndexAccess> McpServer<I> {
 
     fn tool_search(&self, args: &serde_json::Value) -> ToolCallResult {
         let vector: Vec<f32> = match args.get("vector").and_then(|v| {
-            v.as_array().map(|a| a.iter().filter_map(|x| x.as_f64().map(|f| f as f32)).collect())
+            v.as_array().map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_f64().map(|f| f as f32))
+                    .collect()
+            })
         }) {
             Some(v) => v,
             None => return ToolCallResult::error("missing or invalid 'vector' parameter"),
@@ -146,13 +147,20 @@ impl<I: TemporalIndexAccess> McpServer<I> {
         let summary = format!(
             "Found {} matches{}.",
             matches.len(),
-            if matches.is_empty() { "" } else { " ordered by relevance" }
+            if matches.is_empty() {
+                ""
+            } else {
+                " ordered by relevance"
+            }
         );
 
-        ToolCallResult::text(serde_json::to_string_pretty(&json!({
-            "matches": matches,
-            "summary": summary,
-        })).unwrap())
+        ToolCallResult::text(
+            serde_json::to_string_pretty(&json!({
+                "matches": matches,
+                "summary": summary,
+            }))
+            .unwrap(),
+        )
     }
 
     fn tool_entity_summary(&self, args: &serde_json::Value) -> ToolCallResult {
@@ -179,9 +187,15 @@ impl<I: TemporalIndexAccess> McpServer<I> {
 
         // Velocity at last point (if enough data)
         let velocity_magnitude = if traj.len() >= 2 {
-            let vectors: Vec<Vec<f32>> = traj.iter().map(|&(_, nid)| self.index.vector(nid)).collect();
-            let traj_refs: Vec<(i64, &[f32])> = traj.iter().zip(vectors.iter())
-                .map(|(&(ts, _), v)| (ts, v.as_slice())).collect();
+            let vectors: Vec<Vec<f32>> = traj
+                .iter()
+                .map(|&(_, nid)| self.index.vector(nid))
+                .collect();
+            let traj_refs: Vec<(i64, &[f32])> = traj
+                .iter()
+                .zip(vectors.iter())
+                .map(|(&(ts, _), v)| (ts, v.as_slice()))
+                .collect();
             cvx_analytics::calculus::velocity(&traj_refs, last_seen)
                 .ok()
                 .map(|v| v.iter().map(|x| x * x).sum::<f32>().sqrt())
@@ -279,13 +293,16 @@ impl<I: TemporalIndexAccess> McpServer<I> {
 
     fn tool_detect_anomalies(&self, args: &serde_json::Value) -> ToolCallResult {
         let entity_ids: Vec<u64> = match args.get("entity_ids").and_then(|v| {
-            v.as_array().map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
+            v.as_array()
+                .map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
         }) {
             Some(ids) => ids,
             None => return ToolCallResult::error("missing 'entity_ids'"),
         };
 
-        let lookback = args.get("lookback_us").and_then(|v| v.as_i64())
+        let lookback = args
+            .get("lookback_us")
+            .and_then(|v| v.as_i64())
             .unwrap_or(7 * 86_400_000_000); // default 7 days
 
         let mut anomalies: Vec<serde_json::Value> = Vec::new();
@@ -321,7 +338,9 @@ impl<I: TemporalIndexAccess> McpServer<I> {
         }
 
         anomalies.sort_by(|a, b| {
-            b["severity"].as_f64().unwrap_or(0.0)
+            b["severity"]
+                .as_f64()
+                .unwrap_or(0.0)
                 .partial_cmp(&a["severity"].as_f64().unwrap_or(0.0))
                 .unwrap()
         });
@@ -348,7 +367,9 @@ impl<I: TemporalIndexAccess> McpServer<I> {
             None => return ToolCallResult::error("missing 'entity_b'"),
         };
         let epsilon = args.get("epsilon").and_then(|v| v.as_f64()).unwrap_or(0.5) as f32;
-        let window_us = args.get("window_us").and_then(|v| v.as_i64())
+        let window_us = args
+            .get("window_us")
+            .and_then(|v| v.as_i64())
             .unwrap_or(7 * 86_400_000_000);
 
         let query = cvx_query::types::TemporalQuery::TemporalJoin {
@@ -360,25 +381,40 @@ impl<I: TemporalIndexAccess> McpServer<I> {
 
         match cvx_query::engine::execute_query(&self.index, query) {
             Ok(cvx_query::types::QueryResult::TemporalJoin(joins)) => {
-                let windows: Vec<serde_json::Value> = joins.iter().map(|j| json!({
-                    "start": j.start,
-                    "end": j.end,
-                    "mean_distance": j.mean_distance,
-                    "min_distance": j.min_distance,
-                })).collect();
+                let windows: Vec<serde_json::Value> = joins
+                    .iter()
+                    .map(|j| {
+                        json!({
+                            "start": j.start,
+                            "end": j.end,
+                            "mean_distance": j.mean_distance,
+                            "min_distance": j.min_distance,
+                        })
+                    })
+                    .collect();
 
                 let summary = if windows.is_empty() {
-                    format!("Entities {} and {} show no convergence periods (ε={}).", entity_a, entity_b, epsilon)
+                    format!(
+                        "Entities {entity_a} and {entity_b} show no convergence periods (ε={epsilon})."
+                    )
                 } else {
-                    format!("Found {} convergence window(s) between entities {} and {}.", windows.len(), entity_a, entity_b)
+                    format!(
+                        "Found {} convergence window(s) between entities {} and {}.",
+                        windows.len(),
+                        entity_a,
+                        entity_b
+                    )
                 };
 
-                ToolCallResult::text(serde_json::to_string_pretty(&json!({
-                    "entity_a": entity_a,
-                    "entity_b": entity_b,
-                    "convergence_windows": windows,
-                    "summary": summary,
-                })).unwrap())
+                ToolCallResult::text(
+                    serde_json::to_string_pretty(&json!({
+                        "entity_a": entity_a,
+                        "entity_b": entity_b,
+                        "convergence_windows": windows,
+                        "summary": summary,
+                    }))
+                    .unwrap(),
+                )
             }
             Ok(_) => ToolCallResult::error("unexpected result type"),
             Err(e) => ToolCallResult::error(format!("query error: {e}")),
@@ -387,7 +423,8 @@ impl<I: TemporalIndexAccess> McpServer<I> {
 
     fn tool_cohort_analysis(&self, args: &serde_json::Value) -> ToolCallResult {
         let entity_ids: Vec<u64> = match args.get("entity_ids").and_then(|v| {
-            v.as_array().map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
+            v.as_array()
+                .map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
         }) {
             Some(ids) => ids,
             None => return ToolCallResult::error("missing 'entity_ids'"),
@@ -480,6 +517,71 @@ impl<I: TemporalIndexAccess> McpServer<I> {
             Err(e) => ToolCallResult::error(format!("query error: {e}")),
         }
     }
+
+    fn tool_causal_search(&self, args: &serde_json::Value) -> ToolCallResult {
+        let vector: Vec<f32> = match args.get("vector").and_then(|v| {
+            v.as_array().map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_f64().map(|f| f as f32))
+                    .collect()
+            })
+        }) {
+            Some(v) => v,
+            None => return ToolCallResult::error("missing or invalid 'vector' parameter"),
+        };
+
+        let k = args.get("k").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
+        let temporal_context = args
+            .get("temporal_context")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5) as usize;
+        let alpha = args.get("alpha").and_then(|v| v.as_f64()).unwrap_or(0.8) as f32;
+
+        let query = cvx_query::types::TemporalQuery::CausalSearch {
+            vector,
+            k,
+            filter: TemporalFilter::All,
+            alpha,
+            query_timestamp: 0,
+            temporal_context,
+        };
+
+        match cvx_query::engine::execute_query(&self.index, query) {
+            Ok(cvx_query::types::QueryResult::CausalSearch(entries)) => {
+                let results: Vec<serde_json::Value> = entries
+                    .iter()
+                    .map(|e| {
+                        json!({
+                            "entity_id": e.entity_id,
+                            "score": e.score,
+                            "successors": e.successors.iter()
+                                .map(|(nid, ts)| json!({"node_id": nid, "timestamp": ts}))
+                                .collect::<Vec<_>>(),
+                            "predecessors": e.predecessors.iter()
+                                .map(|(nid, ts)| json!({"node_id": nid, "timestamp": ts}))
+                                .collect::<Vec<_>>(),
+                        })
+                    })
+                    .collect();
+
+                let summary = format!(
+                    "Found {} matches with temporal context (±{} steps).",
+                    entries.len(),
+                    temporal_context
+                );
+
+                ToolCallResult::text(
+                    serde_json::to_string_pretty(&json!({
+                        "results": results,
+                        "summary": summary,
+                    }))
+                    .unwrap(),
+                )
+            }
+            Ok(_) => ToolCallResult::error("unexpected result type"),
+            Err(e) => ToolCallResult::error(format!("query error: {e}")),
+        }
+    }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────
@@ -487,8 +589,8 @@ impl<I: TemporalIndexAccess> McpServer<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cvx_index::hnsw::temporal::TemporalHnsw;
     use cvx_index::hnsw::HnswConfig;
+    use cvx_index::hnsw::temporal::TemporalHnsw;
     use cvx_index::metrics::L2Distance;
 
     fn setup_server() -> McpServer<TemporalHnsw<L2Distance>> {
@@ -513,7 +615,8 @@ mod tests {
     #[test]
     fn handle_initialize() {
         let server = setup_server();
-        let resp = server.handle_message(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+        let resp =
+            server.handle_message(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
         let parsed: serde_json::Value = serde_json::from_str(&resp).unwrap();
 
         assert_eq!(parsed["jsonrpc"], "2.0");
@@ -525,17 +628,19 @@ mod tests {
     #[test]
     fn handle_tools_list() {
         let server = setup_server();
-        let resp = server.handle_message(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#);
+        let resp =
+            server.handle_message(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#);
         let parsed: serde_json::Value = serde_json::from_str(&resp).unwrap();
 
         let tools = parsed["result"]["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 8);
+        assert_eq!(tools.len(), 9);
     }
 
     #[test]
     fn handle_unknown_method() {
         let server = setup_server();
-        let resp = server.handle_message(r#"{"jsonrpc":"2.0","id":3,"method":"nonexistent","params":{}}"#);
+        let resp =
+            server.handle_message(r#"{"jsonrpc":"2.0","id":3,"method":"nonexistent","params":{}}"#);
         let parsed: serde_json::Value = serde_json::from_str(&resp).unwrap();
 
         assert!(parsed["error"].is_object());

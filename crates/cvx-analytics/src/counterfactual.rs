@@ -72,10 +72,7 @@ pub fn counterfactual_trajectory(
         });
     }
     if post_change.is_empty() {
-        return Err(AnalyticsError::InsufficientData {
-            needed: 1,
-            have: 0,
-        });
+        return Err(AnalyticsError::InsufficientData { needed: 1, have: 0 });
     }
 
     let dim = pre_change[0].1.len();
@@ -99,10 +96,7 @@ pub fn counterfactual_trajectory(
 
     // ── Actual post-change trajectory ──
 
-    let actual: Vec<(i64, Vec<f32>)> = post_change
-        .iter()
-        .map(|&(t, v)| (t, v.to_vec()))
-        .collect();
+    let actual: Vec<(i64, Vec<f32>)> = post_change.iter().map(|&(t, v)| (t, v.to_vec())).collect();
 
     // ── Divergence curve ──
 
@@ -217,8 +211,16 @@ mod tests {
         ];
         let traj = as_refs(&owned);
         let (slopes, intercepts) = fit_linear_per_dim(&traj);
-        assert!((slopes[0] - 2.0).abs() < 1e-6, "slope should be 2.0, got {}", slopes[0]);
-        assert!((intercepts[0] - 1.0).abs() < 1e-6, "intercept should be 1.0, got {}", intercepts[0]);
+        assert!(
+            (slopes[0] - 2.0).abs() < 1e-6,
+            "slope should be 2.0, got {}",
+            slopes[0]
+        );
+        assert!(
+            (intercepts[0] - 1.0).abs() < 1e-6,
+            "intercept should be 1.0, got {}",
+            intercepts[0]
+        );
     }
 
     #[test]

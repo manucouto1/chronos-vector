@@ -20,7 +20,7 @@ The mapping from drift detection concepts to CVX primitives is direct:
 | Current distribution | Region distribution at T_now |
 | Drift metric | `drift()`, `wasserstein_drift()`, `fisher_rao_distance()` |
 | Drift onset | `detect_changepoints()` |
-| Affected subpopulation | `region_members(changed_region, time_range)` |
+| Affected subpopulation | `region_members(changed_region, time_range)` or `region_assignments(level, start, end)` for all regions at once |
 
 This is not an analogy. CVX's temporal HNSW index stores embedding trajectories natively, and its statistical toolkit operates on exactly the objects that drift detection requires.
 
@@ -95,10 +95,18 @@ Once you detect drift, the next question is *what changed*. CVX's region-level a
 
 ```python
 # Which regions changed?
+# Option A: query one region at a time with region_members
 for rid, centroid, n in regions:
     members_before = index.region_members(rid, level=2, start=t0, end=t1)
     members_after = index.region_members(rid, level=2, start=t1, end=t2)
     # Compare counts to identify growing/shrinking clusters
+
+# Option B (faster): assign all nodes in a single O(N) pass
+assignments_before = index.region_assignments(level=2, start=t0, end=t1)
+assignments_after = index.region_assignments(level=2, start=t1, end=t2)
+for rid in assignments_before:
+    # Compare len(assignments_before[rid]) vs len(assignments_after.get(rid, []))
+    pass
 ```
 
 A region that doubles in size may indicate a new user behavior pattern the model was not trained on. A region that empties out may mean a previously common pattern has disappeared. Both require different remediation strategies.

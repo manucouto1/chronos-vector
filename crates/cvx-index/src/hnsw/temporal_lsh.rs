@@ -108,9 +108,7 @@ impl TemporalLSH {
             })
             .collect();
 
-        let tables = (0..config.n_tables)
-            .map(|_| HashMap::new())
-            .collect();
+        let tables = (0..config.n_tables).map(|_| HashMap::new()).collect();
 
         Self {
             tables,
@@ -122,11 +120,7 @@ impl TemporalLSH {
     }
 
     /// Build T-LSH from existing index data.
-    pub fn build(
-        vectors: &[&[f32]],
-        timestamps: &[i64],
-        config: TLSHConfig,
-    ) -> Self {
+    pub fn build(vectors: &[&[f32]], timestamps: &[i64], config: TLSHConfig) -> Self {
         assert_eq!(vectors.len(), timestamps.len());
         if vectors.is_empty() {
             return Self::new(0, config);
@@ -157,11 +151,7 @@ impl TemporalLSH {
     /// Query: find candidate node IDs under spatiotemporal locality.
     ///
     /// Returns deduplicated candidate IDs from all tables + multi-probe.
-    pub fn query(
-        &self,
-        vector: &[f32],
-        timestamp: i64,
-    ) -> Vec<u32> {
+    pub fn query(&self, vector: &[f32], timestamp: i64) -> Vec<u32> {
         let mut candidates = Vec::new();
         let mut seen = std::collections::HashSet::new();
 
@@ -233,10 +223,16 @@ impl TemporalLSH {
             * self.dim
             * std::mem::size_of::<f32>();
 
-        let table_mem: usize = self.tables.iter().map(|t| {
-            t.values().map(|v| v.len() * std::mem::size_of::<u32>() + 8).sum::<usize>()
-                + t.len() * (std::mem::size_of::<u64>() + 24)
-        }).sum();
+        let table_mem: usize = self
+            .tables
+            .iter()
+            .map(|t| {
+                t.values()
+                    .map(|v| v.len() * std::mem::size_of::<u32>() + 8)
+                    .sum::<usize>()
+                    + t.len() * (std::mem::size_of::<u64>() + 24)
+            })
+            .sum();
 
         hyperplane_mem + table_mem
     }
@@ -349,10 +345,7 @@ mod tests {
         let candidates = index.query(&query_v, query_ts);
 
         // Should find some candidates (may not be exact, it's LSH)
-        assert!(
-            !candidates.is_empty(),
-            "should find at least one candidate"
-        );
+        assert!(!candidates.is_empty(), "should find at least one candidate");
     }
 
     // ─── Temporal locality ──────────────────────────────────────
@@ -382,8 +375,7 @@ mod tests {
         let found_1 = candidates.contains(&1);
         assert!(
             found_0 || found_1,
-            "multi-probe should find at least one temporal neighbor, got {:?}",
-            candidates
+            "multi-probe should find at least one temporal neighbor, got {candidates:?}"
         );
     }
 
@@ -418,12 +410,8 @@ mod tests {
 
     #[test]
     fn build_from_vectors() {
-        let vectors: Vec<Vec<f32>> = (0..50)
-            .map(|i| vec![i as f32, 0.0])
-            .collect();
-        let timestamps: Vec<i64> = (0..50)
-            .map(|i| i as i64 * 1_000_000)
-            .collect();
+        let vectors: Vec<Vec<f32>> = (0..50).map(|i| vec![i as f32, 0.0]).collect();
+        let timestamps: Vec<i64> = (0..50).map(|i| i as i64 * 1_000_000).collect();
 
         let refs: Vec<&[f32]> = vectors.iter().map(|v| v.as_slice()).collect();
         let index = TemporalLSH::build(&refs, &timestamps, default_config());
@@ -536,6 +524,9 @@ mod tests {
 
         // They might be the same if semantic bits dominate, but for 1s buckets
         // 10 seconds apart should differ
-        assert_ne!(h1, h2, "different temporal buckets should usually give different hashes");
+        assert_ne!(
+            h1, h2,
+            "different temporal buckets should usually give different hashes"
+        );
     }
 }

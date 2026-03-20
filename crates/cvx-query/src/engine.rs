@@ -12,8 +12,8 @@ use cvx_analytics::counterfactual;
 use cvx_analytics::granger;
 use cvx_analytics::motifs;
 use cvx_analytics::ode;
-use cvx_analytics::temporal_join;
 use cvx_analytics::pelt::{self, PeltConfig};
+use cvx_analytics::temporal_join;
 
 use crate::types::*;
 
@@ -191,7 +191,15 @@ pub fn execute_query(
             alpha,
             query_timestamp,
             temporal_context,
-        } => do_causal_search(index, &vector, k, filter, alpha, query_timestamp, temporal_context),
+        } => do_causal_search(
+            index,
+            &vector,
+            k,
+            filter,
+            alpha,
+            query_timestamp,
+            temporal_context,
+        ),
     }
 }
 
@@ -319,10 +327,8 @@ fn do_counterfactual(
     entity_id: u64,
     change_point: i64,
 ) -> Result<QueryResult, QueryError> {
-    let (td_pre, vecs_pre) =
-        build_traj(index, entity_id, TemporalFilter::Before(change_point));
-    let (td_post, vecs_post) =
-        build_traj(index, entity_id, TemporalFilter::After(change_point));
+    let (td_pre, vecs_pre) = build_traj(index, entity_id, TemporalFilter::Before(change_point));
+    let (td_post, vecs_post) = build_traj(index, entity_id, TemporalFilter::After(change_point));
 
     if td_pre.len() < 2 {
         return Err(QueryError::InsufficientData {
@@ -331,10 +337,7 @@ fn do_counterfactual(
         });
     }
     if td_post.is_empty() {
-        return Err(QueryError::InsufficientData {
-            needed: 1,
-            have: 0,
-        });
+        return Err(QueryError::InsufficientData { needed: 1, have: 0 });
     }
 
     let pre = to_slices(&td_pre, &vecs_pre);
@@ -378,10 +381,12 @@ fn do_granger(
     let traj_a = to_slices(&td_a, &vecs_a);
     let traj_b = to_slices(&td_b, &vecs_b);
 
-    let result = granger::granger_causality(&traj_a, &traj_b, max_lag, significance)
-        .map_err(|_| QueryError::InsufficientData {
-            needed: max_lag + 3,
-            have: traj_a.len().min(traj_b.len()),
+    let result =
+        granger::granger_causality(&traj_a, &traj_b, max_lag, significance).map_err(|_| {
+            QueryError::InsufficientData {
+                needed: max_lag + 3,
+                have: traj_a.len().min(traj_b.len()),
+            }
         })?;
 
     let direction = match result.direction {
@@ -413,11 +418,12 @@ fn do_discover_motifs(
         return Err(QueryError::EntityNotFound(entity_id));
     }
     let traj = to_slices(&td, &vecs);
-    let found = motifs::discover_motifs(&traj, window, max_motifs, 0.5)
-        .map_err(|_| QueryError::InsufficientData {
+    let found = motifs::discover_motifs(&traj, window, max_motifs, 0.5).map_err(|_| {
+        QueryError::InsufficientData {
             needed: 2 * window,
             have: traj.len(),
-        })?;
+        }
+    })?;
 
     Ok(QueryResult::Motifs(
         found
@@ -451,11 +457,12 @@ fn do_discover_discords(
         return Err(QueryError::EntityNotFound(entity_id));
     }
     let traj = to_slices(&td, &vecs);
-    let found = motifs::discover_discords(&traj, window, max_discords)
-        .map_err(|_| QueryError::InsufficientData {
+    let found = motifs::discover_discords(&traj, window, max_discords).map_err(|_| {
+        QueryError::InsufficientData {
             needed: 2 * window,
             have: traj.len(),
-        })?;
+        }
+    })?;
 
     Ok(QueryResult::Discords(
         found
@@ -490,10 +497,7 @@ fn do_temporal_join(
     let traj_b = to_slices(&td_b, &vecs_b);
 
     let joins = temporal_join::temporal_join(&traj_a, &traj_b, epsilon, window_us)
-        .map_err(|_| QueryError::InsufficientData {
-            needed: 1,
-            have: 0,
-        })?;
+        .map_err(|_| QueryError::InsufficientData { needed: 1, have: 0 })?;
 
     Ok(QueryResult::TemporalJoin(
         joins
@@ -518,6 +522,7 @@ fn do_cohort_drift(
     top_n: usize,
 ) -> Result<QueryResult, QueryError> {
     // Build trajectories for all entities
+    #[allow(clippy::type_complexity)]
     let mut traj_data: Vec<(Vec<(i64, u32)>, Vec<Vec<f32>>)> = Vec::new();
     let mut valid_ids: Vec<u64> = Vec::new();
 
@@ -542,14 +547,15 @@ fn do_cohort_drift(
         .map(|(td, vecs)| to_slices(td, vecs))
         .collect();
 
+    #[allow(clippy::type_complexity)]
     let input: Vec<(u64, &[(i64, &[f32])])> = valid_ids
         .iter()
         .zip(slice_trajs.iter())
         .map(|(&eid, st)| (eid, st.as_slice()))
         .collect();
 
-    let report = cohort::cohort_drift(&input, t1, t2, top_n)
-        .map_err(|_| QueryError::InsufficientData {
+    let report =
+        cohort::cohort_drift(&input, t1, t2, top_n).map_err(|_| QueryError::InsufficientData {
             needed: 2,
             have: valid_ids.len(),
         })?;
@@ -620,7 +626,7 @@ fn do_causal_search(
         .into_iter()
         .map(|(node_id, score)| {
             let entity_id = index.entity_id(node_id);
-            let ts = index.timestamp(node_id);
+            let _ts = index.timestamp(node_id);
 
             // Get entity's full trajectory to find temporal neighbors
             let traj = index.trajectory(entity_id, TemporalFilter::All);

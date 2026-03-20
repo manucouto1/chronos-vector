@@ -73,6 +73,11 @@ regions_l2 = index.regions(level=2)
 
 members = index.region_members(region_id=42, level=2)
 # => list of (entity_id, timestamp) tuples belonging to this region
+
+# When you need members for ALL regions at once, use region_assignments —
+# a single O(N) pass instead of one scan per region:
+assignments = index.region_assignments(level=2)
+# => dict mapping hub_id → list of (entity_id, timestamp)
 ```
 
 Region centroids live in the same vector space as your data, so you can project them with PCA, compute TF-IDF labels from member texts, or measure distributional distances between them.

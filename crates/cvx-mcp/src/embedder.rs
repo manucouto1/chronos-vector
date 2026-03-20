@@ -160,7 +160,10 @@ mod tests {
         let emb = MockEmbedder::new(128);
         let v = emb.embed("some text here").unwrap();
         let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 0.01, "should be unit normalized, got {norm}");
+        assert!(
+            (norm - 1.0).abs() < 0.01,
+            "should be unit normalized, got {norm}"
+        );
     }
 
     #[test]
@@ -187,7 +190,12 @@ mod tests {
 
     #[test]
     fn api_stub_returns_error() {
-        let emb = ApiEmbedder::new("https://api.example.com", "key", 1536, "text-embedding-3-small");
+        let emb = ApiEmbedder::new(
+            "https://api.example.com",
+            "key",
+            1536,
+            "text-embedding-3-small",
+        );
         assert!(emb.embed("hello").is_err());
         assert_eq!(emb.model_name(), "text-embedding-3-small");
     }

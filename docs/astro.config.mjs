@@ -82,6 +82,7 @@ export default defineConfig({
 						{ label: 'Use Cases', slug: 'research/use-cases' },
 						{ label: 'Competitive Landscape', slug: 'research/competitive-landscape' },
 						{ label: 'Open Questions', slug: 'research/open-questions' },
+						{ label: 'Episodic Trace Memory', slug: 'research/episodic-trace-memory', badge: { text: 'New', variant: 'success' } },
 					],
 				},
 				{

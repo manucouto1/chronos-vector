@@ -12,7 +12,7 @@
 //! | `convergence_score` | Are entities moving in the same direction? |
 //! | `outliers` | Entities drifting abnormally vs the group |
 
-use crate::calculus::{drift_magnitude_l2, drift_report, DriftReport};
+use crate::calculus::{DriftReport, drift_magnitude_l2, drift_report};
 use cvx_core::error::AnalyticsError;
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -62,10 +62,7 @@ pub struct CohortOutlier {
 /// Find the vector closest in time to `target` within a trajectory.
 ///
 /// Returns `None` if the trajectory is empty.
-pub fn nearest_vector_at<'a>(
-    trajectory: &'a [(i64, &'a [f32])],
-    target: i64,
-) -> Option<&'a [f32]> {
+pub fn nearest_vector_at<'a>(trajectory: &'a [(i64, &'a [f32])], target: i64) -> Option<&'a [f32]> {
     if trajectory.is_empty() {
         return None;
     }
@@ -156,6 +153,7 @@ fn compute_convergence_score(drift_vectors: &[Vec<f32>]) -> f32 {
 ///
 /// Returns [`AnalyticsError::InsufficientData`] if fewer than 2 entities have
 /// data at both t1 and t2.
+#[allow(clippy::type_complexity)]
 pub fn cohort_drift(
     trajectories: &[(u64, &[(i64, &[f32])])],
     t1: i64,
@@ -163,6 +161,7 @@ pub fn cohort_drift(
     top_n: usize,
 ) -> Result<CohortDriftReport, AnalyticsError> {
     // Collect per-entity data: (entity_id, vector_at_t1, vector_at_t2, drift_vector)
+    #[allow(clippy::type_complexity)]
     let mut entity_data: Vec<(u64, Vec<f32>, Vec<f32>, Vec<f32>)> = Vec::new();
 
     for &(entity_id, traj) in trajectories {
@@ -181,10 +180,7 @@ pub fn cohort_drift(
 
     let n = entity_data.len();
     if n < 2 {
-        return Err(AnalyticsError::InsufficientData {
-            needed: 2,
-            have: n,
-        });
+        return Err(AnalyticsError::InsufficientData { needed: 2, have: n });
     }
 
     // ── Individual drift magnitudes ──
@@ -213,8 +209,14 @@ pub fn cohort_drift(
 
     // ── Centroid drift ──
 
-    let vectors_t1: Vec<&[f32]> = entity_data.iter().map(|(_, v1, _, _)| v1.as_slice()).collect();
-    let vectors_t2: Vec<&[f32]> = entity_data.iter().map(|(_, _, v2, _)| v2.as_slice()).collect();
+    let vectors_t1: Vec<&[f32]> = entity_data
+        .iter()
+        .map(|(_, v1, _, _)| v1.as_slice())
+        .collect();
+    let vectors_t2: Vec<&[f32]> = entity_data
+        .iter()
+        .map(|(_, _, v2, _)| v2.as_slice())
+        .collect();
 
     let centroid_t1 = centroid(&vectors_t1);
     let centroid_t2 = centroid(&vectors_t2);
@@ -285,7 +287,11 @@ pub fn cohort_drift(
             let alignment = if mean_dir_norm > 1e-12 {
                 let dv_norm: f32 = dv.iter().map(|x| x * x).sum::<f32>().sqrt();
                 if dv_norm > 1e-12 {
-                    let dot: f32 = dv.iter().zip(mean_drift_dir.iter()).map(|(a, b)| a * b).sum();
+                    let dot: f32 = dv
+                        .iter()
+                        .zip(mean_drift_dir.iter())
+                        .map(|(a, b)| a * b)
+                        .sum();
                     (dot / (dv_norm * mean_dir_norm)).clamp(-1.0, 1.0)
                 } else {
                     0.0
@@ -321,6 +327,11 @@ pub fn cohort_drift(
 // ─── Tests ──────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(
+    clippy::type_complexity,
+    clippy::needless_range_loop,
+    clippy::useless_vec
+)]
 mod tests {
     use super::*;
 
@@ -467,16 +478,15 @@ mod tests {
         let mut owned_trajs: Vec<Vec<(i64, Vec<f32>)>> = Vec::new();
         for i in 0..n_entities {
             let base: Vec<f32> = (0..dim).map(|d| (i * dim + d) as f32 * 0.1).collect();
-            let shifted: Vec<f32> = base.iter().enumerate().map(|(d, &v)| {
-                if d == 0 { v + shift } else { v }
-            }).collect();
+            let shifted: Vec<f32> = base
+                .iter()
+                .enumerate()
+                .map(|(d, &v)| if d == 0 { v + shift } else { v })
+                .collect();
             owned_trajs.push(vec![(1000, base), (2000, shifted)]);
         }
 
-        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs
-            .iter()
-            .map(|t| as_refs(t))
-            .collect();
+        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs.iter().map(|t| as_refs(t)).collect();
         let trajectories: Vec<(u64, &[(i64, &[f32])])> = ref_trajs
             .iter()
             .enumerate()
@@ -525,16 +535,13 @@ mod tests {
     #[test]
     fn cohort_drift_convergence_detected() {
         // Entities start far apart, end close together → dispersion decreases
-        let owned_trajs = vec![
+        let owned_trajs = [
             vec![(1000i64, vec![0.0f32, 0.0]), (2000, vec![0.5, 0.5])],
             vec![(1000, vec![2.0, 0.0]), (2000, vec![0.5, 0.5])],
             vec![(1000, vec![0.0, 2.0]), (2000, vec![0.5, 0.5])],
         ];
 
-        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs
-            .iter()
-            .map(|t| as_refs(t))
-            .collect();
+        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs.iter().map(|t| as_refs(t)).collect();
         let trajectories: Vec<(u64, &[(i64, &[f32])])> = ref_trajs
             .iter()
             .enumerate()
@@ -559,16 +566,13 @@ mod tests {
     #[test]
     fn cohort_drift_divergence_detected() {
         // Entities start close together, end far apart → dispersion increases
-        let owned_trajs = vec![
+        let owned_trajs = [
             vec![(1000i64, vec![0.5f32, 0.5]), (2000, vec![0.0, 0.0])],
             vec![(1000, vec![0.5, 0.5]), (2000, vec![2.0, 0.0])],
             vec![(1000, vec![0.5, 0.5]), (2000, vec![0.0, 2.0])],
         ];
 
-        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs
-            .iter()
-            .map(|t| as_refs(t))
-            .collect();
+        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs.iter().map(|t| as_refs(t)).collect();
         let trajectories: Vec<(u64, &[(i64, &[f32])])> = ref_trajs
             .iter()
             .enumerate()
@@ -593,23 +597,24 @@ mod tests {
         // 9 normal entities: drift of 0.01 in dim 0
         for i in 0..9u64 {
             let base: Vec<f32> = vec![i as f32 * 0.1; dim];
-            let shifted: Vec<f32> = base.iter().enumerate().map(|(d, &v)| {
-                if d == 0 { v + 0.01 } else { v }
-            }).collect();
+            let shifted: Vec<f32> = base
+                .iter()
+                .enumerate()
+                .map(|(d, &v)| if d == 0 { v + 0.01 } else { v })
+                .collect();
             owned_trajs.push(vec![(1000, base), (2000, shifted)]);
         }
 
         // 1 outlier: drift of 10.0 in dim 0
         let base = vec![0.5f32; dim];
-        let shifted: Vec<f32> = base.iter().enumerate().map(|(d, &v)| {
-            if d == 0 { v + 10.0 } else { v }
-        }).collect();
+        let shifted: Vec<f32> = base
+            .iter()
+            .enumerate()
+            .map(|(d, &v)| if d == 0 { v + 10.0 } else { v })
+            .collect();
         owned_trajs.push(vec![(1000, base), (2000, shifted)]);
 
-        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs
-            .iter()
-            .map(|t| as_refs(t))
-            .collect();
+        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs.iter().map(|t| as_refs(t)).collect();
         let trajectories: Vec<(u64, &[(i64, &[f32])])> = ref_trajs
             .iter()
             .enumerate()
@@ -619,10 +624,7 @@ mod tests {
         let report = cohort_drift(&trajectories, 1000, 2000, 3).unwrap();
 
         assert_eq!(report.n_entities, 10);
-        assert!(
-            !report.outliers.is_empty(),
-            "expected at least one outlier"
-        );
+        assert!(!report.outliers.is_empty(), "expected at least one outlier");
 
         // The outlier should be entity 9
         let outlier = report.outliers.iter().find(|o| o.entity_id == 9);
@@ -643,15 +645,12 @@ mod tests {
     #[test]
     fn cohort_drift_centroid_drift_matches_manual() {
         // 2 entities, manually compute expected centroid drift
-        let owned_trajs = vec![
+        let owned_trajs = [
             vec![(1000i64, vec![0.0f32, 0.0]), (2000, vec![1.0, 0.0])],
             vec![(1000, vec![2.0, 0.0]), (2000, vec![3.0, 0.0])],
         ];
 
-        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs
-            .iter()
-            .map(|t| as_refs(t))
-            .collect();
+        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs.iter().map(|t| as_refs(t)).collect();
         let trajectories: Vec<(u64, &[(i64, &[f32])])> = ref_trajs
             .iter()
             .enumerate()
@@ -674,16 +673,13 @@ mod tests {
         // Entity 1 has data only at t1, entity 2 has data at both, entity 3 only at t2
         // Entity 1's nearest to t2=2000 will be its only point at t1=1000
         // All entities will actually be included since nearest_vector_at finds closest
-        let owned_trajs = vec![
+        let owned_trajs = [
             vec![(1000i64, vec![1.0f32, 0.0])],
             vec![(1000, vec![2.0, 0.0]), (2000, vec![3.0, 0.0])],
             vec![(2000i64, vec![4.0, 0.0])],
         ];
 
-        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs
-            .iter()
-            .map(|t| as_refs(t))
-            .collect();
+        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs.iter().map(|t| as_refs(t)).collect();
         let trajectories: Vec<(u64, &[(i64, &[f32])])> = ref_trajs
             .iter()
             .enumerate()
@@ -699,16 +695,16 @@ mod tests {
     #[test]
     fn cohort_drift_stationary_cohort() {
         // All entities stay in the same place
-        let owned_trajs = vec![
-            vec![(1000i64, vec![1.0f32, 2.0, 3.0]), (2000, vec![1.0, 2.0, 3.0])],
+        let owned_trajs = [
+            vec![
+                (1000i64, vec![1.0f32, 2.0, 3.0]),
+                (2000, vec![1.0, 2.0, 3.0]),
+            ],
             vec![(1000, vec![4.0, 5.0, 6.0]), (2000, vec![4.0, 5.0, 6.0])],
             vec![(1000, vec![7.0, 8.0, 9.0]), (2000, vec![7.0, 8.0, 9.0])],
         ];
 
-        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs
-            .iter()
-            .map(|t| as_refs(t))
-            .collect();
+        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs.iter().map(|t| as_refs(t)).collect();
         let trajectories: Vec<(u64, &[(i64, &[f32])])> = ref_trajs
             .iter()
             .enumerate()
@@ -717,10 +713,16 @@ mod tests {
 
         let report = cohort_drift(&trajectories, 1000, 2000, 3).unwrap();
 
-        assert!(report.mean_drift_l2 < 1e-6, "stationary cohort should have ~0 drift");
+        assert!(
+            report.mean_drift_l2 < 1e-6,
+            "stationary cohort should have ~0 drift"
+        );
         assert!(report.median_drift_l2 < 1e-6);
         assert!(report.centroid_drift.l2_magnitude < 1e-6);
-        assert!((report.dispersion_change).abs() < 1e-6, "dispersion should not change");
+        assert!(
+            (report.dispersion_change).abs() < 1e-6,
+            "dispersion should not change"
+        );
         assert!(report.outliers.is_empty());
     }
 
@@ -732,15 +734,14 @@ mod tests {
         let mut owned_trajs = Vec::new();
 
         for i in 0..n_entities {
-            let base: Vec<f32> = (0..dim).map(|d| ((i * dim + d) as f32 * 0.01).sin()).collect();
+            let base: Vec<f32> = (0..dim)
+                .map(|d| ((i * dim + d) as f32 * 0.01).sin())
+                .collect();
             let shifted: Vec<f32> = base.iter().map(|v| v + 0.05).collect();
             owned_trajs.push(vec![(1000i64, base), (2000, shifted)]);
         }
 
-        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs
-            .iter()
-            .map(|t| as_refs(t))
-            .collect();
+        let ref_trajs: Vec<Vec<(i64, &[f32])>> = owned_trajs.iter().map(|t| as_refs(t)).collect();
         let trajectories: Vec<(u64, &[(i64, &[f32])])> = ref_trajs
             .iter()
             .enumerate()

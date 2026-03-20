@@ -285,8 +285,8 @@ pub fn update_signature_incremental(
     //   (the last term is the self-integral of the single segment)
 
     // Update level 1: displacement
-    for d in 0..dim {
-        existing.signature[d] += dx[d];
+    for (sig, &delta) in existing.signature.iter_mut().zip(dx.iter()).take(dim) {
+        *sig += delta;
     }
 
     // Update level 2: signed area
@@ -297,8 +297,8 @@ pub fn update_signature_incremental(
         // So: old_s1[d] = existing.signature[d] - dx[d]
         for i in 0..dim {
             let old_s1_i = existing.signature[i] - dx[i];
-            for j in 0..dim {
-                existing.signature[level2_start + i * dim + j] += old_s1_i * dx[j];
+            for (j, &dxj) in dx.iter().enumerate().take(dim) {
+                existing.signature[level2_start + i * dim + j] += old_s1_i * dxj;
             }
         }
     }
@@ -393,8 +393,8 @@ mod tests {
 
         // Different signed area (depth 2) — this is the key:
         // path A and B have opposite signed areas
-        let area_a = sig_a.signature[2 + 0 * 2 + 1]; // S^{0,1} for path A
-        let area_b = sig_b.signature[2 + 0 * 2 + 1]; // S^{0,1} for path B
+        let area_a = sig_a.signature[2 + 1]; // S^{0,1} for path A
+        let area_b = sig_b.signature[2 + 1]; // S^{0,1} for path B
         assert!(
             (area_a - area_b).abs() > 0.1,
             "Depth 2 should distinguish rotation: area_a={area_a}, area_b={area_b}"

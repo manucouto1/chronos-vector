@@ -484,10 +484,12 @@ dependencies = [
  "criterion",
  "cvx-core",
  "cvx-storage",
+ "postcard",
  "proptest",
  "rand 0.9.2",
  "serde",
  "tch",
+ "tempfile",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -547,6 +549,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
+ "tempfile",
 ]
 
 [[package]]
@@ -558,6 +561,21 @@ dependencies = [
  "cvx-storage",
  "proptest",
  "tracing",
+]
+
+[[package]]
+name = "cvx-mcp"
+version = "0.1.0"
+dependencies = [
+ "cvx-analytics",
+ "cvx-core",
+ "cvx-index",
+ "cvx-query",
+ "cvx-storage",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

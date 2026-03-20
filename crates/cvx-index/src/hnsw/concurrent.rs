@@ -197,6 +197,14 @@ impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for ConcurrentTemporalHnsw
         self.inner.read().region_members(region_hub, level, filter)
     }
 
+    fn region_assignments(
+        &self,
+        level: usize,
+        filter: cvx_core::TemporalFilter,
+    ) -> std::collections::HashMap<u32, Vec<(u64, i64)>> {
+        self.inner.read().region_assignments(level, filter)
+    }
+
     fn region_trajectory(
         &self,
         entity_id: u64,
@@ -383,7 +391,7 @@ mod tests {
                     for &(id, _) in &results {
                         let ts = idx.timestamp(id);
                         assert!(
-                            ts >= 1000 && ts <= 5000,
+                            (1000..=5000).contains(&ts),
                             "timestamp {ts} out of [1000, 5000]"
                         );
                     }

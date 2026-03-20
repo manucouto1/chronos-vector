@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn linear_extrapolate_constant() {
-        let points = vec![(0i64, vec![1.0f32, 2.0, 3.0]), (1000, vec![1.0, 2.0, 3.0])];
+        let points = [(0i64, vec![1.0f32, 2.0, 3.0]), (1000, vec![1.0, 2.0, 3.0])];
         let traj: Vec<(i64, &[f32])> = points.iter().map(|(t, v)| (*t, v.as_slice())).collect();
 
         let pred = linear_extrapolate(&traj, 5000).unwrap();
@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn linear_extrapolate_trend() {
-        let points = vec![(0i64, vec![0.0f32, 0.0]), (1000, vec![1.0, 2.0])];
+        let points = [(0i64, vec![0.0f32, 0.0]), (1000, vec![1.0, 2.0])];
         let traj: Vec<(i64, &[f32])> = points.iter().map(|(t, v)| (*t, v.as_slice())).collect();
 
         let pred = linear_extrapolate(&traj, 2000).unwrap();
@@ -390,7 +390,7 @@ mod tests {
 
     #[test]
     fn linear_extrapolate_backward() {
-        let points = vec![(0i64, vec![0.0f32]), (1000, vec![10.0])];
+        let points = [(0i64, vec![0.0f32]), (1000, vec![10.0])];
         let traj: Vec<(i64, &[f32])> = points.iter().map(|(t, v)| (*t, v.as_slice())).collect();
 
         let pred = linear_extrapolate(&traj, -1000).unwrap();
@@ -400,7 +400,7 @@ mod tests {
 
     #[test]
     fn linear_extrapolate_insufficient_data() {
-        let points = vec![(0i64, vec![1.0f32])];
+        let points = [(0i64, vec![1.0f32])];
         let traj: Vec<(i64, &[f32])> = points.iter().map(|(t, v)| (*t, v.as_slice())).collect();
         assert!(linear_extrapolate(&traj, 1000).is_err());
     }
