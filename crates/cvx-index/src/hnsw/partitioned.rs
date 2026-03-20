@@ -22,8 +22,8 @@ use std::path::Path;
 use cvx_core::traits::DistanceMetric;
 use cvx_core::types::TemporalFilter;
 
-use super::temporal::TemporalHnsw;
 use super::HnswConfig;
+use super::temporal::TemporalHnsw;
 
 // ─── Configuration ──────────────────────────────────────────────────
 
@@ -200,7 +200,7 @@ impl<D: DistanceMetric + Clone> PartitionedTemporalHnsw<D> {
                 continue;
             }
 
-            let local_results = part.hnsw.search(query, k, filter.clone(), alpha, query_timestamp);
+            let local_results = part.hnsw.search(query, k, filter, alpha, query_timestamp);
 
             // Map local IDs to global IDs
             for (local_id, score) in local_results {
@@ -294,8 +294,7 @@ impl<D: DistanceMetric + Clone> PartitionedTemporalHnsw<D> {
                 })
                 .collect(),
         };
-        let meta_bytes = postcard::to_allocvec(&meta)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let meta_bytes = postcard::to_allocvec(&meta).map_err(std::io::Error::other)?;
         std::fs::write(dir.join("partitions.meta"), meta_bytes)?;
 
         // Save each partition
@@ -404,9 +403,7 @@ impl<D: DistanceMetric + Clone> PartitionedTemporalHnsw<D> {
     /// Resolve a global node ID to (partition, local_id).
     fn resolve_global_id(&self, global_id: u32) -> (&Partition<D>, u32) {
         for part in &self.partitions {
-            if global_id >= part.id_offset
-                && global_id < part.id_offset + part.hnsw.len() as u32
-            {
+            if global_id >= part.id_offset && global_id < part.id_offset + part.hnsw.len() as u32 {
                 return (part, global_id - part.id_offset);
             }
         }
@@ -589,7 +586,7 @@ mod tests {
         let traj = index.trajectory(42, TemporalFilter::Range(5_000_000, 15_000_000));
         for &(ts, _) in &traj {
             assert!(
-                ts >= 5_000_000 && ts <= 15_000_000,
+                (5_000_000..=15_000_000).contains(&ts),
                 "ts {ts} outside filter range"
             );
         }
@@ -727,11 +724,8 @@ mod tests {
             single.insert(i % 3, i as i64 * 1000, &[i as f32, 0.0]);
         }
 
-        let partitioned = PartitionedTemporalHnsw::from_single(
-            single,
-            default_config(),
-            L2Distance,
-        );
+        let partitioned =
+            PartitionedTemporalHnsw::from_single(single, default_config(), L2Distance);
 
         assert_eq!(partitioned.len(), 15);
         assert_eq!(partitioned.num_partitions(), 1);

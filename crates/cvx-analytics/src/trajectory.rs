@@ -45,8 +45,8 @@ pub fn discrete_frechet(a: &[&[f32]], b: &[&[f32]]) -> f64 {
     let mut dp = vec![vec![f64::NEG_INFINITY; m]; n];
 
     for i in 0..n {
-        for j in 0..m {
-            let d = l2_dist(a[i], b[j]);
+        for (j, bj) in b.iter().enumerate().take(m) {
+            let d = l2_dist(a[i], bj);
             if i == 0 && j == 0 {
                 dp[i][j] = d;
             } else if i == 0 {

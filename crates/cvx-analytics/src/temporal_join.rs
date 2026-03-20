@@ -70,10 +70,7 @@ pub fn temporal_join(
     window_us: i64,
 ) -> Result<Vec<TemporalJoinResult>, AnalyticsError> {
     if traj_a.is_empty() || traj_b.is_empty() {
-        return Err(AnalyticsError::InsufficientData {
-            needed: 1,
-            have: 0,
-        });
+        return Err(AnalyticsError::InsufficientData { needed: 1, have: 0 });
     }
 
     // Determine the global time range
@@ -180,6 +177,7 @@ pub fn temporal_join(
 ///
 /// Returns [`AnalyticsError::InsufficientData`] if fewer than `min_entities`
 /// trajectories are provided.
+#[allow(clippy::type_complexity)]
 pub fn group_temporal_join(
     trajectories: &[(u64, &[(i64, &[f32])])],
     epsilon: f32,
@@ -337,9 +335,9 @@ fn find_largest_epsilon_cluster(entity_reps: &[(u64, Vec<f32>)], epsilon: f32) -
                 continue;
             }
             // Check if j is within epsilon of ALL current cluster members
-            let all_close = cluster.iter().all(|&c| {
-                drift_magnitude_l2(&entity_reps[c].1, &entity_reps[j].1) <= epsilon
-            });
+            let all_close = cluster
+                .iter()
+                .all(|&c| drift_magnitude_l2(&entity_reps[c].1, &entity_reps[j].1) <= epsilon);
             if all_close {
                 cluster.push(j);
             }
@@ -357,7 +355,12 @@ fn find_largest_epsilon_cluster(entity_reps: &[(u64, Vec<f32>)], epsilon: f32) -
 fn mean_pairwise_distance(entity_reps: &[(u64, Vec<f32>)], ids: &[u64]) -> f32 {
     let vecs: Vec<&Vec<f32>> = ids
         .iter()
-        .filter_map(|id| entity_reps.iter().find(|(eid, _)| eid == id).map(|(_, v)| v))
+        .filter_map(|id| {
+            entity_reps
+                .iter()
+                .find(|(eid, _)| eid == id)
+                .map(|(_, v)| v)
+        })
         .collect();
 
     if vecs.len() < 2 {
@@ -411,6 +414,11 @@ fn merge_group_results(results: &mut Vec<GroupJoinResult>, step: i64) {
 // ─── Tests ──────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(
+    clippy::type_complexity,
+    clippy::needless_range_loop,
+    clippy::useless_vec
+)]
 mod tests {
     use super::*;
 
@@ -445,7 +453,10 @@ mod tests {
         let b = as_refs(&b_owned);
 
         let results = temporal_join(&a, &b, 0.5, 2000).unwrap();
-        assert!(results.is_empty(), "distant entities should produce no join");
+        assert!(
+            results.is_empty(),
+            "distant entities should produce no join"
+        );
     }
 
     #[test]
@@ -499,7 +510,10 @@ mod tests {
         let b = as_refs(&b_owned);
 
         let results = temporal_join(&a, &b, 0.15, 2000).unwrap();
-        assert!(!results.is_empty(), "should detect convergence around t=5000-6000");
+        assert!(
+            !results.is_empty(),
+            "should detect convergence around t=5000-6000"
+        );
 
         // The convergence should be in the t=4000-7000 region
         let convergence = &results[0];
@@ -586,7 +600,10 @@ mod tests {
             .collect();
 
         let results = group_temporal_join(&trajectories, 0.5, 3, 3000).unwrap();
-        assert!(!results.is_empty(), "all identical entities should converge");
+        assert!(
+            !results.is_empty(),
+            "all identical entities should converge"
+        );
         assert!(results[0].n_converged >= 3);
     }
 
@@ -611,14 +628,17 @@ mod tests {
 
         // Entity 3 (far) should NOT be in the converged set
         let converged = &results[0].converged_entities;
-        assert!(!converged.contains(&3), "far entity should not be in cluster");
+        assert!(
+            !converged.contains(&3),
+            "far entity should not be in cluster"
+        );
         assert!(converged.len() >= 3, "at least 3 should converge");
     }
 
     #[test]
     fn group_join_no_convergence() {
         // All entities far apart
-        let owned = vec![
+        let owned = [
             vec![(1000i64, vec![0.0f32, 0.0])],
             vec![(1000i64, vec![10.0, 0.0])],
             vec![(1000i64, vec![0.0, 10.0])],

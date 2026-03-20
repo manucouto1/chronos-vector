@@ -130,6 +130,16 @@ pub trait TemporalIndexAccess: Send + Sync {
         Vec::new()
     }
 
+    /// Assign all nodes to regions in a single O(N) pass, optionally time-filtered.
+    /// Returns HashMap<hub_id, Vec<(entity_id, timestamp)>>.
+    fn region_assignments(
+        &self,
+        _level: usize,
+        _filter: TemporalFilter,
+    ) -> std::collections::HashMap<u32, Vec<(u64, i64)>> {
+        std::collections::HashMap::new()
+    }
+
     /// Smoothed region-distribution trajectory for an entity (RFC-004).
     fn region_trajectory(
         &self,

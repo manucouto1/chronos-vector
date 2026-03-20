@@ -1323,11 +1323,21 @@ pub async fn causal_search(
                     node_id: e.node_id,
                     entity_id: e.entity_id,
                     score: e.score,
-                    successors: e.successors.into_iter()
-                        .map(|(nid, ts)| TemporalContextEntry { node_id: nid, timestamp: ts })
+                    successors: e
+                        .successors
+                        .into_iter()
+                        .map(|(nid, ts)| TemporalContextEntry {
+                            node_id: nid,
+                            timestamp: ts,
+                        })
                         .collect(),
-                    predecessors: e.predecessors.into_iter()
-                        .map(|(nid, ts)| TemporalContextEntry { node_id: nid, timestamp: ts })
+                    predecessors: e
+                        .predecessors
+                        .into_iter()
+                        .map(|(nid, ts)| TemporalContextEntry {
+                            node_id: nid,
+                            timestamp: ts,
+                        })
                         .collect(),
                 })
                 .collect(),
@@ -1400,8 +1410,6 @@ pub async fn entity_summary(
     Path(entity_id): Path<u64>,
     axum::extract::Query(params): axum::extract::Query<EntitySummaryParams>,
 ) -> Result<Json<EntitySummaryResponse>, (StatusCode, Json<ErrorResponse>)> {
-    use cvx_core::TemporalIndexAccess;
-
     let filter = match (params.start, params.end) {
         (Some(s), Some(e)) => cvx_core::TemporalFilter::Range(s, e),
         (Some(s), None) => cvx_core::TemporalFilter::After(s),
@@ -1409,7 +1417,7 @@ pub async fn entity_summary(
         (None, None) => cvx_core::TemporalFilter::All,
     };
 
-    let traj = state.index.trajectory(entity_id, filter.clone());
+    let traj = state.index.trajectory(entity_id, filter);
     if traj.is_empty() {
         return Err((
             StatusCode::NOT_FOUND,
@@ -1480,8 +1488,13 @@ pub async fn entity_summary(
 
     let summary = format!(
         "Entity {} has {} points spanning {} to {}. {}. L2 drift: {:.4}. {} change point(s) detected.",
-        entity_id, total_points, first_seen, last_seen,
-        drift_interpretation, drift.l2_magnitude, change_points.len()
+        entity_id,
+        total_points,
+        first_seen,
+        last_seen,
+        drift_interpretation,
+        drift.l2_magnitude,
+        change_points.len()
     );
 
     Ok(Json(EntitySummaryResponse {
@@ -1520,8 +1533,6 @@ pub async fn anomaly_scan(
     State(state): State<SharedState>,
     Json(req): Json<AnomalyScanRequest>,
 ) -> Json<AnomalyScanResponse> {
-    use cvx_core::TemporalIndexAccess;
-
     let mut anomalies = Vec::new();
 
     for &eid in &req.entity_ids {

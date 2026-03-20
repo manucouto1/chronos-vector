@@ -87,7 +87,7 @@ mod tests {
         let a: Vec<f32> = (0..768).map(|i| (i as f32) * 0.001).collect();
         let b: Vec<f32> = (0..768).map(|i| ((768 - i) as f32) * 0.001).collect();
         let result = d.distance(&a, &b);
-        assert!(result >= 0.0 && result <= 2.0);
+        assert!((0.0..=2.0).contains(&result));
     }
 
     #[test]
@@ -122,7 +122,7 @@ mod proptests {
         ) {
             let d = CosineDistance;
             let dist = d.distance(&a, &b);
-            prop_assert!(dist >= -1e-5 && dist <= 2.0 + 1e-5, "dist={dist}");
+            prop_assert!((-1e-5..=2.0 + 1e-5).contains(&dist), "dist={dist}");
         }
 
         /// Distance to self is zero

@@ -27,13 +27,15 @@ impl MetadataPredicate {
         match self {
             MetadataPredicate::Exists => value.is_some(),
             MetadataPredicate::Equals(expected) => value.is_some_and(|v| v == expected),
-            MetadataPredicate::Contains(substr) => value.is_some_and(|v| v.contains(substr.as_str())),
-            MetadataPredicate::Gte(threshold) => {
-                value.and_then(|v| v.parse::<f64>().ok()).is_some_and(|n| n >= *threshold)
+            MetadataPredicate::Contains(substr) => {
+                value.is_some_and(|v| v.contains(substr.as_str()))
             }
-            MetadataPredicate::Lte(threshold) => {
-                value.and_then(|v| v.parse::<f64>().ok()).is_some_and(|n| n <= *threshold)
-            }
+            MetadataPredicate::Gte(threshold) => value
+                .and_then(|v| v.parse::<f64>().ok())
+                .is_some_and(|n| n >= *threshold),
+            MetadataPredicate::Lte(threshold) => value
+                .and_then(|v| v.parse::<f64>().ok())
+                .is_some_and(|n| n <= *threshold),
         }
     }
 }
@@ -53,39 +55,44 @@ impl MetadataFilter {
 
     /// Add an equals predicate.
     pub fn equals(mut self, field: impl Into<String>, value: impl Into<String>) -> Self {
-        self.predicates.insert(field.into(), MetadataPredicate::Equals(value.into()));
+        self.predicates
+            .insert(field.into(), MetadataPredicate::Equals(value.into()));
         self
     }
 
     /// Add a >= predicate.
     pub fn gte(mut self, field: impl Into<String>, value: f64) -> Self {
-        self.predicates.insert(field.into(), MetadataPredicate::Gte(value));
+        self.predicates
+            .insert(field.into(), MetadataPredicate::Gte(value));
         self
     }
 
     /// Add a <= predicate.
     pub fn lte(mut self, field: impl Into<String>, value: f64) -> Self {
-        self.predicates.insert(field.into(), MetadataPredicate::Lte(value));
+        self.predicates
+            .insert(field.into(), MetadataPredicate::Lte(value));
         self
     }
 
     /// Add a contains predicate.
     pub fn contains(mut self, field: impl Into<String>, substr: impl Into<String>) -> Self {
-        self.predicates.insert(field.into(), MetadataPredicate::Contains(substr.into()));
+        self.predicates
+            .insert(field.into(), MetadataPredicate::Contains(substr.into()));
         self
     }
 
     /// Add an exists predicate.
     pub fn exists(mut self, field: impl Into<String>) -> Self {
-        self.predicates.insert(field.into(), MetadataPredicate::Exists);
+        self.predicates
+            .insert(field.into(), MetadataPredicate::Exists);
         self
     }
 
     /// Test whether a metadata map satisfies ALL predicates.
     pub fn matches(&self, metadata: &HashMap<String, String>) -> bool {
-        self.predicates.iter().all(|(field, predicate)| {
-            predicate.matches(metadata.get(field))
-        })
+        self.predicates
+            .iter()
+            .all(|(field, predicate)| predicate.matches(metadata.get(field)))
     }
 
     /// Whether this filter has any predicates.
@@ -101,7 +108,10 @@ mod tests {
     use super::*;
 
     fn meta(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]

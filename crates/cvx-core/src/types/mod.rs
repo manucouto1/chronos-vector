@@ -7,9 +7,9 @@
 mod change_point;
 mod delta_entry;
 mod embedding_space;
+mod entity_timeline;
 /// Episode encoding for episodic trace memory.
 pub mod episode_encoding;
-mod entity_timeline;
 /// Metadata predicates for search filtering.
 pub mod metadata_filter;
 mod scored_result;

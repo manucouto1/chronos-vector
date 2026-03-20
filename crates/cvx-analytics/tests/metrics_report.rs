@@ -1,3 +1,4 @@
+#![allow(clippy::needless_range_loop)]
 //! Performance metrics report for analytics modules.
 //!
 //! Run with: `cargo test -p cvx-analytics --test metrics_report -- --nocapture`

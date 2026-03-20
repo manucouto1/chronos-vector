@@ -4,16 +4,16 @@
 //! 1. **Causal search**: find semantic neighbors, then walk temporal edges for context
 //! 2. **Hybrid search**: beam search that explores both semantic AND temporal edges
 
-use std::collections::{BinaryHeap, HashSet};
 use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashSet};
 use std::path::Path;
 
 use cvx_core::traits::DistanceMetric;
 use cvx_core::types::TemporalFilter;
 
+use super::HnswConfig;
 use super::temporal::TemporalHnsw;
 use super::temporal_edges::TemporalEdgeLayer;
-use super::HnswConfig;
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -73,7 +73,8 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
             let traj = inner.trajectory(eid, TemporalFilter::All);
             let my_ts = inner.timestamp(nid);
 
-            let prev = traj.iter()
+            let prev = traj
+                .iter()
                 .filter(|&&(ts, id)| ts < my_ts || (ts == my_ts && id < nid))
                 .max_by_key(|&&(ts, _)| ts)
                 .map(|&(_, id)| id);
@@ -173,7 +174,7 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
     ) -> Vec<(u32, f32)> {
         let graph = self.inner.graph();
 
-        if graph.len() == 0 {
+        if graph.is_empty() {
             return Vec::new();
         }
 
@@ -220,7 +221,10 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
         visited.insert(current);
 
         while let Some(Reverse((OrderedF32(c_dist), c_id))) = candidates.pop() {
-            let farthest_dist = results.peek().map(|(OrderedF32(d), _)| *d).unwrap_or(f32::MAX);
+            let farthest_dist = results
+                .peek()
+                .map(|(OrderedF32(d), _)| *d)
+                .unwrap_or(f32::MAX);
             if c_dist > farthest_dist && results.len() >= ef {
                 break;
             }
@@ -257,7 +261,10 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
                     dist = alpha * dist + (1.0 - alpha) * t_dist;
                 }
 
-                let farthest = results.peek().map(|(OrderedF32(d), _)| *d).unwrap_or(f32::MAX);
+                let farthest = results
+                    .peek()
+                    .map(|(OrderedF32(d), _)| *d)
+                    .unwrap_or(f32::MAX);
                 if dist < farthest || results.len() < ef {
                     candidates.push(Reverse((OrderedF32(dist), neighbor)));
                     results.push((OrderedF32(dist), neighbor));
@@ -324,8 +331,7 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
         self.inner.save(&dir.join("index.bin"))?;
-        let edge_bytes = postcard::to_allocvec(&self.edges)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let edge_bytes = postcard::to_allocvec(&self.edges).map_err(std::io::Error::other)?;
         std::fs::write(dir.join("temporal_edges.bin"), edge_bytes)?;
         Ok(())
     }
@@ -391,7 +397,9 @@ impl PartialOrd for OrderedF32 {
 
 impl Ord for OrderedF32 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.partial_cmp(&other.0).unwrap_or(std::cmp::Ordering::Equal)
+        self.0
+            .partial_cmp(&other.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
     }
 }
 
@@ -402,7 +410,11 @@ mod tests {
     use super::*;
     use crate::metrics::L2Distance;
 
-    fn setup_index(n_entities: u64, points_per_entity: usize, dim: usize) -> TemporalGraphIndex<L2Distance> {
+    fn setup_index(
+        n_entities: u64,
+        points_per_entity: usize,
+        dim: usize,
+    ) -> TemporalGraphIndex<L2Distance> {
         let config = HnswConfig {
             m: 16,
             ef_construction: 100,
@@ -452,7 +464,10 @@ mod tests {
             // Successor should be same entity
             let succ_entity = index.entity_id(succ.unwrap());
             let my_entity = index.entity_id(i);
-            assert_eq!(succ_entity, my_entity, "edge from node {i} crosses entities");
+            assert_eq!(
+                succ_entity, my_entity,
+                "edge from node {i} crosses entities"
+            );
         }
     }
 
@@ -493,14 +508,7 @@ mod tests {
     fn causal_search_successors_same_entity() {
         let index = setup_index(5, 10, 3);
 
-        let results = index.causal_search(
-            &[0.0, 0.0, 0.0],
-            5,
-            TemporalFilter::All,
-            1.0,
-            0,
-            5,
-        );
+        let results = index.causal_search(&[0.0, 0.0, 0.0], 5, TemporalFilter::All, 1.0, 0, 5);
 
         for r in &results {
             for &(succ_id, _) in &r.successors {
@@ -583,7 +591,7 @@ mod tests {
         for &(nid, _) in &results {
             let ts = index.timestamp(nid);
             assert!(
-                ts >= 5_000_000 && ts <= 15_000_000,
+                (5_000_000..=15_000_000).contains(&ts),
                 "ts {ts} outside filter range"
             );
         }

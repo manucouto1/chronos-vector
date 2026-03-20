@@ -3,8 +3,8 @@
 //! Stores `HashMap<String, String>` per node_id, enabling metadata filtering
 //! on search results without modifying the HNSW graph structure.
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use cvx_core::types::metadata_filter::MetadataFilter;
 
@@ -20,7 +20,9 @@ pub struct MetadataStore {
 impl MetadataStore {
     /// Create an empty store.
     pub fn new() -> Self {
-        Self { entries: Vec::new() }
+        Self {
+            entries: Vec::new(),
+        }
     }
 
     /// Register metadata for a new node (must be called in order).
@@ -99,7 +101,7 @@ mod tests {
         for i in 0..5u32 {
             let mut m = HashMap::new();
             m.insert("reward".into(), format!("{}", i as f64 * 0.2));
-            m.insert("step_index".into(), format!("{}", i));
+            m.insert("step_index".into(), format!("{i}"));
             store.push(m);
         }
 

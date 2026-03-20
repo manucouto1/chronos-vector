@@ -217,8 +217,8 @@ fn solve_ols(x: &[Vec<f64>], y: &[f64], p: usize) -> Vec<f64> {
 
     // Ridge regularization (small lambda for numerical stability)
     let lambda = 1e-8;
-    for i in 0..p {
-        xtx[i][i] += lambda;
+    for (i, row) in xtx.iter_mut().enumerate().take(p) {
+        row[i] += lambda;
     }
 
     // X^T y (p × 1)
@@ -262,8 +262,8 @@ fn cholesky_solve(a: &[Vec<f64>], b: &[f64]) -> Vec<f64> {
     let mut z = vec![0.0f64; n];
     for i in 0..n {
         let mut s = 0.0;
-        for j in 0..i {
-            s += l[i][j] * z[j];
+        for (lij, zj) in l[i].iter().zip(z.iter()).take(i) {
+            s += lij * zj;
         }
         z[i] = if l[i][i].abs() > 1e-15 {
             (b[i] - s) / l[i][i]
@@ -339,8 +339,7 @@ fn regularized_incomplete_beta(x: f64, a: f64, b: f64) -> f64 {
         return 1.0 - regularized_incomplete_beta(1.0 - x, b, a);
     }
 
-    let ln_prefix = a * x.ln() + b * (1.0 - x).ln()
-        - (a.ln() + ln_beta(a, b));
+    let ln_prefix = a * x.ln() + b * (1.0 - x).ln() - (a.ln() + ln_beta(a, b));
     let prefix = ln_prefix.exp();
 
     // Lentz's continued fraction
@@ -358,19 +357,26 @@ fn regularized_incomplete_beta(x: f64, a: f64, b: f64) -> f64 {
         // Even step
         let num_even = m_f * (b - m_f) * x / ((a + 2.0 * m_f - 1.0) * (a + 2.0 * m_f));
         d = 1.0 + num_even * d;
-        if d.abs() < 1e-30 { d = 1e-30; }
+        if d.abs() < 1e-30 {
+            d = 1e-30;
+        }
         c = 1.0 + num_even / c;
-        if c.abs() < 1e-30 { c = 1e-30; }
+        if c.abs() < 1e-30 {
+            c = 1e-30;
+        }
         d = 1.0 / d;
         f *= d * c;
 
         // Odd step
-        let num_odd = -(a + m_f) * (a + b + m_f) * x
-            / ((a + 2.0 * m_f) * (a + 2.0 * m_f + 1.0));
+        let num_odd = -(a + m_f) * (a + b + m_f) * x / ((a + 2.0 * m_f) * (a + 2.0 * m_f + 1.0));
         d = 1.0 + num_odd * d;
-        if d.abs() < 1e-30 { d = 1e-30; }
+        if d.abs() < 1e-30 {
+            d = 1e-30;
+        }
         c = 1.0 + num_odd / c;
-        if c.abs() < 1e-30 { c = 1e-30; }
+        if c.abs() < 1e-30 {
+            c = 1e-30;
+        }
         d = 1.0 / d;
         let delta = d * c;
         f *= delta;
@@ -396,9 +402,9 @@ fn ln_gamma(x: f64) -> f64 {
     // Lanczos approximation
     let g = 7.0;
     let coefs = [
-        0.999_999_999_999_809_93,
+        0.999_999_999_999_809_9,
         676.520_368_121_885_1,
-        -1259.139_216_722_402_9,
+        -1_259.139_216_722_402_9,
         771.323_428_777_653_1,
         -176.615_029_162_140_6,
         12.507_343_278_686_905,
@@ -436,8 +442,7 @@ fn fisher_combine(p_values: &[f64]) -> f64 {
 
     // Approximate chi-squared p-value using Wilson-Hilferty transformation
     let k = df as f64;
-    let z = ((chi2 / k).powf(1.0 / 3.0) - (1.0 - 2.0 / (9.0 * k)))
-        / (2.0 / (9.0 * k)).sqrt();
+    let z = ((chi2 / k).powf(1.0 / 3.0) - (1.0 - 2.0 / (9.0 * k))) / (2.0 / (9.0 * k)).sqrt();
 
     // Standard normal survival function (1 - Φ(z))
     0.5 * erfc(z / std::f64::consts::SQRT_2)
@@ -517,8 +522,7 @@ pub fn granger_causality(
 
     for lag in 1..=max_lag {
         // A → B: does A's past improve prediction of B?
-        let (p_a2b, f_a2b, effect_a2b, per_dim_a2b) =
-            test_direction(&a_dims, &b_dims, lag, n);
+        let (p_a2b, f_a2b, effect_a2b, per_dim_a2b) = test_direction(&a_dims, &b_dims, lag, n);
 
         if p_a2b < best_a2b_p {
             best_a2b_p = p_a2b;
@@ -529,8 +533,7 @@ pub fn granger_causality(
         }
 
         // B → A: does B's past improve prediction of A?
-        let (p_b2a, f_b2a, effect_b2a, per_dim_b2a) =
-            test_direction(&b_dims, &a_dims, lag, n);
+        let (p_b2a, f_b2a, effect_b2a, per_dim_b2a) = test_direction(&b_dims, &a_dims, lag, n);
 
         if p_b2a < best_b2a_p {
             best_b2a_p = p_b2a;
@@ -547,7 +550,11 @@ pub fn granger_causality(
     let (direction, optimal_lag, f_stat, p_val, effect) = match (a2b_sig, b2a_sig) {
         (true, true) => (
             GrangerDirection::Bidirectional,
-            if best_a2b_p < best_b2a_p { best_a2b_lag } else { best_b2a_lag },
+            if best_a2b_p < best_b2a_p {
+                best_a2b_lag
+            } else {
+                best_b2a_lag
+            },
             best_a2b_f.max(best_b2a_f),
             best_a2b_p.min(best_b2a_p),
             best_a2b_effect.max(best_b2a_effect),
@@ -596,8 +603,7 @@ fn test_direction(
     let mut total_rss_u = 0.0;
 
     for d in 0..dim {
-        let (rss_r, rss_u, n_obs) =
-            ols_granger_single_dim(&effect_dims[d], &cause_dims[d], lag);
+        let (rss_r, rss_u, n_obs) = ols_granger_single_dim(&effect_dims[d], &cause_dims[d], lag);
 
         let q = lag; // extra parameters
         let p_u = 2 * lag; // total params in unrestricted model
@@ -642,11 +648,7 @@ mod tests {
 
     #[test]
     fn interpolate_at_exact_point() {
-        let owned = vec![
-            (100i64, vec![1.0f32]),
-            (200, vec![2.0]),
-            (300, vec![3.0]),
-        ];
+        let owned = vec![(100i64, vec![1.0f32]), (200, vec![2.0]), (300, vec![3.0])];
         let traj = as_refs(&owned);
         let v = interpolate_at(&traj, 200, 1);
         assert!((v[0] - 2.0).abs() < 1e-6);
@@ -699,13 +701,19 @@ mod tests {
     #[test]
     fn fisher_all_significant() {
         let p = fisher_combine(&[0.01, 0.02, 0.01]);
-        assert!(p < 0.05, "combined very significant p-values should be significant, got {p}");
+        assert!(
+            p < 0.05,
+            "combined very significant p-values should be significant, got {p}"
+        );
     }
 
     #[test]
     fn fisher_all_nonsignificant() {
         let p = fisher_combine(&[0.8, 0.9, 0.7]);
-        assert!(p > 0.3, "combined non-significant should remain non-significant, got {p}");
+        assert!(
+            p > 0.3,
+            "combined non-significant should remain non-significant, got {p}"
+        );
     }
 
     // ─── granger_causality ──────────────────────────────────────

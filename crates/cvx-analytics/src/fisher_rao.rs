@@ -133,7 +133,7 @@ mod tests {
         ];
         for (p, q) in &cases {
             let d = fisher_rao_distance(p, q);
-            assert!(d >= 0.0 && d <= PI + 1e-10, "d={d} out of [0, π]");
+            assert!((0.0..=PI + 1e-10).contains(&d), "d={d} out of [0, π]");
         }
     }
 
@@ -142,7 +142,7 @@ mod tests {
         let p = vec![0.3, 0.7];
         let q = vec![0.6, 0.4];
         let bc = bhattacharyya_coefficient(&p, &q);
-        assert!(bc >= 0.0 && bc <= 1.0, "BC={bc} out of [0, 1]");
+        assert!((0.0..=1.0).contains(&bc), "BC={bc} out of [0, 1]");
     }
 
     #[test]
@@ -150,7 +150,7 @@ mod tests {
         let p = vec![0.3, 0.7];
         let q = vec![0.6, 0.4];
         let h = hellinger_distance(&p, &q);
-        assert!(h >= 0.0 && h <= 1.0, "H={h} out of [0, 1]");
+        assert!((0.0..=1.0).contains(&h), "H={h} out of [0, 1]");
     }
 
     #[test]

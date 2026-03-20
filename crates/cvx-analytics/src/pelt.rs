@@ -223,6 +223,7 @@ fn segment_mean(segment: &[(i64, &[f32])], dim: usize) -> Vec<f32> {
 }
 
 #[cfg(test)]
+#[allow(clippy::needless_range_loop)]
 mod tests {
     use super::*;
 
