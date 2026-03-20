@@ -5,99 +5,76 @@ description: "Experimental evaluation of CVX episodic trace memory on HumanEval 
 
 ## Hypothesis
 
-**H1**: An LLM augmented with semantically retrieved past solved problems (via CVX episodic memory) will generate more correct code than the same LLM with no context or randomly selected examples.
+**H1**: Semantic retrieval outperforms random few-shot for code generation.
 
-**H2**: CVX's HNSW temporal search retrieves different (and better) examples than flat cosine brute-force search.
+**H2**: CVX-Causal (match any step, return continuation) outperforms CVX-Episodic (match problem, return full episode) by leveraging temporal structure.
 
 ## Experimental Setup
 
 | Component | Choice |
 |-----------|--------|
-| **Training corpus** | MBPP sanitized (384 problems) |
+| **Training corpus** | MBPP sanitized (384 problems, 3 steps each) |
 | **Test benchmark** | HumanEval (164 problems) |
-| **Embedding model** | all-MiniLM-L6-v2 (D=384) |
+| **Embedding** | all-MiniLM-L6-v2 (D=384) |
 | **LLM** | qwen2.5-coder:7b-instruct (Ollama) |
-| **Memory backend** | CVX TemporalIndex (M=16, ef=100) |
 
 ### Conditions
 
-| Condition | Description |
-|-----------|-------------|
-| **NoMemory** | Zero-shot |
-| **RandomFewShot** | k random MBPP solutions |
-| **FlatCosine** | k most similar by numpy brute-force cosine |
-| **CVX-Episodic** | k most similar via CVX temporal HNSW search |
+| Condition | Retrieval | Formatting |
+|-----------|-----------|------------|
+| NoMemory | None | Zero-shot |
+| RandomFewShot | Random MBPP | Full problem + solution |
+| FlatCosine | numpy cosine on problems | Full problem + solution |
+| CVX-Episodic | CVX search, step_0 only | Full problem + solution |
+| **CVX-Causal** | CVX search, ALL steps | **Continuation only** (what happened after match) |
 
 ### Protocol
 
-1. **Validation** (HumanEval[0:82], n=82): Sweep k ∈ {1, 3, 5, 7}, T=0, single pass → select best k
-2. **Test** (HumanEval[82:164], n=82): Best k, T=0.2, 5 seeds → mean ± std
-3. **Statistical testing**: McNemar's test (majority-vote), paired t-test (seed-level)
+- **Validation**: HumanEval[0:82], T=0, k ∈ {1,3,5,7}
+- **Test**: HumanEval[82:164], T=0.2, 5 seeds, best k from validation
+- **Statistics**: McNemar (majority-vote), paired t-test (seed-level)
 
 ## Results
 
-### Validation (T=0, single pass)
+### Validation (T=0)
 
-| k | NoMemory | RandomFewShot | FlatCosine | CVX-Episodic |
-|---|----------|---------------|------------|--------------|
-| 1 | 59.8% | 85.4% | 85.4% | 84.1% |
-| **3** | 59.8% | 84.1% | 85.4% | **86.6%** |
-| 5 | 58.5% | 85.4% | 82.9% | 81.7% |
-| 7 | 61.0% | 80.5% | 80.5% | 79.3% |
+| k | NoMemory | Random | Flat | CVX-Episodic | **CVX-Causal** |
+|---|----------|--------|------|-------------|---------------|
+| 1 | 59.8% | 85.4% | 85.4% | 84.1% | 81.7% |
+| 3 | 58.5% | 78.0% | 85.4% | 84.1% | 78.0% |
+| **5** | 58.5% | 82.9% | 81.7% | 81.7% | **82.9%** |
+| 7 | 58.5% | 85.4% | 79.3% | 79.3% | 81.7% |
 
-**Best k = 3** (selected by CVX-Episodic on validation).
+### Test (T=0.2, 5 seeds, k=5)
 
-### Test (T=0.2, 5 seeds, k=3)
+| Condition | pass@1 (mean ± std) |
+|-----------|-------------------|
+| NoMemory | 71.2% ± 1.5% |
+| CVX-Causal | 75.4% ± 2.6% |
+| RandomFewShot | 77.3% ± 1.7% |
+| CVX-Episodic | 77.3% ± 2.0% |
+| **FlatCosine** | **78.5% ± 1.8%** |
 
-| Condition | pass@1 (mean ± std) | Range |
-|-----------|-------------------|-------|
-| NoMemory | 71.7% ± 2.1% | 68.3–74.4% |
-| **RandomFewShot** | **76.8% ± 1.1%** | 75.6–78.0% |
-| FlatCosine | 74.1% ± 2.5% | 70.7–78.0% |
-| CVX-Episodic | 74.1% ± 2.6% | 70.7–78.0% |
+## Key Findings
 
-### Statistical Tests
+1. **H1 rejected**: Semantic retrieval (FlatCosine 78.5%, CVX-Episodic 77.3%) does not significantly outperform random few-shot (77.3%). For code generation, any example teaches formatting; similarity adds marginal value.
 
-**McNemar's test (majority-vote across seeds):**
+2. **H2 rejected**: CVX-Causal (75.4%) underperforms both CVX-Episodic (77.3%) and FlatCosine (78.5%). Matching on plan/solution steps without interactive state feedback introduces noise rather than signal.
 
-| Comparison | A only | B only | Both | Neither | χ² | p |
-|-----------|--------|--------|------|---------|----|---|
-| CVX vs NoMemory | 8 | 9 | 52 | 13 | 0.00 | 1.000 ns |
-| CVX vs FlatCosine | 0 | 0 | 60 | 22 | 0.00 | 1.000 ns |
-| CVX vs Random | 4 | 10 | 56 | 12 | 1.79 | 0.181 ns |
+3. **CVX ≈ FlatCosine**: 96.7% retrieval overlap at this corpus size. HNSW approximate search finds the same neighbors as brute-force.
 
-**Paired t-test (seed-level):**
-- CVX vs FlatCosine: Δ=0.0%, t=0.000, p=1.000 ns
-- CVX vs Random: Δ=-2.7%, t=-1.901, p=0.130 ns
-
-### Retrieval Overlap
-
-CVX and FlatCosine retrieve **96.7% identical episodes** (top-3). On this corpus size (384 episodes, D=384), HNSW produces the same nearest neighbors as brute-force cosine.
-
-## Findings
-
-1. **Few-shot prompting provides a massive boost** (+13–15pp over zero-shot), confirming that qwen2.5-coder:7b benefits strongly from in-context examples regardless of selection method.
-
-2. **Semantic retrieval does not outperform random few-shot** on this benchmark. RandomFewShot (76.8%) trends higher than both retrieval methods (74.1%), though the difference is not statistically significant (p=0.13).
-
-3. **CVX and FlatCosine are functionally identical** — 96.7% retrieval overlap, 0.0pp pass@1 difference. At this corpus scale (384 episodes), HNSW's approximate search finds the exact same neighbors as brute-force.
-
-4. **Validation vs test divergence**: On validation (T=0), CVX-Episodic led at 86.6% vs Random 84.1%. On test (T=0.2, 5 seeds), this reversed. The validation advantage was noise, not signal.
-
-5. **k=3 is optimal**: Performance degrades at k≥5, suggesting that too many examples dilute the prompt rather than helping.
+4. **CVX-Causal step distribution**: When searching across all steps, the model finds matches at plan (step 1) and solution (step 2) — but the resulting continuations (just the solution without the problem context) are less useful than the full episode.
 
 ## Interpretation
 
-The null result for semantic retrieval vs random is consistent with the hypothesis that for **code completion tasks**, the primary value of few-shot examples is **formatting and style priming** rather than **problem-specific transfer**. Any MBPP example teaches the model "here's how to write a Python function given a spec" — the specific problem similarity matters less.
+The CVX-Causal null result is **expected** for code generation with static retrieval. The causal hypothesis ("show what happened after a similar state") requires the query to be an **in-progress state**, not a task description. For code:
 
-This contrasts with domains where retrieval specificity matters more (e.g., E2's ALFWorld, where action sequences are highly task-dependent).
+- The "state" at query time is always the same: "I have a problem description, generate code"
+- There is no mid-episode state differentiation — the problem is either solved or not
+- Matching on plan/solution vectors returns examples based on code similarity rather than problem similarity, which is less useful for prompting
 
-## Limitations
-
-- **Small corpus (384 episodes)**: With more training data, semantic retrieval may differentiate more from random sampling.
-- **Single model/size**: Smaller models may benefit more from relevant examples; larger models may not need any.
-- **Code-specific**: The null result may not generalize to other domains.
+**Where CVX-Causal should work**: Interactive environments (ALFWorld, games) where the agent has genuine mid-episode states that evolve. This requires step-by-step environment interaction, not static plan generation.
 
 ## CVX Features Exercised
 
-`TemporalIndex`, `insert`, `search`, `save`/`load`, episode encoding via entity_id + timestamp scheme.
+`TemporalIndex`, `insert`, `search` (across all steps, not just step_0), `save`/`load`, episode encoding, timestamp-based step filtering.

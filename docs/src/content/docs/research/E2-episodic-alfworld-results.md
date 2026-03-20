@@ -1,114 +1,110 @@
 ---
 title: "E2: Episodic ALFWorld Benchmark — Results"
-description: "Experimental evaluation of CVX episodic trace memory on embodied agent planning with AgentInstruct"
+description: "Experimental evaluation of CVX episodic trace memory on embodied agent planning"
 ---
 
 ## Hypothesis
 
-**H1**: An LLM agent augmented with retrieved expert trajectories will produce plans more similar to expert solutions than zero-shot or random trajectory injection.
+**H1**: Semantic retrieval significantly outperforms random/zero-shot for embodied planning.
 
-**H2**: Semantic retrieval (CVX or flat cosine) selects more useful trajectories than random selection.
+**H2**: CVX-Causal (match mid-episode states, return continuation) outperforms full-episode retrieval by providing targeted procedural context.
 
 ## Experimental Setup
 
 | Component | Choice |
 |-----------|--------|
-| **Dataset** | AgentInstruct ALFWorld split (336 GPT-4 expert trajectories) |
+| **Dataset** | AgentInstruct ALFWorld (336 GPT-4 expert trajectories, 3–35 steps) |
 | **LLM** | qwen2.5-coder:7b-instruct (Ollama) |
-| **Embedding model** | all-MiniLM-L6-v2 (D=384) |
-| **Memory backend** | CVX TemporalIndex (M=16, ef=100) |
-| **Retrieval** | top-k=3, leave-one-out evaluation |
+| **Embedding** | all-MiniLM-L6-v2 (D=384) |
+| **Evaluation** | 99 episodes, stratified by task type, leave-one-out, k=3 |
 
 ### Conditions
 
-| Condition | Description |
-|-----------|-------------|
-| **NoMemory** | Zero-shot |
-| **RandomTrajectory** | k random expert trajectories |
-| **FlatCosine** | k most similar by numpy cosine |
-| **CVX-Episodic** | k most similar via CVX temporal search |
+| Condition | Retrieval | Context |
+|-----------|-----------|---------|
+| NoMemory | None | Zero-shot |
+| RandomTrajectory | Random | Full expert trajectory |
+| FlatCosine | numpy cosine on tasks | Full trajectory |
+| CVX-Episodic | CVX search | Full trajectory |
+| **CVX-Causal** | CVX search ALL steps | **Continuation only** |
 
 ### Metrics
 
-| Metric | Description | Range |
-|--------|-------------|-------|
-| **Semantic Similarity** | Cosine sim between plan and expert trajectory embeddings | [0, 1] |
-| **Action Overlap** | Fraction of expert action verbs present in plan | [0, 1] |
-| **Object Recall** | Fraction of expert objects mentioned in plan | [0, 1] |
-| **Step Ratio** | plan_steps / expert_steps | [0, ∞) |
-
-### Evaluation Protocol
-
-- **n=99** episodes, stratified by task type (put: 47, clean: 20, cool: 14, examine: 11, heat: 7)
-- **Leave-one-out**: Each episode excluded from its own retrieval
-- **T=0**, deterministic generation
+- **Semantic Similarity**: cosine(plan embedding, expert trajectory embedding)
+- **Action Overlap**: fraction of expert action verbs in plan
+- **Object Recall**: fraction of expert objects in plan
+- **Step Ratio**: plan_steps / expert_steps
 
 ## Results
 
-### Primary Metrics
+| Condition | SemSim | ActOvl | ObjRec | StepR |
+|-----------|--------|--------|--------|-------|
+| NoMemory | 0.600 | 0.60 | 0.09 | 0.56 |
+| RandomTrajectory | 0.614 | 0.78 | 0.17 | 0.70 |
+| **FlatCosine** | **0.702** | **0.89** | **0.30** | 0.74 |
+| **CVX-Episodic** | **0.709** | **0.88** | **0.28** | 0.74 |
+| CVX-Causal | 0.588 | 0.70 | 0.21 | 0.43 |
 
-| Condition | Semantic Sim | Action Overlap | Object Recall | Step Ratio |
-|-----------|-------------|----------------|--------------|-----------|
-| NoMemory | 0.600 | 0.60 | 0.10 | 0.56 |
-| RandomTrajectory | 0.612 | 0.78 | 0.17 | 0.72 |
-| **FlatCosine** | **0.700** | **0.88** | **0.30** | 0.74 |
-| **CVX-Episodic** | **0.708** | **0.88** | **0.28** | 0.74 |
+### Statistical Tests (Wilcoxon, semantic similarity)
 
-### Statistical Tests (Wilcoxon Signed-Rank, one-sided)
+| Comparison | Δ | p | Sig |
+|-----------|---|---|-----|
+| CVX-Episodic vs NoMemory | +0.109 | <0.0001 | *** |
+| FlatCosine vs NoMemory | +0.102 | <0.0001 | *** |
+| CVX-Episodic vs Random | +0.095 | <0.0001 | *** |
+| CVX-Episodic vs FlatCosine | +0.007 | 0.213 | ns |
+| CVX-Causal vs NoMemory | -0.012 | 0.927 | ns |
+| CVX-Causal vs FlatCosine | -0.114 | 1.000 | ns |
 
-**Semantic Similarity:**
+### CVX-Causal Match Step Distribution
 
-| Comparison | Δ | W | p | Sig |
-|-----------|---|---|---|-----|
-| CVX vs NoMemory | +0.108 | 4521 | <0.0001 | *** |
-| CVX vs Random | +0.096 | 4035 | <0.0001 | *** |
-| CVX vs FlatCosine | +0.008 | 1071 | 0.254 | ns |
-| Flat vs NoMemory | +0.100 | 4389 | <0.0001 | *** |
-| Flat vs Random | +0.088 | 3968 | <0.0001 | *** |
+```
+Step  0:   21 ( 7.1%)  ██
+Step  1:    8 ( 2.7%)  █
+Step  2:    9 ( 3.0%)  █
+Step  3:   22 ( 7.4%)  ██
+Step  5:   23 ( 7.7%)  ███
+Step  7:   39 (13.1%)  █████
+Step 10+: 109 (36.7%)  ███████████████
+```
 
-**Object Recall:**
+## Key Findings
 
-| Comparison | Δ | W | p | Sig |
-|-----------|---|---|---|-----|
-| CVX vs NoMemory | +0.187 | 332 | <0.0001 | *** |
-| CVX vs Random | +0.110 | 162 | 0.003 | ** |
-| CVX vs FlatCosine | -0.016 | 4 | 0.844 | ns |
-| Flat vs NoMemory | +0.203 | 385 | <0.0001 | *** |
-| Flat vs Random | +0.126 | 158 | 0.001 | *** |
+1. **H1 confirmed**: Semantic retrieval (FlatCosine/CVX-Episodic) significantly outperforms zero-shot (+0.10 semantic sim, p<0.0001) and random (+0.09, p<0.0001). Object recall triples (0.09 → 0.30).
 
-### Retrieval Overlap
+2. **H2 rejected**: CVX-Causal (0.588) is **worse than NoMemory** (0.600). The continuation-only format, without full task context, confuses the LLM.
 
-CVX and FlatCosine retrieve **67% overlapping episodes**. Unlike E1 (96.7%), here CVX and flat search diverge meaningfully — CVX searches over action-observation embeddings (multi-step), while flat cosine searches task descriptions only.
+3. **CVX-Episodic ≈ FlatCosine**: +0.007 semantic sim (p=0.213 ns), 67% retrieval overlap.
 
-## Findings
+4. **Why CVX-Causal fails**: 36.7% of matches are at step 10+, meaning the continuation is just the last 2-3 steps of an episode (e.g., "put X in/on Y"). Without the preceding context (which objects, which rooms), these fragments are useless. The query (task description) matches late-episode states because they contain the task text as a prefix.
 
-1. **Semantic retrieval significantly outperforms zero-shot and random** (p<0.0001 on both semantic similarity and object recall). This is the central positive result.
+## Root Cause Analysis: CVX-Causal
 
-2. **CVX-Episodic ≈ FlatCosine** (Δ=+0.008 semantic sim, p=0.254 ns). The two retrieval methods produce statistically indistinguishable results, despite 33% different retrievals.
+The causal retrieval hypothesis is sound but the **implementation context** is wrong:
 
-3. **Object recall is the most discriminating metric** — semantic retrieval triples it (0.10 → 0.28–0.30). When the agent sees expert trajectories with the right objects and locations, it names them in its own plan.
+| What we do | What we should do |
+|-----------|------------------|
+| Query = task description | Query = current agent state (observation) |
+| Match against any step | Match against observation-only embeddings |
+| Static plan generation | Interactive step-by-step with environment |
+| Return text continuation | Return structured action sequence |
 
-4. **Action vocabulary improves sharply** (0.60 → 0.88) — retrieved trajectories teach the model the ALFWorld action format (go to X, take Y, put Y in/on Z).
+**CVX-Causal requires an interactive loop**:
+1. Agent takes action in environment
+2. Environment returns observation
+3. Embed observation → `search()` in CVX
+4. Find similar mid-episode state in memory
+5. Return continuation → agent uses it for next action
+6. Repeat until task completion
 
-5. **Random trajectories help modestly** — they teach action format but not task-specific content, explaining the gap to semantic retrieval.
+This is a **fundamentally different architecture** than static plan generation. It requires the ALFWorld simulator running in the loop, which is the natural next step.
 
-## Interpretation
+## What These Results Mean for CVX
 
-Unlike E1 (code generation, null result), E2 shows **clear value for semantic retrieval in embodied planning**. The difference likely stems from:
-
-- **Action sequences are task-dependent**: "clean mug" requires sink → fridge, while "heat egg" requires microwave. Random trajectories may demonstrate wrong action sequences.
-- **Object grounding matters**: The right retrieved trajectory names the objects and locations relevant to the current task.
-- **Code generation is more format-dependent**: Any Python example teaches function structure; ALFWorld tasks require specific procedural knowledge.
-
-The CVX vs FlatCosine null result suggests that at this scale (336 episodes), exact nearest neighbors matter more than the search method used to find them.
-
-## Limitations
-
-- **No environment execution**: Plans are evaluated against expert trajectories, not by running them in ALFWorld. A correct plan that differs from the expert could score low.
-- **All episodes are successful**: With 100% success rate, reward filtering is vacuous. A mixed corpus would better test this feature.
-- **Single T=0 pass**: No confidence intervals (but Wilcoxon operates per-problem).
-- **Metric validity**: Semantic similarity and action overlap are proxies for plan quality, not task completion.
+- **As a vector store** (insert + search): CVX ≈ numpy. No differentiation at this scale.
+- **As an episodic memory** with temporal structure: The value is real but requires an **interactive agent architecture** to exploit it. Static benchmarks don't exercise the temporal features.
+- **Next step**: Implement the interactive ALFWorld agent loop where the query to CVX changes at each step based on the actual environment state.
 
 ## CVX Features Exercised
 
-`TemporalIndex`, `insert`, `search`, `save`/`load`, episode encoding, reward-filtered retrieval.
+`TemporalIndex`, `insert`, `search` (multi-step), `save`/`load`, episode encoding, timestamp-based step extraction, continuation slicing.
