@@ -72,7 +72,7 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64
-            manylinux: auto
+            manylinux: "2_28"
           - os: macos-latest
             target: aarch64
             manylinux: "off"
@@ -101,8 +101,7 @@ jobs:
           working-directory: crates/cvx-python
           manylinux: ${{ matrix.manylinux }}
           before-script-linux: |
-            yum install -y clang-devel libzstd-devel lz4-devel bzip2-devel zlib-devel snappy-devel || \
-            apk add --no-cache clang-dev zstd-dev lz4-dev bzip2-dev zlib-dev snappy-dev || true
+            dnf install -y clang-devel lz4-devel libzstd-devel bzip2-devel snappy-devel zlib-devel
       - name: Upload to PyPI
         uses: PyO3/maturin-action@v1
         with:
