@@ -20,6 +20,5 @@ crate-type = ["cdylib"]
 cvx-core = { path = "../cvx-core" }
 cvx-index = { path = "../cvx-index" }
 cvx-analytics = { path = "../cvx-analytics" }
-cvx-storage = { path = "../cvx-storage" }
 pyo3 = { version = "0.24", features = ["extension-module"] }
 numpy = "0.24"
