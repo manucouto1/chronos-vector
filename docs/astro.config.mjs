@@ -128,8 +128,20 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Tutorials',
+					badge: { text: 'Guides', variant: 'tip' },
+					items: [
+						{ label: 'Quick Start', slug: 'tutorials/guides/quick-start' },
+						{ label: 'Temporal Analytics', slug: 'tutorials/guides/temporal-analytics' },
+						{ label: 'Anchor Projection & Centering', slug: 'tutorials/guides/anchor-projection' },
+						{ label: 'Semantic Regions', slug: 'tutorials/guides/semantic-regions' },
+						{ label: 'Episodic Memory for Agents', slug: 'tutorials/guides/episodic-memory' },
+					],
+				},
+				{
 					label: 'Specifications',
 					items: [
+						{ label: 'Python API Reference', slug: 'specs/python-api', badge: { text: '52 fns', variant: 'success' } },
 						{ label: 'API & Examples', slug: 'examples/overview' },
 						{ label: 'Storage Layout', slug: 'specs/storage-layout' },
 						{ label: 'API Contract', slug: 'specs/api-contract' },
