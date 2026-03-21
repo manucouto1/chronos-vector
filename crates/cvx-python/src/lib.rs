@@ -96,9 +96,71 @@ impl TemporalIndex {
         })
     }
 
-    /// Insert a temporal point.
-    fn insert(&mut self, entity_id: u64, timestamp: i64, vector: Vec<f32>) -> u32 {
-        self.inner.insert(entity_id, timestamp, &vector)
+    /// Insert a temporal point, optionally with a reward.
+    ///
+    /// Args:
+    ///     entity_id: Entity identifier.
+    ///     timestamp: Unix timestamp.
+    ///     vector: Embedding vector.
+    ///     reward: Optional outcome reward (e.g., 0.0-1.0). None = no reward.
+    #[pyo3(signature = (entity_id, timestamp, vector, reward=None))]
+    fn insert(&mut self, entity_id: u64, timestamp: i64, vector: Vec<f32>, reward: Option<f32>) -> u32 {
+        match reward {
+            Some(r) => self.inner.insert_with_reward(entity_id, timestamp, &vector, r),
+            None => self.inner.insert(entity_id, timestamp, &vector),
+        }
+    }
+
+    /// Set the reward for a node retroactively.
+    ///
+    /// Useful for annotating outcomes after an episode completes.
+    fn set_reward(&mut self, node_id: u32, reward: f32) {
+        self.inner.set_reward(node_id, reward);
+    }
+
+    /// Get the reward for a node. Returns None if no reward was assigned.
+    fn reward(&self, node_id: u32) -> Option<f32> {
+        let r = self.inner.reward(node_id);
+        if r.is_nan() { None } else { Some(r) }
+    }
+
+    /// Search with reward pre-filtering: only return nodes with reward >= min_reward.
+    ///
+    /// Args:
+    ///     vector: Query embedding.
+    ///     k: Number of results.
+    ///     min_reward: Minimum reward threshold.
+    ///     alpha: Semantic vs temporal weight (default 1.0).
+    ///     query_timestamp: Reference timestamp (default 0).
+    ///     filter_start: Optional temporal range start.
+    ///     filter_end: Optional temporal range end.
+    ///
+    /// Returns:
+    ///     List of (entity_id, timestamp, score) tuples.
+    #[pyo3(signature = (vector, k=10, min_reward=0.0, alpha=1.0, query_timestamp=0, filter_start=None, filter_end=None))]
+    fn search_with_reward(
+        &self,
+        vector: Vec<f32>,
+        k: usize,
+        min_reward: f32,
+        alpha: f32,
+        query_timestamp: i64,
+        filter_start: Option<i64>,
+        filter_end: Option<i64>,
+    ) -> Vec<(u64, i64, f32)> {
+        let filter = match (filter_start, filter_end) {
+            (Some(start), Some(end)) => TemporalFilter::Range(start, end),
+            _ => TemporalFilter::All,
+        };
+        self.inner
+            .search_with_reward(&vector, k, filter, alpha, query_timestamp, min_reward)
+            .into_iter()
+            .map(|(node_id, score)| {
+                let eid = self.inner.entity_id(node_id);
+                let ts = self.inner.timestamp(node_id);
+                (eid, ts, score)
+            })
+            .collect()
     }
 
     /// Bulk insert from numpy arrays.

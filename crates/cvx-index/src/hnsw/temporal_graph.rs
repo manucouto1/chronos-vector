@@ -97,6 +97,22 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
         node_id
     }
 
+    /// Insert a temporal point with an outcome reward.
+    pub fn insert_with_reward(
+        &mut self,
+        entity_id: u64,
+        timestamp: i64,
+        vector: &[f32],
+        reward: f32,
+    ) -> u32 {
+        let last_node = self.inner.entity_last_node(entity_id);
+        let node_id = self
+            .inner
+            .insert_with_reward(entity_id, timestamp, vector, reward);
+        self.edges.register(node_id, last_node);
+        node_id
+    }
+
     /// Standard search (delegates to inner TemporalHnsw).
     pub fn search(
         &self,
@@ -357,6 +373,32 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
     /// Disable scalar quantization.
     pub fn disable_scalar_quantization(&mut self) {
         self.inner.disable_scalar_quantization();
+    }
+
+    // ─── Delegated outcome / reward (RFC-012 P4) ───────────────────
+
+    /// Get the reward for a node.
+    pub fn reward(&self, node_id: u32) -> f32 {
+        self.inner.reward(node_id)
+    }
+
+    /// Set the reward for a node retroactively.
+    pub fn set_reward(&mut self, node_id: u32, reward: f32) {
+        self.inner.set_reward(node_id, reward);
+    }
+
+    /// Search with reward pre-filtering.
+    pub fn search_with_reward(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+        min_reward: f32,
+    ) -> Vec<(u32, f32)> {
+        self.inner
+            .search_with_reward(query, k, filter, alpha, query_timestamp, min_reward)
     }
 
     // ─── Delegated centering (RFC-012 Part B) ─────────────────────
