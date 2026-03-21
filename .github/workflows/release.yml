@@ -25,7 +25,7 @@ jobs:
             os: macos-latest
             artifact: cvx-server
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-14
             artifact: cvx-server
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +76,7 @@ jobs:
           - os: macos-latest
             target: aarch64
             manylinux: "off"
-          - os: macos-13
+          - os: macos-14
             target: x86_64
             manylinux: "off"
     steps:
@@ -100,6 +100,9 @@ jobs:
           args: --release --out dist -i python3.12
           working-directory: crates/cvx-python
           manylinux: ${{ matrix.manylinux }}
+          before-script-linux: |
+            yum install -y clang-devel libzstd-devel lz4-devel bzip2-devel zlib-devel snappy-devel || \
+            apk add --no-cache clang-dev zstd-dev lz4-dev bzip2-dev zlib-dev snappy-dev || true
       - name: Upload to PyPI
         uses: PyO3/maturin-action@v1
         with:
