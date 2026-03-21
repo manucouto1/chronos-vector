@@ -45,6 +45,8 @@ pub mod temporal_lsh;
 
 pub use concurrent::ConcurrentTemporalHnsw;
 pub use temporal::TemporalHnsw;
+pub use temporal_edges::TemporalEdgeLayer;
+pub use temporal_graph::{CausalSearchResult, TemporalGraphIndex};
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;

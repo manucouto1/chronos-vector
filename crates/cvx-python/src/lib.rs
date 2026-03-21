@@ -29,8 +29,8 @@ use cvx_analytics::calculus;
 use cvx_analytics::ode;
 use cvx_analytics::pelt::{self, PeltConfig};
 use cvx_analytics::temporal_ml::{AnalyticBackend, TemporalOps};
-use cvx_core::TemporalFilter;
-use cvx_index::hnsw::{HnswConfig, temporal::TemporalHnsw};
+use cvx_core::{TemporalFilter, TemporalIndexAccess};
+use cvx_index::hnsw::{HnswConfig, TemporalGraphIndex, temporal::TemporalHnsw};
 use cvx_index::metrics::L2Distance;
 
 /// Python-exposed temporal vector index.
@@ -39,7 +39,7 @@ use cvx_index::metrics::L2Distance;
 /// If no model is provided, prediction uses linear extrapolation.
 #[pyclass]
 struct TemporalIndex {
-    inner: TemporalHnsw<L2Distance>,
+    inner: TemporalGraphIndex<L2Distance>,
     #[cfg(feature = "torch-backend")]
     torch_model: Option<std::sync::Arc<cvx_analytics::torch_ode::TorchOdeModel>>,
 }
@@ -85,7 +85,7 @@ impl TemporalIndex {
         }
 
         Ok(Self {
-            inner: TemporalHnsw::new(config, L2Distance),
+            inner: TemporalGraphIndex::new(config, L2Distance),
             #[cfg(feature = "torch-backend")]
             torch_model,
         })
@@ -169,20 +169,34 @@ impl TemporalIndex {
             .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("Failed to save index: {e}")))
     }
 
-    /// Load a previously saved index from file.
+    /// Load a previously saved index.
     ///
-    /// Restores the full HNSW graph without rebuilding.
-    /// Typically ~100× faster than bulk_insert for large indices.
+    /// Supports both formats:
+    /// - Directory format (new): contains index.bin + temporal_edges.bin
+    /// - Single file format (legacy .cvx): auto-migrates to TemporalGraphIndex
     ///
     /// Args:
-    ///     path: File path to load from.
+    ///     path: Path to directory or legacy .cvx file.
     ///
     /// Returns:
     ///     A new TemporalIndex with all data and graph structure restored.
     #[staticmethod]
     fn load(path: String) -> PyResult<Self> {
-        let inner = TemporalHnsw::load(std::path::Path::new(&path), L2Distance)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("Failed to load index: {e}")))?;
+        let p = std::path::Path::new(&path);
+
+        let inner = if p.is_dir() {
+            // New directory format with temporal edges
+            TemporalGraphIndex::load(p, L2Distance)
+        } else {
+            // Legacy single-file format — migrate to TemporalGraphIndex
+            TemporalHnsw::load(p, L2Distance)
+                .map(TemporalGraphIndex::from_temporal_hnsw)
+        };
+
+        let inner = inner.map_err(|e| {
+            pyo3::exceptions::PyIOError::new_err(format!("Failed to load index: {e}"))
+        })?;
+
         Ok(Self {
             inner,
             #[cfg(feature = "torch-backend")]
@@ -286,6 +300,122 @@ impl TemporalIndex {
 
         self.inner
             .search(&vector, k, filter, alpha, query_timestamp)
+            .into_iter()
+            .map(|(node_id, score)| {
+                let eid = self.inner.entity_id(node_id);
+                let ts = self.inner.timestamp(node_id);
+                (eid, ts, score)
+            })
+            .collect()
+    }
+
+    /// Causal search: find similar states and return what happened next.
+    ///
+    /// Phase 1: Standard HNSW search for k nearest neighbors.
+    /// Phase 2: Walk temporal edges forward/backward from each match.
+    ///
+    /// This is the primary retrieval pattern for AI agent memory:
+    /// "Find past states similar to mine, and show me the continuation."
+    ///
+    /// Args:
+    ///     vector: Query embedding.
+    ///     k: Number of matches.
+    ///     temporal_context: Steps to walk forward/backward (default 5).
+    ///     alpha: Semantic vs temporal weight (default 1.0).
+    ///     query_timestamp: Reference timestamp (default 0).
+    ///     filter_start: Optional temporal range start.
+    ///     filter_end: Optional temporal range end.
+    ///
+    /// Returns:
+    ///     List of dicts with keys: node_id, score, entity_id,
+    ///     successors [(node_id, timestamp, vector)],
+    ///     predecessors [(node_id, timestamp, vector)].
+    #[pyo3(signature = (vector, k=5, temporal_context=5, alpha=1.0, query_timestamp=0, filter_start=None, filter_end=None))]
+    fn causal_search(
+        &self,
+        vector: Vec<f32>,
+        k: usize,
+        temporal_context: usize,
+        alpha: f32,
+        query_timestamp: i64,
+        filter_start: Option<i64>,
+        filter_end: Option<i64>,
+    ) -> Vec<pyo3::Py<pyo3::types::PyDict>> {
+        let filter = match (filter_start, filter_end) {
+            (Some(start), Some(end)) => TemporalFilter::Range(start, end),
+            _ => TemporalFilter::All,
+        };
+
+        let results = self.inner.causal_search(
+            &vector, k, filter, alpha, query_timestamp, temporal_context,
+        );
+
+        Python::with_gil(|py| {
+            results
+                .into_iter()
+                .map(|r| {
+                    let dict = pyo3::types::PyDict::new(py);
+                    dict.set_item("node_id", r.node_id).unwrap();
+                    dict.set_item("score", r.score).unwrap();
+                    dict.set_item("entity_id", r.entity_id).unwrap();
+
+                    // Successors with vectors
+                    let succ: Vec<(u32, i64, Vec<f32>)> = r
+                        .successors
+                        .iter()
+                        .map(|&(nid, ts)| (nid, ts, self.inner.vector(nid).to_vec()))
+                        .collect();
+                    dict.set_item("successors", succ).unwrap();
+
+                    // Predecessors with vectors
+                    let pred: Vec<(u32, i64, Vec<f32>)> = r
+                        .predecessors
+                        .iter()
+                        .map(|&(nid, ts)| (nid, ts, self.inner.vector(nid).to_vec()))
+                        .collect();
+                    dict.set_item("predecessors", pred).unwrap();
+
+                    dict.into()
+                })
+                .collect()
+        })
+    }
+
+    /// Hybrid search: beam search exploring both semantic and temporal neighbors.
+    ///
+    /// Unlike standard search, this also explores temporal edges (predecessor/
+    /// successor) during HNSW traversal. Useful for finding semantically
+    /// similar points that are also temporally connected.
+    ///
+    /// Args:
+    ///     vector: Query embedding.
+    ///     k: Number of results.
+    ///     beta: Temporal edge exploration weight (0.0=pure semantic, 1.0=aggressive temporal).
+    ///     alpha: Semantic vs temporal distance weight (default 1.0).
+    ///     query_timestamp: Reference timestamp (default 0).
+    ///     filter_start: Optional temporal range start.
+    ///     filter_end: Optional temporal range end.
+    ///
+    /// Returns:
+    ///     List of (entity_id, timestamp, score) tuples.
+    #[pyo3(signature = (vector, k=10, beta=0.3, alpha=1.0, query_timestamp=0, filter_start=None, filter_end=None))]
+    fn hybrid_search(
+        &self,
+        vector: Vec<f32>,
+        k: usize,
+        beta: f32,
+        alpha: f32,
+        query_timestamp: i64,
+        filter_start: Option<i64>,
+        filter_end: Option<i64>,
+    ) -> Vec<(u64, i64, f32)> {
+        let filter = match (filter_start, filter_end) {
+            (Some(start), Some(end)) => TemporalFilter::Range(start, end),
+            _ => TemporalFilter::All,
+        };
+
+        self.inner
+            .hybrid_search(&vector, k, filter, alpha, beta, query_timestamp)
             .into_iter()
             .map(|(node_id, score)| {
                 let eid = self.inner.entity_id(node_id);

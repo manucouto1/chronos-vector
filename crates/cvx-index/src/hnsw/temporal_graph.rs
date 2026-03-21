@@ -327,6 +327,93 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
         self.inner.is_empty()
     }
 
+    // ─── Delegated configuration ──────────────────────────────────
+
+    /// Mutable access to the underlying TemporalHnsw.
+    pub fn inner_mut(&mut self) -> &mut TemporalHnsw<D> {
+        &mut self.inner
+    }
+
+    /// Get HNSW config.
+    pub fn config(&self) -> &super::HnswConfig {
+        self.inner.config()
+    }
+
+    /// Set ef_construction at runtime.
+    pub fn set_ef_construction(&mut self, ef: usize) {
+        self.inner.set_ef_construction(ef);
+    }
+
+    /// Set ef_search at runtime.
+    pub fn set_ef_search(&mut self, ef: usize) {
+        self.inner.set_ef_search(ef);
+    }
+
+    /// Enable scalar quantization.
+    pub fn enable_scalar_quantization(&mut self, min_val: f32, max_val: f32) {
+        self.inner.enable_scalar_quantization(min_val, max_val);
+    }
+
+    /// Disable scalar quantization.
+    pub fn disable_scalar_quantization(&mut self) {
+        self.inner.disable_scalar_quantization();
+    }
+
+    // ─── Delegated centering (RFC-012 Part B) ─────────────────────
+
+    /// Compute the centroid of all vectors.
+    pub fn compute_centroid(&self) -> Option<Vec<f32>> {
+        self.inner.compute_centroid()
+    }
+
+    /// Set centroid for anisotropy correction.
+    pub fn set_centroid(&mut self, centroid: Vec<f32>) {
+        self.inner.set_centroid(centroid);
+    }
+
+    /// Clear centroid.
+    pub fn clear_centroid(&mut self) {
+        self.inner.clear_centroid();
+    }
+
+    /// Get current centroid.
+    pub fn centroid(&self) -> Option<&[f32]> {
+        self.inner.centroid()
+    }
+
+    /// Center a vector by subtracting the centroid.
+    pub fn centered_vector(&self, vec: &[f32]) -> Vec<f32> {
+        self.inner.centered_vector(vec)
+    }
+
+    // ─── Delegated region operations ──────────────────────────────
+
+    /// Get semantic regions at a given HNSW level.
+    pub fn regions(&self, level: usize) -> Vec<(u32, Vec<f32>, usize)> {
+        self.inner.regions(level)
+    }
+
+    /// O(N) single-pass region assignments.
+    pub fn region_assignments(
+        &self,
+        level: usize,
+        filter: TemporalFilter,
+    ) -> std::collections::HashMap<u32, Vec<(u64, i64)>> {
+        self.inner.region_assignments(level, filter)
+    }
+
+    /// Smoothed region distribution trajectory for an entity.
+    pub fn region_trajectory(
+        &self,
+        entity_id: u64,
+        level: usize,
+        window_days: i64,
+        alpha: f32,
+    ) -> Vec<(i64, Vec<f32>)> {
+        self.inner
+            .region_trajectory(entity_id, level, window_days, alpha)
+    }
+
     /// Save to directory (index + edges).
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
