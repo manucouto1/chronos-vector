@@ -697,16 +697,48 @@ impl<D: DistanceMetric> cvx_core::TemporalIndexAccess for TemporalHnsw<D> {
         if metadata_filter.is_empty() {
             return self.search(query, k, filter, alpha, query_timestamp);
         }
-        // Over-fetch and post-filter using the metadata store directly
-        let overfetch = k * 4;
-        let candidates = self.search(query, overfetch, filter, alpha, query_timestamp);
+
         match &self.metadata_store {
-            Some(store) => store
-                .filter_results(&candidates, metadata_filter)
-                .into_iter()
-                .take(k)
-                .collect(),
-            None => candidates.into_iter().take(k).collect(),
+            Some(store) => {
+                // Pre-filter: build combined temporal + metadata bitmap
+                let temporal_bitmap = self.build_filter_bitmap(&filter);
+                let metadata_bitmap = store.build_filter_bitmap(metadata_filter);
+                let combined = temporal_bitmap & metadata_bitmap;
+
+                if combined.is_empty() {
+                    return Vec::new();
+                }
+
+                // Search with combined bitmap
+                let candidates = self
+                    .graph
+                    .search_filtered(query, k, |id| combined.contains(id));
+
+                if alpha >= 1.0 {
+                    return candidates;
+                }
+
+                // Re-rank with composite distance
+                let mut scored: Vec<(u32, f32)> = candidates
+                    .into_iter()
+                    .map(|(id, sem_dist)| {
+                        let t_dist = self.temporal_distance_normalized(
+                            self.timestamps[id as usize],
+                            query_timestamp,
+                        );
+                        let combined_score = alpha * sem_dist + (1.0 - alpha) * t_dist;
+                        (id, combined_score)
+                    })
+                    .collect();
+
+                scored.sort_by(|a, b| a.1.total_cmp(&b.1));
+                scored.truncate(k);
+                scored
+            }
+            None => {
+                // No metadata store: fall back to search without metadata
+                self.search(query, k, filter, alpha, query_timestamp)
+            }
         }
     }
 }
