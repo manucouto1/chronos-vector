@@ -5,32 +5,70 @@ description: The problems ChronosVector solves and why they matter
 
 import { Aside } from '@astrojs/starlight/components';
 
-## Beyond Filtering
+## Beyond Static Vectors
 
-The traditional approach of "filter by time then search" ignores **semantic continuity**. Recent literature confirms the magnitude of this problem.
+Standard vector databases treat embeddings as frozen snapshots. But in every domain where embeddings matter — NLP, clinical research, political analysis, AI agents — the interesting signal is in **how vectors change over time**.
 
-### Semantic Drift
+CVX was built around one insight: **time is not a filter, it's a dimension**.
 
-Semantic change — how words and concepts mutate in meaning over time — has been extensively studied in computational NLP. Periti & Montanelli (2024) present WiDiD, an incremental approach based on evolutionary clustering of contextualized embeddings that detects gradual semantic changes across multiple temporal periods.
+## Three Motivating Problems
 
-The taxonomy of semantic changes includes: *broadening*, *narrowing*, *amelioration*, *pejoration*, technological *substitution*, and abrupt cultural *drift* (Kutuzov et al., 2018). Diachronic embeddings allow operationalizing these phenomena as **geometric displacements** in high-dimensional spaces.
+### 1. Clinical Signal in Temporal Drift
 
-<Aside type="tip" title="Insight for CVX">
-A vector for "AI" in 2020 is geometrically distinct from one in 2024. We need to measure the *geodesic* between them, not just the static cosine distance.
+A single social media post tells you almost nothing about a user's mental state. But the **trajectory** of their language over weeks — gradual vocabulary shifts, increasing negativity, changing topic patterns — reveals clinically meaningful signals.
+
+CVX enables this by projecting user trajectories onto **DSM-5 symptom anchors** (depressed mood, anhedonia, worthlessness, etc.) and tracking proximity over time. On the eRisk dataset (1.36M posts, 2,285 users), anchor-projected temporal features achieve **F1=0.744** — a 24% improvement over static embeddings.
+
+<Aside type="tip" title="Key discovery">
+Modern embedding models (MentalRoBERTa, sentence-transformers) produce vectors in a narrow anisotropic cone — all pairwise cosine similarities are ~0.96. Mean-centering amplifies the discriminative signal **30×** (Ethayarajh 2019, Su et al. 2021). This correction benefits all downstream CVX operations.
 </Aside>
 
-### The "Flashback" Problem
+### 2. Episodic Memory for AI Agents
 
-Querying how the latent space looked at an instant $t_n$ without reconstructing the entire index. Wang et al. (ICDE 2025) formalize this as **Timestamp Approximate Nearest Neighbor Search (TANNS)**, where both vectors and queries incorporate temporal attributes. Their *timestamp graph* exploits temporal locality to maintain a unified index with fast updates.
+Standard RAG gives LLM agents access to **facts** — but not to **how a problem was solved before**. This maps to the cognitive science distinction between semantic memory (what you know) and episodic memory (what you've done and how it went).
 
-### Trajectory Prediction
+CVX provides the temporal structure that standard vector stores lack:
 
-Predicting where a user's or concept's vector will be based on its historical inertia. Temporal embedding models based on Neural ODEs (Chen et al., 2018) allow modeling evolution as a continuous flow, making prediction an integration of the learned vector field.
+- **Episode identity**: `entity_id = episode_id << 16 | step_index` — groups steps into episodes
+- **Temporal ordering**: Timestamps define step order within episodes
+- **Causal continuation**: "Find where someone was in my situation, show me what they did next"
 
-### Concept Drift in Production
+Validated experimentally: an ALFWorld agent with CVX episodic memory achieves **6× improvement** in task completion over zero-shot (3.3% → 20.0%).
 
-In deployed ML systems, *concept drift* — changes in the underlying data distribution — degrades models over time. Hinder, Vaquet & Hammer (2024) provide the first comprehensive taxonomy of unsupervised drift detection, identifying three analysis levels: detection (did it happen?), localization (where in feature space?), and explanation (why?).
+### 3. Rhetorical Evolution in Political Discourse
+
+Parliamentary speech evolves over time — influenced by elections, crises, and social movements. CVX tracks rhetorical trajectories of individual MPs and political groups, using anchor projection onto rhetorical dimensions (emotional appeals, policy topics, personal attacks).
+
+On ParlaMint-ES (32K speeches, 841 MPs), CVX rhetorical profiling predicts speaker gender with **F1=0.94** and reveals that party affiliation drives rhetorical similarity more than gender.
+
+## The Scientific Foundation
+
+### Embedding Anisotropy
+
+Modern contextual embeddings occupy a narrow cone in high-dimensional space (Ethayarajh 2019). All vectors share a dominant "average text" direction, compressing the discriminative signal into a small residual. CVX addresses this natively via mean-centering.
+
+### Path Signatures
+
+From rough path theory (Lyons 1998), path signatures provide **universal**, **reparametrization-invariant** descriptors of trajectories. CVX implements truncated path signatures as trajectory fingerprints — two trajectories with the same shape (regardless of speed) will have similar signatures.
+
+### Change Point Detection
+
+PELT (Killick et al. 2012) provides exact offline change point detection in O(N). BOCPD (Adams & MacKay 2007) provides online streaming detection in O(1) amortized. CVX implements both for identifying regime transitions in embedding trajectories.
+
+### Temporal Vector Calculus
+
+CVX computes velocity ($\partial v / \partial t$), acceleration ($\partial^2 v / \partial t^2$), drift magnitude, and Hurst exponents on embedding trajectories — treating vector time series as differentiable curves in high-dimensional space.
 
 <Aside type="note">
-CVX can serve as the infrastructure feeding all three levels of drift analysis.
+CVX is not just a database — it's a **temporal analytics engine** with 27+ analytical functions spanning vector calculus, topology, distributional distances, causality, and motif discovery.
 </Aside>
+
+## Design Principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Time as Geometry** | Time is a dimension of the search space, not a filter |
+| **Vectors as Trajectories** | Entities are curves in embedding space, not points |
+| **Anchors as Coordinates** | Domain-specific reference vectors create interpretable projections |
+| **Episodes as Sequences** | Temporal structure enables "what happened next?" queries |
+| **Analytics over Storage** | The value is in the 27+ temporal operations, not just kNN |
