@@ -77,6 +77,8 @@ jobs:
           - os: macos-latest
             target: universal2-apple-darwin
             manylinux: "off"
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "10.14"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -110,6 +112,7 @@ jobs:
 
   release:
     name: GitHub Release
+    if: always()
     needs: [build, publish-crates, publish-pypi]
     runs-on: ubuntu-latest
     steps:
