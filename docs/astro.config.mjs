@@ -79,6 +79,7 @@ export default defineConfig({
 							badge: { text: 'Validated', variant: 'success' },
 							items: [
 								{ label: 'Overview & Results', slug: 'applications/mental-health/overview' },
+								{ label: 'Clinical Dashboard (B3)', slug: 'applications/mental-health/clinical-dashboard', badge: { text: 'Live', variant: 'success' } },
 								{ label: 'Interactive Explorer (B1)', slug: 'tutorials/b1-explorer' },
 								{ label: 'Clinical Anchoring (B2)', slug: 'tutorials/b2-clinical-anchoring' },
 								{ label: 'Classification Benchmarks', slug: 'tutorials/b1-mental-health' },
