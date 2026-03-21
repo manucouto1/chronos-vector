@@ -111,6 +111,33 @@ impl<D: DistanceMetric> ConcurrentTemporalHnsw<D> {
         self.inner.read().vector(node_id).to_vec()
     }
 
+    // ─── Centering (RFC-012 Part B) ──────────────────────────────────
+
+    /// Compute the centroid (mean vector) of all indexed vectors.
+    pub fn compute_centroid(&self) -> Option<Vec<f32>> {
+        self.inner.read().compute_centroid()
+    }
+
+    /// Set the centroid for anisotropy correction (write lock).
+    pub fn set_centroid(&self, centroid: Vec<f32>) {
+        self.inner.write().set_centroid(centroid);
+    }
+
+    /// Clear the centroid (write lock).
+    pub fn clear_centroid(&self) {
+        self.inner.write().clear_centroid();
+    }
+
+    /// Get the current centroid, if set.
+    pub fn centroid(&self) -> Option<Vec<f32>> {
+        self.inner.read().centroid().map(|c| c.to_vec())
+    }
+
+    /// Return a centered copy of the given vector (vec - centroid).
+    pub fn centered_vector(&self, vec: &[f32]) -> Vec<f32> {
+        self.inner.read().centered_vector(vec)
+    }
+
     /// Queue an insert for batched processing (RFC-002-04).
     ///
     /// This only takes a `Mutex` (sub-microsecond), NOT the write lock.

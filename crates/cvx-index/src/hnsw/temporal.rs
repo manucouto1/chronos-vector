@@ -59,6 +59,12 @@ pub struct TemporalHnsw<D: DistanceMetric> {
     max_timestamp: i64,
     /// Optional per-node metadata store.
     metadata_store: Option<super::metadata_store::MetadataStore>,
+    /// Optional centroid for anisotropy correction (RFC-012 Part B).
+    ///
+    /// When set, all distance computations center vectors by subtracting
+    /// this mean vector, amplifying the discriminative signal that is
+    /// otherwise compressed by the dominant "average text" direction.
+    centroid: Option<Vec<f32>>,
 }
 
 impl<D: DistanceMetric> TemporalHnsw<D> {
@@ -72,6 +78,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             min_timestamp: i64::MAX,
             max_timestamp: i64::MIN,
             metadata_store: None,
+            centroid: None,
         }
     }
 
@@ -213,6 +220,64 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         let range = (self.max_timestamp - self.min_timestamp).max(1) as f64;
         let diff = (t1 as f64 - t2 as f64).abs();
         (diff / range) as f32
+    }
+
+    // ─── Centering (RFC-012 Part B) ──────────────────────────────────
+
+    /// Compute the centroid (mean vector) of all indexed vectors.
+    ///
+    /// Single O(N×D) pass over stored vectors. Returns `None` if the index
+    /// is empty.
+    pub fn compute_centroid(&self) -> Option<Vec<f32>> {
+        let n = self.graph.len();
+        if n == 0 {
+            return None;
+        }
+
+        let dim = self.graph.vector(0).len();
+        let mut sum = vec![0.0f64; dim];
+
+        for i in 0..n {
+            let v = self.graph.vector(i as u32);
+            for (s, &val) in sum.iter_mut().zip(v.iter()) {
+                *s += val as f64;
+            }
+        }
+
+        let inv_n = 1.0 / n as f64;
+        Some(sum.into_iter().map(|s| (s * inv_n) as f32).collect())
+    }
+
+    /// Set the centroid for anisotropy correction.
+    ///
+    /// Once set, `centered_vector()` subtracts this from any vector,
+    /// and search operations use centered distances. The centroid is
+    /// serialized with the index snapshot.
+    ///
+    /// You can provide an externally computed centroid (e.g., from a
+    /// larger corpus) or use `compute_centroid()` for the index contents.
+    pub fn set_centroid(&mut self, centroid: Vec<f32>) {
+        self.centroid = Some(centroid);
+    }
+
+    /// Clear the centroid, reverting to raw (uncentered) distances.
+    pub fn clear_centroid(&mut self) {
+        self.centroid = None;
+    }
+
+    /// Get the current centroid, if set.
+    pub fn centroid(&self) -> Option<&[f32]> {
+        self.centroid.as_deref()
+    }
+
+    /// Return a centered copy of the given vector (vec - centroid).
+    ///
+    /// If no centroid is set, returns the vector unchanged (cloned).
+    pub fn centered_vector(&self, vec: &[f32]) -> Vec<f32> {
+        match &self.centroid {
+            Some(c) => vec.iter().zip(c.iter()).map(|(v, m)| v - m).collect(),
+            None => vec.to_vec(),
+        }
     }
 
     /// Search for the k nearest neighbors with temporal filtering and composite scoring.
@@ -508,6 +573,9 @@ struct TemporalSnapshot {
     max_timestamp: i64,
     #[serde(default)]
     metadata_store: Option<super::metadata_store::MetadataStore>,
+    /// Centroid for anisotropy correction (RFC-012 Part B).
+    #[serde(default)]
+    centroid: Option<Vec<f32>>,
 }
 
 impl<D: DistanceMetric> TemporalHnsw<D> {
@@ -524,6 +592,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             min_timestamp: self.min_timestamp,
             max_timestamp: self.max_timestamp,
             metadata_store: self.metadata_store.clone(),
+            centroid: self.centroid.clone(),
         };
 
         let bytes = postcard::to_allocvec(&snapshot).map_err(std::io::Error::other)?;
@@ -552,6 +621,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             min_timestamp: snapshot.min_timestamp,
             max_timestamp: snapshot.max_timestamp,
             metadata_store: snapshot.metadata_store,
+            centroid: snapshot.centroid,
         })
     }
 }
@@ -1237,6 +1307,134 @@ mod tests {
                 "assignment hub {hub} is not a level-{level} node"
             );
         }
+    }
+
+    // ─── Centering (RFC-012 Part B) ─────────────────────────────────
+
+    #[test]
+    fn compute_centroid_empty_index() {
+        let index = make_temporal_index();
+        assert!(index.compute_centroid().is_none());
+    }
+
+    #[test]
+    fn compute_centroid_single_vector() {
+        let mut index = make_temporal_index();
+        index.insert(1, 1000, &[3.0, 4.0, 5.0]);
+        let centroid = index.compute_centroid().unwrap();
+        assert_eq!(centroid, vec![3.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn compute_centroid_mean_of_vectors() {
+        let mut index = make_temporal_index();
+        index.insert(1, 1000, &[2.0, 0.0]);
+        index.insert(2, 2000, &[4.0, 6.0]);
+        let centroid = index.compute_centroid().unwrap();
+        assert!((centroid[0] - 3.0).abs() < 1e-6);
+        assert!((centroid[1] - 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn set_and_clear_centroid() {
+        let mut index = make_temporal_index();
+        index.insert(1, 1000, &[1.0, 2.0]);
+
+        assert!(index.centroid().is_none());
+
+        index.set_centroid(vec![0.5, 1.0]);
+        assert!(index.centroid().is_some());
+        assert_eq!(index.centroid().unwrap(), &[0.5, 1.0]);
+
+        index.clear_centroid();
+        assert!(index.centroid().is_none());
+    }
+
+    #[test]
+    fn centered_vector_subtracts_centroid() {
+        let mut index = make_temporal_index();
+        index.insert(1, 1000, &[1.0, 2.0]);
+        index.set_centroid(vec![0.5, 1.0]);
+
+        let centered = index.centered_vector(&[3.0, 5.0]);
+        assert!((centered[0] - 2.5).abs() < 1e-6);
+        assert!((centered[1] - 4.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn centered_vector_without_centroid_is_identity() {
+        let mut index = make_temporal_index();
+        index.insert(1, 1000, &[1.0, 2.0]);
+        // No centroid set
+        let centered = index.centered_vector(&[3.0, 5.0]);
+        assert_eq!(centered, vec![3.0, 5.0]);
+    }
+
+    #[test]
+    fn centroid_survives_save_load() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("test_centroid_snapshot.cvx");
+
+        let mut index = make_temporal_index();
+        index.insert(1, 1000, &[1.0, 2.0, 3.0]);
+        index.insert(2, 2000, &[4.0, 5.0, 6.0]);
+        index.set_centroid(vec![2.5, 3.5, 4.5]);
+
+        index.save(&path).unwrap();
+
+        let loaded = TemporalHnsw::load(&path, L2Distance).unwrap();
+        assert_eq!(loaded.centroid().unwrap(), &[2.5, 3.5, 4.5]);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn load_without_centroid_is_none() {
+        // Verifies backward compatibility: old snapshots without centroid
+        // field deserialize with centroid = None (via #[serde(default)])
+        let dir = std::env::temp_dir();
+        let path = dir.join("test_no_centroid_snapshot.cvx");
+
+        let mut index = make_temporal_index();
+        index.insert(1, 1000, &[1.0, 0.0]);
+        // No centroid set
+        index.save(&path).unwrap();
+
+        let loaded = TemporalHnsw::load(&path, L2Distance).unwrap();
+        assert!(loaded.centroid().is_none());
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn compute_centroid_precision_with_many_vectors() {
+        let config = HnswConfig {
+            m: 4,
+            ef_construction: 20,
+            ef_search: 10,
+            ..Default::default()
+        };
+        let mut index = TemporalHnsw::new(config, L2Distance);
+
+        // Insert 1000 vectors with known mean
+        for i in 0..1000u64 {
+            // Vectors centered around [10.0, 20.0] with small perturbation
+            let v = vec![10.0 + (i as f32 * 0.001), 20.0 - (i as f32 * 0.001)];
+            index.insert(i, i as i64, &v);
+        }
+
+        let centroid = index.compute_centroid().unwrap();
+        // Expected mean: [10.0 + 0.4995, 20.0 - 0.4995] = [10.4995, 19.5005]
+        assert!(
+            (centroid[0] - 10.4995).abs() < 0.01,
+            "centroid[0] = {}, expected ~10.4995",
+            centroid[0]
+        );
+        assert!(
+            (centroid[1] - 19.5005).abs() < 0.01,
+            "centroid[1] = {}, expected ~19.5005",
+            centroid[1]
+        );
     }
 
     #[test]

@@ -223,6 +223,51 @@ impl TemporalIndex {
         self.inner.disable_scalar_quantization();
     }
 
+    // ─── Centering (RFC-012 Part B) ──────────────────────────────────
+
+    /// Compute the centroid (mean vector) of all indexed vectors.
+    ///
+    /// Returns the mean vector as a list of floats, or None if the index
+    /// is empty. This is an O(N×D) operation.
+    ///
+    /// Use with `set_centroid()` to enable anisotropy correction.
+    /// After centering, all distance-based analytics (`project_to_anchors`,
+    /// `drift`, `velocity`, etc.) operate on centered vectors, amplifying
+    /// the discriminative signal that embedding models compress.
+    fn compute_centroid(&self) -> Option<Vec<f32>> {
+        self.inner.compute_centroid()
+    }
+
+    /// Set the centroid for anisotropy correction.
+    ///
+    /// Once set, `centered_vector()` subtracts this from any vector.
+    /// The centroid is persisted with `save()`.
+    ///
+    /// Args:
+    ///     centroid: The mean vector to subtract. Can be computed via
+    ///         `compute_centroid()` or provided externally (e.g., from
+    ///         a larger corpus).
+    fn set_centroid(&mut self, centroid: Vec<f32>) {
+        self.inner.set_centroid(centroid);
+    }
+
+    /// Clear the centroid, reverting to raw (uncentered) distances.
+    fn clear_centroid(&mut self) {
+        self.inner.clear_centroid();
+    }
+
+    /// Get the current centroid, if set.
+    fn centroid(&self) -> Option<Vec<f32>> {
+        self.inner.centroid().map(|c| c.to_vec())
+    }
+
+    /// Return a centered copy of the vector (vec - centroid).
+    ///
+    /// If no centroid is set, returns the vector unchanged.
+    fn centered_vector(&self, vec: Vec<f32>) -> Vec<f32> {
+        self.inner.centered_vector(&vec)
+    }
+
     /// Search for k nearest neighbors.
     #[pyo3(signature = (vector, k=10, alpha=1.0, query_timestamp=0, filter_start=None, filter_end=None))]
     fn search(
