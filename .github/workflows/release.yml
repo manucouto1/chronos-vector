@@ -72,12 +72,13 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64
-          - os: ubuntu-latest
-            target: aarch64
+            manylinux: auto
           - os: macos-latest
             target: aarch64
+            manylinux: "off"
           - os: macos-13
             target: x86_64
+            manylinux: "off"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -96,9 +97,9 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist
+          args: --release --out dist -i python3.12
           working-directory: crates/cvx-python
-          manylinux: auto
+          manylinux: ${{ matrix.manylinux }}
       - name: Upload to PyPI
         uses: PyO3/maturin-action@v1
         with:
