@@ -50,7 +50,7 @@ smallvec = { version = "1", features = ["union", "serde"] }
 rand = "0.9"
 
 # Bitmaps
-roaring = "0.10"
+roaring = { version = "0.10", features = ["serde"] }
 
 # Storage
 rocksdb = "0.23"
