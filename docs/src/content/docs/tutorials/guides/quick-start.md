@@ -2,9 +2,6 @@
 title: "Quick Start"
 description: "Install CVX, create an index, insert vectors, search, and explore temporal analytics — in 10 minutes"
 ---
-
-import { Aside } from '@astrojs/starlight/components';
-
 ## Install
 
 ```bash
@@ -27,26 +24,53 @@ This enables questions that static stores cannot answer: *"How is this entity ch
 
 ## Create an Index and Insert Data
 
+We create three entities with distinct temporal behaviors — each models a real phenomenon:
+
+| Entity | Process | Models |
+|--------|---------|--------|
+| 0 | Ornstein-Uhlenbeck | Stable concept with slow evolution |
+| 1 | Regime shift (onset at day 40) | Disease onset, crisis event |
+| 2 | Periodic oscillation (14-day) | Circadian/weekly patterns |
+
 ```python
 import chronos_vector as cvx
 import numpy as np
 
 np.random.seed(42)
+D = 32
 
 index = cvx.TemporalIndex(m=16, ef_construction=200, ef_search=50)
 
-# Bulk insert: 1000 points, 10 entities, D=32
-n = 1000
-entity_ids = np.random.randint(0, 10, size=n, dtype=np.uint64)
-timestamps = np.arange(n, dtype=np.int64) * 86400  # daily
-vectors = np.random.randn(n, 32).astype(np.float32)
+# Entity 0: Ornstein-Uhlenbeck — mean-reverting with slow drift
+theta = 0.1
+ou_mean, ou_state = np.zeros(D, dtype=np.float32), np.zeros(D, dtype=np.float32)
+for t in range(100):
+    ou_mean += np.sin(np.arange(D) * 0.05 + t * 0.02).astype(np.float32) * 0.02
+    ou_state += theta * (ou_mean - ou_state) + np.random.randn(D).astype(np.float32) * 0.05
+    index.insert(0, t * 86400, ou_state.tolist())
 
-count = index.bulk_insert(entity_ids, timestamps, vectors)
-print(f"{count} points inserted, index size: {len(index)}")
+# Entity 1: Regime shift — gradual onset after day 40
+for t in range(100):
+    if t < 40:
+        vec = np.ones(D, dtype=np.float32) * 0.3 + np.random.randn(D).astype(np.float32) * 0.03
+    else:
+        severity = (t - 40) / 60.0
+        vec = np.ones(D, dtype=np.float32) * (0.3 - severity * 0.8) + \
+              np.random.randn(D).astype(np.float32) * (0.03 + severity * 0.1)
+    index.insert(1, t * 86400, vec.tolist())
+
+# Entity 2: Periodic oscillation — 14-day cycle
+for t in range(100):
+    phase = 2 * np.pi * t / 14
+    vec = np.sin(np.arange(D) * 0.3 + phase).astype(np.float32) * 0.3 + \
+          np.random.randn(D).astype(np.float32) * 0.02
+    index.insert(2, t * 86400, vec.tolist())
+
+print(f"{len(index)} points inserted")
 ```
 
 ```text
-1000 points inserted, index size: 1000
+300 points inserted
 ```
 
 The HNSW index parameters control the speed/accuracy trade-off:
@@ -108,7 +132,7 @@ A high velocity indicates rapid semantic change — the entity's representation 
 
 <iframe src="/chronos-vector/plots/quickstart_velocity.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
-The **smooth drift** entity (green) shows low, consistent velocity. The **regime change** entity (red) shows a sharp velocity spike at day 50 when its embedding space flips. The **noise** entity (blue) shows moderate, erratic velocity.
+The **OU process** (green) shows stable low velocity — mean reversion keeps changes bounded. The **onset entity** (red) shows increasing velocity after day 40 as the regime shift deepens. The **periodic entity** (blue) shows regular velocity oscillations matching its 14-day cycle.
 
 ### Hurst Exponent: Long-Memory Estimation
 
@@ -200,9 +224,9 @@ Three synthetic entities show distinct behaviors in embedding space:
 
 <iframe src="/chronos-vector/plots/quickstart_trajectories.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
-<Aside type="tip" title="Color = time">
+> **💡 Color = time**  
 Points are colored by time (dark = early, light = late). The smooth drift entity traces a continuous path. The regime change entity shows two distinct clusters. The noise entity fills a cloud around the origin.
-</Aside>
+
 
 ## Save & Load
 

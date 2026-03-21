@@ -2,9 +2,6 @@
 title: "Episodic Memory for AI Agents"
 description: "Store action sequences, retrieve by similarity, and extract continuations with causal search"
 ---
-
-import { Aside } from '@astrojs/starlight/components';
-
 ## Semantic vs Episodic Memory
 
 Standard RAG gives agents access to **facts** (semantic memory). CVX provides **episodic memory** — the ability to recall *how a problem was solved before*, step by step.
@@ -71,9 +68,9 @@ for eid, ts, score in results:
   Episode 15 step 4: score=14.112
 ```
 
-<Aside type="tip" title="Bitmap pre-filtering">
+> **💡 Bitmap pre-filtering**  
 `search_with_reward` uses a RoaringBitmap to pre-filter nodes during HNSW traversal — not post-filtering. This is O(1) per node, same cost as temporal filtering.
-</Aside>
+
 
 ## Causal Search: "What Happened Next?"
 

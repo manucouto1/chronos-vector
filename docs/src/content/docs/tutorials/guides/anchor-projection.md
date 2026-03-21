@@ -2,9 +2,6 @@
 title: "Anchor Projection & Centering"
 description: "Project trajectories onto interpretable dimensions and correct embedding anisotropy"
 ---
-
-import { Aside } from '@astrojs/starlight/components';
-
 ## The Problem: Anisotropic Embeddings
 
 Modern sentence embedding models (BERT, RoBERTa, sentence-transformers) produce vectors that occupy a **narrow cone** in high-dimensional space. All vectors share a dominant component — the "average text" direction — and the discriminative signal is compressed into a small residual (Ethayarajh, EMNLP 2019).
@@ -75,9 +72,9 @@ Gap amplification:   28x
 
 <iframe src="/chronos-vector/plots/anchor_anisotropy.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
-<Aside type="caution" title="Raw similarity is useless">
+> **⚠️ Raw similarity is useless**  
 Left panel: raw cosine similarities clustered around 0.97 — Groups A and B are indistinguishable. Right panel: after centering, similarity drops to ~0.18, revealing the actual discriminative signal.
-</Aside>
+
 
 ## CVX Centering API
 

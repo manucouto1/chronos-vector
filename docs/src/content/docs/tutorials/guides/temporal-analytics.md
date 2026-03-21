@@ -2,12 +2,17 @@
 title: "Temporal Analytics"
 description: "Velocity, drift, changepoints, path signatures, distributional distances, and topology on embedding trajectories"
 ---
-
-import { Aside } from '@astrojs/starlight/components';
-
 CVX provides 27+ analytical functions that treat embedding trajectories as mathematical objects — differentiable curves, stochastic processes, and topological spaces. This tutorial covers each category with theory, code, and visualizations.
 
-## Setup: Three Behavioral Archetypes
+## Setup: Three Stochastic Processes
+
+Each entity models a real phenomenon using well-known stochastic processes:
+
+| Entity | Process | Models | Expected behavior |
+|--------|---------|--------|------------------|
+| 0 | **Ornstein-Uhlenbeck** | Stable concept with slow evolution | Mean-reverting, bounded drift |
+| 1 | **Regime shift** (onset at $t=40$) | Disease onset, crisis event | Structural break, accelerating drift |
+| 2 | **Periodic oscillation** (14-day) | Circadian/weekly patterns | Cyclical velocity, oscillating drift |
 
 ```python
 import chronos_vector as cvx
@@ -18,19 +23,30 @@ D = 32
 
 index = cvx.TemporalIndex(m=16, ef_construction=100)
 
-# Entity 0: Smooth directional drift (trending behavior)
+# Entity 0: Ornstein-Uhlenbeck — mean-reverting with slow drift
+theta = 0.1  # mean reversion speed
+ou_mean, ou_state = np.zeros(D, dtype=np.float32), np.zeros(D, dtype=np.float32)
 for t in range(100):
-    vec = np.sin(np.arange(D) * 0.1 + t * 0.05) + np.random.randn(D) * 0.01
-    index.insert(0, t * 86400, vec.astype(np.float32).tolist())
+    ou_mean += np.sin(np.arange(D) * 0.05 + t * 0.02).astype(np.float32) * 0.02
+    ou_state += theta * (ou_mean - ou_state) + np.random.randn(D).astype(np.float32) * 0.05
+    index.insert(0, t * 86400, ou_state.tolist())
 
-# Entity 1: Regime change at t=50 (structural break)
+# Entity 1: Regime shift — gradual onset after day 40
 for t in range(100):
-    base = np.ones(D) * (0.5 if t < 50 else -0.5)
-    index.insert(1, t * 86400, (base + np.random.randn(D) * 0.02).astype(np.float32).tolist())
+    if t < 40:
+        vec = np.ones(D, dtype=np.float32) * 0.3 + np.random.randn(D).astype(np.float32) * 0.03
+    else:
+        severity = (t - 40) / 60.0
+        vec = np.ones(D, dtype=np.float32) * (0.3 - severity * 0.8) + \
+              np.random.randn(D).astype(np.float32) * (0.03 + severity * 0.1)
+    index.insert(1, t * 86400, vec.tolist())
 
-# Entity 2: Stationary noise (no structure)
+# Entity 2: Periodic oscillation — 14-day cycle
 for t in range(100):
-    index.insert(2, t * 86400, (np.random.randn(D) * 0.1).astype(np.float32).tolist())
+    phase = 2 * np.pi * t / 14
+    vec = np.sin(np.arange(D) * 0.3 + phase).astype(np.float32) * 0.3 + \
+          np.random.randn(D).astype(np.float32) * 0.02
+    index.insert(2, t * 86400, vec.tolist())
 
 traj0, traj1, traj2 = index.trajectory(0), index.trajectory(1), index.trajectory(2)
 ```
@@ -56,7 +72,7 @@ Regime entity drift: L2=5.627, cosine=1.9959
 
 <iframe src="/chronos-vector/plots/analytics_drift.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
-The **regime change** entity (red) shows a sudden jump in cumulative drift at step 50. The **trending** entity (green) drifts steadily. The **noise** entity (blue) drifts randomly with no clear direction.
+The **onset entity** (red) shows accelerating drift after day 40 as the regime shift deepens. The **OU process** (green) drifts slowly but is bounded by mean reversion. The **periodic entity** (blue) oscillates — drift increases and decreases with each cycle.
 
 ### Velocity: Instantaneous Rate of Change
 
@@ -110,9 +126,9 @@ for ts, severity in cps:
   Day 50: severity=0.963
 ```
 
-<Aside type="tip" title="BIC penalty for high dimensions">
+> **💡 BIC penalty for high dimensions**  
 For $D > 100$, the default BIC penalty may be too sensitive. Use `penalty = 3 * np.log(n)` to reduce false positives.
-</Aside>
+
 
 ---
 

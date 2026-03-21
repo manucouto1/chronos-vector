@@ -2,16 +2,13 @@
 title: "Semantic Regions"
 description: "Explore HNSW hierarchy as unsupervised clustering with distributional distances"
 ---
-
-import { Aside } from '@astrojs/starlight/components';
-
 ## HNSW as Hierarchical Clustering
 
 HNSW builds a multi-level graph where each level has fewer, more "central" nodes. These **hubs** emerge naturally and act as unsupervised cluster centroids. CVX assigns every node to its nearest hub via greedy descent — $\sim N/M^L$ regions at level $L$.
 
-<Aside type="tip" title="No training required">
+> **💡 No training required**  
 Unlike k-means or DBSCAN, HNSW regions emerge from index construction. No hyperparameter tuning, no iterative optimization. O(N) single-pass assignment.
-</Aside>
+
 
 ## Setup
 
