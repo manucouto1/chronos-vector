@@ -48,13 +48,18 @@ CVX applies temporal trajectory analysis to political speech, tracking how rheto
 | `granger_causality()` | Cross-group rhetorical influence |
 | `discover_motifs()` | Recurring rhetorical patterns |
 
-## Notebooks
+## Notebooks & Reports
 
 | Notebook | Focus | Status |
 |----------|-------|--------|
 | B8_parlamint_polarization | Real ParlaMint-ES data, gender/party analysis, COVID counterfactual | Complete |
 | B7_political_polarization | Synthetic political polarization framework | Superseded by B8 |
 
+## Interactive Results
+
+- [Political Rhetoric Analysis (B3)](/chronos-vector/tutorials/trump-impact) — Full interactive tutorial with temporal analytics on political speech: rhetorical drift, partisan clustering, counterfactual analysis
+
 ## Related
 
 - [RFC-007: Advanced Temporal Primitives](/chronos-vector/rfc/rfc-007) (temporal join, Granger, motifs)
+- [Research: Political Rhetoric](/chronos-vector/research/trump-impact) — Methodology and theoretical background

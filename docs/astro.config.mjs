@@ -89,6 +89,7 @@ export default defineConfig({
 							badge: { text: 'Validated', variant: 'success' },
 							items: [
 								{ label: 'Overview & Results', slug: 'applications/political-discourse/overview' },
+								{ label: 'Political Rhetoric (B3)', slug: 'tutorials/trump-impact', badge: { text: 'Live', variant: 'success' } },
 							],
 						},
 						{
