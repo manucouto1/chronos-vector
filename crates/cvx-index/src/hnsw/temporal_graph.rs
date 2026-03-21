@@ -97,6 +97,22 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
         node_id
     }
 
+    /// Insert a temporal point with an outcome reward.
+    pub fn insert_with_reward(
+        &mut self,
+        entity_id: u64,
+        timestamp: i64,
+        vector: &[f32],
+        reward: f32,
+    ) -> u32 {
+        let last_node = self.inner.entity_last_node(entity_id);
+        let node_id = self
+            .inner
+            .insert_with_reward(entity_id, timestamp, vector, reward);
+        self.edges.register(node_id, last_node);
+        node_id
+    }
+
     /// Standard search (delegates to inner TemporalHnsw).
     pub fn search(
         &self,
@@ -325,6 +341,119 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
     /// Whether empty.
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
+    }
+
+    // ─── Delegated configuration ──────────────────────────────────
+
+    /// Mutable access to the underlying TemporalHnsw.
+    pub fn inner_mut(&mut self) -> &mut TemporalHnsw<D> {
+        &mut self.inner
+    }
+
+    /// Get HNSW config.
+    pub fn config(&self) -> &super::HnswConfig {
+        self.inner.config()
+    }
+
+    /// Set ef_construction at runtime.
+    pub fn set_ef_construction(&mut self, ef: usize) {
+        self.inner.set_ef_construction(ef);
+    }
+
+    /// Set ef_search at runtime.
+    pub fn set_ef_search(&mut self, ef: usize) {
+        self.inner.set_ef_search(ef);
+    }
+
+    /// Enable scalar quantization.
+    pub fn enable_scalar_quantization(&mut self, min_val: f32, max_val: f32) {
+        self.inner.enable_scalar_quantization(min_val, max_val);
+    }
+
+    /// Disable scalar quantization.
+    pub fn disable_scalar_quantization(&mut self) {
+        self.inner.disable_scalar_quantization();
+    }
+
+    // ─── Delegated outcome / reward (RFC-012 P4) ───────────────────
+
+    /// Get the reward for a node.
+    pub fn reward(&self, node_id: u32) -> f32 {
+        self.inner.reward(node_id)
+    }
+
+    /// Set the reward for a node retroactively.
+    pub fn set_reward(&mut self, node_id: u32, reward: f32) {
+        self.inner.set_reward(node_id, reward);
+    }
+
+    /// Search with reward pre-filtering.
+    pub fn search_with_reward(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+        min_reward: f32,
+    ) -> Vec<(u32, f32)> {
+        self.inner
+            .search_with_reward(query, k, filter, alpha, query_timestamp, min_reward)
+    }
+
+    // ─── Delegated centering (RFC-012 Part B) ─────────────────────
+
+    /// Compute the centroid of all vectors.
+    pub fn compute_centroid(&self) -> Option<Vec<f32>> {
+        self.inner.compute_centroid()
+    }
+
+    /// Set centroid for anisotropy correction.
+    pub fn set_centroid(&mut self, centroid: Vec<f32>) {
+        self.inner.set_centroid(centroid);
+    }
+
+    /// Clear centroid.
+    pub fn clear_centroid(&mut self) {
+        self.inner.clear_centroid();
+    }
+
+    /// Get current centroid.
+    pub fn centroid(&self) -> Option<&[f32]> {
+        self.inner.centroid()
+    }
+
+    /// Center a vector by subtracting the centroid.
+    pub fn centered_vector(&self, vec: &[f32]) -> Vec<f32> {
+        self.inner.centered_vector(vec)
+    }
+
+    // ─── Delegated region operations ──────────────────────────────
+
+    /// Get semantic regions at a given HNSW level.
+    pub fn regions(&self, level: usize) -> Vec<(u32, Vec<f32>, usize)> {
+        self.inner.regions(level)
+    }
+
+    /// O(N) single-pass region assignments.
+    pub fn region_assignments(
+        &self,
+        level: usize,
+        filter: TemporalFilter,
+    ) -> std::collections::HashMap<u32, Vec<(u64, i64)>> {
+        self.inner.region_assignments(level, filter)
+    }
+
+    /// Smoothed region distribution trajectory for an entity.
+    pub fn region_trajectory(
+        &self,
+        entity_id: u64,
+        level: usize,
+        window_days: i64,
+        alpha: f32,
+    ) -> Vec<(i64, Vec<f32>)> {
+        self.inner
+            .region_trajectory(entity_id, level, window_days, alpha)
     }
 
     /// Save to directory (index + edges).
@@ -694,5 +823,141 @@ mod tests {
         assert_eq!(causal.len(), 1);
         assert!(causal[0].successors.is_empty());
         assert!(causal[0].predecessors.is_empty());
+    }
+
+    // ─── Delegated method coverage ───────────────────────────────
+
+    #[test]
+    fn config_and_ef_delegation() {
+        let config = HnswConfig {
+            m: 8,
+            ef_construction: 100,
+            ef_search: 50,
+            ..Default::default()
+        };
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        assert_eq!(index.config().m, 8);
+        assert_eq!(index.config().ef_construction, 100);
+
+        index.set_ef_construction(150);
+        assert_eq!(index.config().ef_construction, 150);
+
+        index.set_ef_search(200);
+        assert_eq!(index.config().ef_search, 200);
+    }
+
+    #[test]
+    fn centering_delegation() {
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        index.insert(1, 1000, &[2.0, 4.0]);
+        index.insert(2, 2000, &[4.0, 6.0]);
+
+        let centroid = index.compute_centroid().unwrap();
+        assert!((centroid[0] - 3.0).abs() < 1e-6);
+
+        index.set_centroid(vec![3.0, 5.0]);
+        assert_eq!(index.centroid().unwrap(), &[3.0, 5.0]);
+
+        let centered = index.centered_vector(&[5.0, 8.0]);
+        assert!((centered[0] - 2.0).abs() < 1e-6);
+        assert!((centered[1] - 3.0).abs() < 1e-6);
+
+        index.clear_centroid();
+        assert!(index.centroid().is_none());
+    }
+
+    #[test]
+    fn reward_delegation() {
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        let n0 = index.insert(1, 1000, &[1.0, 0.0]);
+        let n1 = index.insert_with_reward(2, 2000, &[0.0, 1.0], 0.8);
+
+        assert!(index.reward(n0).is_nan());
+        assert!((index.reward(n1) - 0.8).abs() < 1e-6);
+
+        index.set_reward(n0, 0.95);
+        assert!((index.reward(n0) - 0.95).abs() < 1e-6);
+    }
+
+    #[test]
+    fn search_with_reward_delegation() {
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        for i in 0..10u64 {
+            index.insert_with_reward(i, i as i64 * 1000, &[i as f32, 0.0, 0.0], i as f32 * 0.1);
+        }
+
+        let results =
+            index.search_with_reward(&[7.0, 0.0, 0.0], 5, TemporalFilter::All, 1.0, 0, 0.5);
+        assert!(!results.is_empty());
+        for &(node_id, _) in &results {
+            assert!(
+                index.reward(node_id) >= 0.5,
+                "node {node_id} reward {} < 0.5",
+                index.reward(node_id)
+            );
+        }
+    }
+
+    #[test]
+    fn region_delegation() {
+        let config = HnswConfig {
+            m: 4,
+            ef_construction: 50,
+            ef_search: 50,
+            ..Default::default()
+        };
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        let mut rng = rand::rng();
+        for i in 0..200u64 {
+            let v: Vec<f32> = (0..8).map(|_| rand::Rng::random::<f32>(&mut rng)).collect();
+            index.insert(i % 4, i as i64 * 1000, &v);
+        }
+
+        let regions = index.regions(1);
+        assert!(!regions.is_empty());
+
+        let assignments = index.region_assignments(1, TemporalFilter::All);
+        let total: usize = assignments.values().map(|v| v.len()).sum();
+        assert_eq!(total, 200);
+    }
+
+    #[test]
+    fn scalar_quantization_delegation() {
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        index.insert(1, 1000, &[1.0, 0.0]);
+        index.insert(2, 2000, &[0.0, 1.0]);
+
+        index.enable_scalar_quantization(-1.0, 1.0);
+        let results = index.search(&[1.0, 0.0], 2, TemporalFilter::All, 1.0, 0);
+        assert_eq!(results.len(), 2);
+
+        index.disable_scalar_quantization();
+        let results = index.search(&[1.0, 0.0], 2, TemporalFilter::All, 1.0, 0);
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn insert_with_reward_creates_temporal_edges() {
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+
+        // Insert 5 steps for same entity with rewards
+        for i in 0..5u32 {
+            index.insert_with_reward(1, i as i64 * 100, &[i as f32, 0.0], i as f32 * 0.2);
+        }
+
+        // Check temporal edges exist
+        let edges = index.edges();
+        assert!(edges.successor(0).is_some());
+        assert!(edges.predecessor(4).is_some());
+
+        // Causal search should return continuations
+        let results = index.causal_search(&[0.0, 0.0], 1, TemporalFilter::All, 1.0, 0, 3);
+        assert_eq!(results.len(), 1);
+        assert!(!results[0].successors.is_empty());
     }
 }

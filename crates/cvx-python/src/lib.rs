@@ -29,8 +29,8 @@ use cvx_analytics::calculus;
 use cvx_analytics::ode;
 use cvx_analytics::pelt::{self, PeltConfig};
 use cvx_analytics::temporal_ml::{AnalyticBackend, TemporalOps};
-use cvx_core::TemporalFilter;
-use cvx_index::hnsw::{HnswConfig, temporal::TemporalHnsw};
+use cvx_core::{TemporalFilter, TemporalIndexAccess};
+use cvx_index::hnsw::{HnswConfig, TemporalGraphIndex, temporal::TemporalHnsw};
 use cvx_index::metrics::L2Distance;
 
 /// Python-exposed temporal vector index.
@@ -39,7 +39,7 @@ use cvx_index::metrics::L2Distance;
 /// If no model is provided, prediction uses linear extrapolation.
 #[pyclass]
 struct TemporalIndex {
-    inner: TemporalHnsw<L2Distance>,
+    inner: TemporalGraphIndex<L2Distance>,
     #[cfg(feature = "torch-backend")]
     torch_model: Option<std::sync::Arc<cvx_analytics::torch_ode::TorchOdeModel>>,
 }
@@ -55,7 +55,12 @@ impl TemporalIndex {
     ///     model_path: Optional path to TorchScript Neural ODE model (.pt).
     #[new]
     #[pyo3(signature = (m=16, ef_construction=200, ef_search=50, model_path=None))]
-    fn new(m: usize, ef_construction: usize, ef_search: usize, model_path: Option<String>) -> PyResult<Self> {
+    fn new(
+        m: usize,
+        ef_construction: usize,
+        ef_search: usize,
+        model_path: Option<String>,
+    ) -> PyResult<Self> {
         let config = HnswConfig {
             m,
             ef_construction,
@@ -68,9 +73,9 @@ impl TemporalIndex {
             match cvx_analytics::torch_ode::TorchOdeModel::load(std::path::Path::new(&path)) {
                 Ok(model) => Some(std::sync::Arc::new(model)),
                 Err(e) => {
-                    return Err(pyo3::exceptions::PyIOError::new_err(
-                        format!("Failed to load model: {e}")
-                    ));
+                    return Err(pyo3::exceptions::PyIOError::new_err(format!(
+                        "Failed to load model: {e}"
+                    )));
                 }
             }
         } else {
@@ -80,20 +85,82 @@ impl TemporalIndex {
         #[cfg(not(feature = "torch-backend"))]
         if model_path.is_some() {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "torch-backend feature not enabled. Build with: maturin develop --features torch-backend"
+                "torch-backend feature not enabled. Build with: maturin develop --features torch-backend",
             ));
         }
 
         Ok(Self {
-            inner: TemporalHnsw::new(config, L2Distance),
+            inner: TemporalGraphIndex::new(config, L2Distance),
             #[cfg(feature = "torch-backend")]
             torch_model,
         })
     }
 
-    /// Insert a temporal point.
-    fn insert(&mut self, entity_id: u64, timestamp: i64, vector: Vec<f32>) -> u32 {
-        self.inner.insert(entity_id, timestamp, &vector)
+    /// Insert a temporal point, optionally with a reward.
+    ///
+    /// Args:
+    ///     entity_id: Entity identifier.
+    ///     timestamp: Unix timestamp.
+    ///     vector: Embedding vector.
+    ///     reward: Optional outcome reward (e.g., 0.0-1.0). None = no reward.
+    #[pyo3(signature = (entity_id, timestamp, vector, reward=None))]
+    fn insert(&mut self, entity_id: u64, timestamp: i64, vector: Vec<f32>, reward: Option<f32>) -> u32 {
+        match reward {
+            Some(r) => self.inner.insert_with_reward(entity_id, timestamp, &vector, r),
+            None => self.inner.insert(entity_id, timestamp, &vector),
+        }
+    }
+
+    /// Set the reward for a node retroactively.
+    ///
+    /// Useful for annotating outcomes after an episode completes.
+    fn set_reward(&mut self, node_id: u32, reward: f32) {
+        self.inner.set_reward(node_id, reward);
+    }
+
+    /// Get the reward for a node. Returns None if no reward was assigned.
+    fn reward(&self, node_id: u32) -> Option<f32> {
+        let r = self.inner.reward(node_id);
+        if r.is_nan() { None } else { Some(r) }
+    }
+
+    /// Search with reward pre-filtering: only return nodes with reward >= min_reward.
+    ///
+    /// Args:
+    ///     vector: Query embedding.
+    ///     k: Number of results.
+    ///     min_reward: Minimum reward threshold.
+    ///     alpha: Semantic vs temporal weight (default 1.0).
+    ///     query_timestamp: Reference timestamp (default 0).
+    ///     filter_start: Optional temporal range start.
+    ///     filter_end: Optional temporal range end.
+    ///
+    /// Returns:
+    ///     List of (entity_id, timestamp, score) tuples.
+    #[pyo3(signature = (vector, k=10, min_reward=0.0, alpha=1.0, query_timestamp=0, filter_start=None, filter_end=None))]
+    fn search_with_reward(
+        &self,
+        vector: Vec<f32>,
+        k: usize,
+        min_reward: f32,
+        alpha: f32,
+        query_timestamp: i64,
+        filter_start: Option<i64>,
+        filter_end: Option<i64>,
+    ) -> Vec<(u64, i64, f32)> {
+        let filter = match (filter_start, filter_end) {
+            (Some(start), Some(end)) => TemporalFilter::Range(start, end),
+            _ => TemporalFilter::All,
+        };
+        self.inner
+            .search_with_reward(&vector, k, filter, alpha, query_timestamp, min_reward)
+            .into_iter()
+            .map(|(node_id, score)| {
+                let eid = self.inner.entity_id(node_id);
+                let ts = self.inner.timestamp(node_id);
+                (eid, ts, score)
+            })
+            .collect()
     }
 
     /// Bulk insert from numpy arrays.
@@ -117,18 +184,21 @@ impl TemporalIndex {
         vectors: PyReadonlyArray2<f32>,
         ef_construction: Option<usize>,
     ) -> PyResult<usize> {
-        let ids = entity_ids.as_slice()
+        let ids = entity_ids
+            .as_slice()
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("entity_ids: {e}")))?;
-        let ts = timestamps.as_slice()
+        let ts = timestamps
+            .as_slice()
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("timestamps: {e}")))?;
         let vecs = vectors.as_array();
         let n = ids.len();
 
         if ts.len() != n || vecs.nrows() != n {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                format!("Length mismatch: entity_ids={n}, timestamps={}, vectors={}",
-                        ts.len(), vecs.nrows())
-            ));
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Length mismatch: entity_ids={n}, timestamps={}, vectors={}",
+                ts.len(),
+                vecs.nrows()
+            )));
         }
 
         // Optionally lower ef_construction for bulk load
@@ -141,7 +211,9 @@ impl TemporalIndex {
             let row = vecs.row(i);
             // as_slice() can fail if the array isn't C-contiguous
             match row.as_slice() {
-                Some(slice) => { self.inner.insert(ids[i], ts[i], slice); }
+                Some(slice) => {
+                    self.inner.insert(ids[i], ts[i], slice);
+                }
                 None => {
                     let vec: Vec<f32> = row.iter().copied().collect();
                     self.inner.insert(ids[i], ts[i], &vec);
@@ -165,24 +237,38 @@ impl TemporalIndex {
     /// Args:
     ///     path: File path to save to (e.g., "index.cvx").
     fn save(&self, path: String) -> PyResult<()> {
-        self.inner.save(std::path::Path::new(&path))
+        self.inner
+            .save(std::path::Path::new(&path))
             .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("Failed to save index: {e}")))
     }
 
-    /// Load a previously saved index from file.
+    /// Load a previously saved index.
     ///
-    /// Restores the full HNSW graph without rebuilding.
-    /// Typically ~100× faster than bulk_insert for large indices.
+    /// Supports both formats:
+    /// - Directory format (new): contains index.bin + temporal_edges.bin
+    /// - Single file format (legacy .cvx): auto-migrates to TemporalGraphIndex
     ///
     /// Args:
-    ///     path: File path to load from.
+    ///     path: Path to directory or legacy .cvx file.
     ///
     /// Returns:
     ///     A new TemporalIndex with all data and graph structure restored.
     #[staticmethod]
     fn load(path: String) -> PyResult<Self> {
-        let inner = TemporalHnsw::load(std::path::Path::new(&path), L2Distance)
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("Failed to load index: {e}")))?;
+        let p = std::path::Path::new(&path);
+
+        let inner = if p.is_dir() {
+            // New directory format with temporal edges
+            TemporalGraphIndex::load(p, L2Distance)
+        } else {
+            // Legacy single-file format — migrate to TemporalGraphIndex
+            TemporalHnsw::load(p, L2Distance).map(TemporalGraphIndex::from_temporal_hnsw)
+        };
+
+        let inner = inner.map_err(|e| {
+            pyo3::exceptions::PyIOError::new_err(format!("Failed to load index: {e}"))
+        })?;
+
         Ok(Self {
             inner,
             #[cfg(feature = "torch-backend")]
@@ -223,6 +309,51 @@ impl TemporalIndex {
         self.inner.disable_scalar_quantization();
     }
 
+    // ─── Centering (RFC-012 Part B) ──────────────────────────────────
+
+    /// Compute the centroid (mean vector) of all indexed vectors.
+    ///
+    /// Returns the mean vector as a list of floats, or None if the index
+    /// is empty. This is an O(N×D) operation.
+    ///
+    /// Use with `set_centroid()` to enable anisotropy correction.
+    /// After centering, all distance-based analytics (`project_to_anchors`,
+    /// `drift`, `velocity`, etc.) operate on centered vectors, amplifying
+    /// the discriminative signal that embedding models compress.
+    fn compute_centroid(&self) -> Option<Vec<f32>> {
+        self.inner.compute_centroid()
+    }
+
+    /// Set the centroid for anisotropy correction.
+    ///
+    /// Once set, `centered_vector()` subtracts this from any vector.
+    /// The centroid is persisted with `save()`.
+    ///
+    /// Args:
+    ///     centroid: The mean vector to subtract. Can be computed via
+    ///         `compute_centroid()` or provided externally (e.g., from
+    ///         a larger corpus).
+    fn set_centroid(&mut self, centroid: Vec<f32>) {
+        self.inner.set_centroid(centroid);
+    }
+
+    /// Clear the centroid, reverting to raw (uncentered) distances.
+    fn clear_centroid(&mut self) {
+        self.inner.clear_centroid();
+    }
+
+    /// Get the current centroid, if set.
+    fn centroid(&self) -> Option<Vec<f32>> {
+        self.inner.centroid().map(|c| c.to_vec())
+    }
+
+    /// Return a centered copy of the vector (vec - centroid).
+    ///
+    /// If no centroid is set, returns the vector unchanged.
+    fn centered_vector(&self, vec: Vec<f32>) -> Vec<f32> {
+        self.inner.centered_vector(&vec)
+    }
+
     /// Search for k nearest neighbors.
     #[pyo3(signature = (vector, k=10, alpha=1.0, query_timestamp=0, filter_start=None, filter_end=None))]
     fn search(
@@ -241,6 +372,122 @@ impl TemporalIndex {
 
         self.inner
             .search(&vector, k, filter, alpha, query_timestamp)
+            .into_iter()
+            .map(|(node_id, score)| {
+                let eid = self.inner.entity_id(node_id);
+                let ts = self.inner.timestamp(node_id);
+                (eid, ts, score)
+            })
+            .collect()
+    }
+
+    /// Causal search: find similar states and return what happened next.
+    ///
+    /// Phase 1: Standard HNSW search for k nearest neighbors.
+    /// Phase 2: Walk temporal edges forward/backward from each match.
+    ///
+    /// This is the primary retrieval pattern for AI agent memory:
+    /// "Find past states similar to mine, and show me the continuation."
+    ///
+    /// Args:
+    ///     vector: Query embedding.
+    ///     k: Number of matches.
+    ///     temporal_context: Steps to walk forward/backward (default 5).
+    ///     alpha: Semantic vs temporal weight (default 1.0).
+    ///     query_timestamp: Reference timestamp (default 0).
+    ///     filter_start: Optional temporal range start.
+    ///     filter_end: Optional temporal range end.
+    ///
+    /// Returns:
+    ///     List of dicts with keys: node_id, score, entity_id,
+    ///     successors [(node_id, timestamp, vector)],
+    ///     predecessors [(node_id, timestamp, vector)].
+    #[pyo3(signature = (vector, k=5, temporal_context=5, alpha=1.0, query_timestamp=0, filter_start=None, filter_end=None))]
+    fn causal_search(
+        &self,
+        vector: Vec<f32>,
+        k: usize,
+        temporal_context: usize,
+        alpha: f32,
+        query_timestamp: i64,
+        filter_start: Option<i64>,
+        filter_end: Option<i64>,
+    ) -> Vec<pyo3::Py<pyo3::types::PyDict>> {
+        let filter = match (filter_start, filter_end) {
+            (Some(start), Some(end)) => TemporalFilter::Range(start, end),
+            _ => TemporalFilter::All,
+        };
+
+        let results =
+            self.inner
+                .causal_search(&vector, k, filter, alpha, query_timestamp, temporal_context);
+
+        Python::with_gil(|py| {
+            results
+                .into_iter()
+                .map(|r| {
+                    let dict = pyo3::types::PyDict::new(py);
+                    dict.set_item("node_id", r.node_id).unwrap();
+                    dict.set_item("score", r.score).unwrap();
+                    dict.set_item("entity_id", r.entity_id).unwrap();
+
+                    // Successors with vectors
+                    let succ: Vec<(u32, i64, Vec<f32>)> = r
+                        .successors
+                        .iter()
+                        .map(|&(nid, ts)| (nid, ts, self.inner.vector(nid).to_vec()))
+                        .collect();
+                    dict.set_item("successors", succ).unwrap();
+
+                    // Predecessors with vectors
+                    let pred: Vec<(u32, i64, Vec<f32>)> = r
+                        .predecessors
+                        .iter()
+                        .map(|&(nid, ts)| (nid, ts, self.inner.vector(nid).to_vec()))
+                        .collect();
+                    dict.set_item("predecessors", pred).unwrap();
+
+                    dict.into()
+                })
+                .collect()
+        })
+    }
+
+    /// Hybrid search: beam search exploring both semantic and temporal neighbors.
+    ///
+    /// Unlike standard search, this also explores temporal edges (predecessor/
+    /// successor) during HNSW traversal. Useful for finding semantically
+    /// similar points that are also temporally connected.
+    ///
+    /// Args:
+    ///     vector: Query embedding.
+    ///     k: Number of results.
+    ///     beta: Temporal edge exploration weight (0.0=pure semantic, 1.0=aggressive temporal).
+    ///     alpha: Semantic vs temporal distance weight (default 1.0).
+    ///     query_timestamp: Reference timestamp (default 0).
+    ///     filter_start: Optional temporal range start.
+    ///     filter_end: Optional temporal range end.
+    ///
+    /// Returns:
+    ///     List of (entity_id, timestamp, score) tuples.
+    #[pyo3(signature = (vector, k=10, beta=0.3, alpha=1.0, query_timestamp=0, filter_start=None, filter_end=None))]
+    fn hybrid_search(
+        &self,
+        vector: Vec<f32>,
+        k: usize,
+        beta: f32,
+        alpha: f32,
+        query_timestamp: i64,
+        filter_start: Option<i64>,
+        filter_end: Option<i64>,
+    ) -> Vec<(u64, i64, f32)> {
+        let filter = match (filter_start, filter_end) {
+            (Some(start), Some(end)) => TemporalFilter::Range(start, end),
+            _ => TemporalFilter::All,
+        };
+
+        self.inner
+            .hybrid_search(&vector, k, filter, alpha, beta, query_timestamp)
             .into_iter()
             .map(|(node_id, score)| {
                 let eid = self.inner.entity_id(node_id);
@@ -286,9 +533,10 @@ impl TemporalIndex {
     fn predict(&self, entity_id: u64, target_timestamp: i64) -> PyResult<(Vec<f32>, String)> {
         let traj_data = self.inner.trajectory(entity_id, TemporalFilter::All);
         if traj_data.len() < 2 {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                format!("entity {entity_id} has insufficient data ({} points, need 2)", traj_data.len())
-            ));
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "entity {entity_id} has insufficient data ({} points, need 2)",
+                traj_data.len()
+            )));
         }
 
         let vectors: Vec<Vec<f32>> = traj_data
@@ -420,7 +668,8 @@ impl TemporalIndex {
         window_days: i64,
         alpha: f32,
     ) -> Vec<(i64, Vec<f32>)> {
-        self.inner.region_trajectory(entity_id, level, window_days, alpha)
+        self.inner
+            .region_trajectory(entity_id, level, window_days, alpha)
     }
 
     /// Number of points in the index.
@@ -457,7 +706,11 @@ fn velocity(trajectory: Vec<(i64, Vec<f32>)>, timestamp: i64) -> PyResult<Vec<f3
 #[pyo3(signature = (v1, v2, top_n=5))]
 fn drift(v1: Vec<f32>, v2: Vec<f32>, top_n: usize) -> (f32, f32, Vec<(usize, f32)>) {
     let report = calculus::drift_report(&v1, &v2, top_n);
-    (report.l2_magnitude, report.cosine_drift, report.top_dimensions)
+    (
+        report.l2_magnitude,
+        report.cosine_drift,
+        report.top_dimensions,
+    )
 }
 
 /// Detect change points using PELT.
@@ -545,7 +798,10 @@ fn path_signature(
     time_augmentation: bool,
 ) -> PyResult<Vec<f64>> {
     let traj: Vec<(i64, &[f32])> = trajectory.iter().map(|(t, v)| (*t, v.as_slice())).collect();
-    let config = cvx_analytics::signatures::SignatureConfig { depth, time_augmentation };
+    let config = cvx_analytics::signatures::SignatureConfig {
+        depth,
+        time_augmentation,
+    };
     cvx_analytics::signatures::compute_signature(&traj, &config)
         .map(|r| r.signature)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
@@ -563,7 +819,10 @@ fn log_signature(
     time_augmentation: bool,
 ) -> PyResult<Vec<f64>> {
     let traj: Vec<(i64, &[f32])> = trajectory.iter().map(|(t, v)| (*t, v.as_slice())).collect();
-    let config = cvx_analytics::signatures::SignatureConfig { depth, time_augmentation };
+    let config = cvx_analytics::signatures::SignatureConfig {
+        depth,
+        time_augmentation,
+    };
     cvx_analytics::signatures::compute_log_signature(&traj, &config)
         .map(|r| r.signature)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
@@ -581,10 +840,7 @@ fn log_signature(
 /// Returns:
 ///     Fréchet distance (float). Lower = more similar paths.
 #[pyfunction]
-fn frechet_distance(
-    traj_a: Vec<(i64, Vec<f32>)>,
-    traj_b: Vec<(i64, Vec<f32>)>,
-) -> f64 {
+fn frechet_distance(traj_a: Vec<(i64, Vec<f32>)>, traj_b: Vec<(i64, Vec<f32>)>) -> f64 {
     let a: Vec<(i64, &[f32])> = traj_a.iter().map(|(t, v)| (*t, v.as_slice())).collect();
     let b: Vec<(i64, &[f32])> = traj_b.iter().map(|(t, v)| (*t, v.as_slice())).collect();
     cvx_analytics::trajectory::discrete_frechet_temporal(&a, &b)
@@ -596,7 +852,9 @@ fn frechet_distance(
 /// Captures all order-dependent temporal dynamics.
 #[pyfunction]
 fn signature_distance(sig_a: Vec<f64>, sig_b: Vec<f64>) -> f64 {
-    sig_a.iter().zip(sig_b.iter())
+    sig_a
+        .iter()
+        .zip(sig_b.iter())
         .map(|(a, b)| (a - b) * (a - b))
         .sum::<f64>()
         .sqrt()
@@ -686,17 +944,63 @@ fn topological_features(
     use pyo3::IntoPyObject;
 
     let point_refs: Vec<&[f32]> = points.iter().map(|p| p.as_slice()).collect();
-    let feat = cvx_analytics::topology::topological_summary(&point_refs, n_radii, persistence_threshold);
+    let feat =
+        cvx_analytics::topology::topological_summary(&point_refs, n_radii, persistence_threshold);
 
     Python::with_gil(|py| {
         let mut map = std::collections::HashMap::new();
-        map.insert("n_components".into(), feat.n_components.into_pyobject(py).unwrap().into_any().unbind());
-        map.insert("total_persistence".into(), feat.total_persistence_h0.into_pyobject(py).unwrap().into_any().unbind());
-        map.insert("max_persistence".into(), feat.max_persistence.into_pyobject(py).unwrap().into_any().unbind());
-        map.insert("mean_persistence".into(), feat.mean_persistence.into_pyobject(py).unwrap().into_any().unbind());
-        map.insert("persistence_entropy".into(), feat.persistence_entropy.into_pyobject(py).unwrap().into_any().unbind());
-        map.insert("betti_curve".into(), feat.betti_curve.into_pyobject(py).unwrap().into_any().unbind());
-        map.insert("radii".into(), feat.radii.into_pyobject(py).unwrap().into_any().unbind());
+        map.insert(
+            "n_components".into(),
+            feat.n_components
+                .into_pyobject(py)
+                .unwrap()
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "total_persistence".into(),
+            feat.total_persistence_h0
+                .into_pyobject(py)
+                .unwrap()
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "max_persistence".into(),
+            feat.max_persistence
+                .into_pyobject(py)
+                .unwrap()
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "mean_persistence".into(),
+            feat.mean_persistence
+                .into_pyobject(py)
+                .unwrap()
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "persistence_entropy".into(),
+            feat.persistence_entropy
+                .into_pyobject(py)
+                .unwrap()
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "betti_curve".into(),
+            feat.betti_curve
+                .into_pyobject(py)
+                .unwrap()
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "radii".into(),
+            feat.radii.into_pyobject(py).unwrap().into_any().unbind(),
+        );
         map
     })
 }
@@ -753,11 +1057,17 @@ fn project_to_anchors(
     let m = match metric {
         "cosine" => cvx_analytics::anchor::AnchorMetric::Cosine,
         "l2" => cvx_analytics::anchor::AnchorMetric::L2,
-        _ => return Err(pyo3::exceptions::PyValueError::new_err(
-            format!("Unknown metric '{metric}'. Use 'cosine' or 'l2'.")
-        )),
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Unknown metric '{metric}'. Use 'cosine' or 'l2'."
+            )));
+        }
     };
-    Ok(cvx_analytics::anchor::project_to_anchors(&traj, &anchor_refs, m))
+    Ok(cvx_analytics::anchor::project_to_anchors(
+        &traj,
+        &anchor_refs,
+        m,
+    ))
 }
 
 /// Compute summary statistics of anchor proximity over a projected trajectory.
@@ -769,9 +1079,7 @@ fn project_to_anchors(
 ///     Dict with keys: mean, min, trend, last (each a list of K floats).
 ///     trend[k] < 0 means the entity is approaching anchor k over time.
 #[pyfunction]
-fn anchor_summary(
-    projected: Vec<(i64, Vec<f32>)>,
-) -> std::collections::HashMap<String, Vec<f32>> {
+fn anchor_summary(projected: Vec<(i64, Vec<f32>)>) -> std::collections::HashMap<String, Vec<f32>> {
     let summary = cvx_analytics::anchor::anchor_summary(&projected);
     let mut map = std::collections::HashMap::new();
     map.insert("mean".into(), summary.mean);
@@ -821,21 +1129,88 @@ fn cohort_drift(
 
     Python::with_gil(|py| {
         let mut map = std::collections::HashMap::new();
-        map.insert("n_entities".into(), report.n_entities.into_pyobject(py)?.into_any().unbind());
-        map.insert("mean_drift_l2".into(), report.mean_drift_l2.into_pyobject(py)?.into_any().unbind());
-        map.insert("median_drift_l2".into(), report.median_drift_l2.into_pyobject(py)?.into_any().unbind());
-        map.insert("std_drift_l2".into(), report.std_drift_l2.into_pyobject(py)?.into_any().unbind());
-        map.insert("centroid_l2".into(), report.centroid_drift.l2_magnitude.into_pyobject(py)?.into_any().unbind());
-        map.insert("centroid_cosine".into(), report.centroid_drift.cosine_drift.into_pyobject(py)?.into_any().unbind());
-        map.insert("dispersion_t1".into(), report.dispersion_t1.into_pyobject(py)?.into_any().unbind());
-        map.insert("dispersion_t2".into(), report.dispersion_t2.into_pyobject(py)?.into_any().unbind());
-        map.insert("dispersion_change".into(), report.dispersion_change.into_pyobject(py)?.into_any().unbind());
-        map.insert("convergence_score".into(), report.convergence_score.into_pyobject(py)?.into_any().unbind());
-        map.insert("top_dimensions".into(), report.top_dimensions.into_pyobject(py)?.into_any().unbind());
-        let outliers: Vec<(u64, f32, f32, f32)> = report.outliers.into_iter()
-            .map(|o| (o.entity_id, o.drift_magnitude, o.z_score, o.drift_direction_alignment))
+        map.insert(
+            "n_entities".into(),
+            report.n_entities.into_pyobject(py)?.into_any().unbind(),
+        );
+        map.insert(
+            "mean_drift_l2".into(),
+            report.mean_drift_l2.into_pyobject(py)?.into_any().unbind(),
+        );
+        map.insert(
+            "median_drift_l2".into(),
+            report
+                .median_drift_l2
+                .into_pyobject(py)?
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "std_drift_l2".into(),
+            report.std_drift_l2.into_pyobject(py)?.into_any().unbind(),
+        );
+        map.insert(
+            "centroid_l2".into(),
+            report
+                .centroid_drift
+                .l2_magnitude
+                .into_pyobject(py)?
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "centroid_cosine".into(),
+            report
+                .centroid_drift
+                .cosine_drift
+                .into_pyobject(py)?
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "dispersion_t1".into(),
+            report.dispersion_t1.into_pyobject(py)?.into_any().unbind(),
+        );
+        map.insert(
+            "dispersion_t2".into(),
+            report.dispersion_t2.into_pyobject(py)?.into_any().unbind(),
+        );
+        map.insert(
+            "dispersion_change".into(),
+            report
+                .dispersion_change
+                .into_pyobject(py)?
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "convergence_score".into(),
+            report
+                .convergence_score
+                .into_pyobject(py)?
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "top_dimensions".into(),
+            report.top_dimensions.into_pyobject(py)?.into_any().unbind(),
+        );
+        let outliers: Vec<(u64, f32, f32, f32)> = report
+            .outliers
+            .into_iter()
+            .map(|o| {
+                (
+                    o.entity_id,
+                    o.drift_magnitude,
+                    o.z_score,
+                    o.drift_direction_alignment,
+                )
+            })
             .collect();
-        map.insert("outliers".into(), outliers.into_pyobject(py)?.into_any().unbind());
+        map.insert(
+            "outliers".into(),
+            outliers.into_pyobject(py)?.into_any().unbind(),
+        );
         Ok(map)
     })
 }
@@ -864,7 +1239,16 @@ fn temporal_join(
         .map(|results| {
             results
                 .into_iter()
-                .map(|r| (r.start, r.end, r.mean_distance, r.min_distance, r.points_a, r.points_b))
+                .map(|r| {
+                    (
+                        r.start,
+                        r.end,
+                        r.mean_distance,
+                        r.min_distance,
+                        r.points_a,
+                        r.points_b,
+                    )
+                })
                 .collect()
         })
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
@@ -900,13 +1284,27 @@ fn discover_motifs(
             .into_iter()
             .map(|m| {
                 let mut map = std::collections::HashMap::new();
-                map.insert("canonical_index".into(), m.canonical_index.into_pyobject(py)?.into_any().unbind());
-                let occs: Vec<(usize, i64, f32)> = m.occurrences.into_iter()
+                map.insert(
+                    "canonical_index".into(),
+                    m.canonical_index.into_pyobject(py)?.into_any().unbind(),
+                );
+                let occs: Vec<(usize, i64, f32)> = m
+                    .occurrences
+                    .into_iter()
                     .map(|o| (o.start_index, o.timestamp, o.distance))
                     .collect();
-                map.insert("occurrences".into(), occs.into_pyobject(py)?.into_any().unbind());
-                map.insert("period".into(), m.period.into_pyobject(py)?.into_any().unbind());
-                map.insert("mean_match_distance".into(), m.mean_match_distance.into_pyobject(py)?.into_any().unbind());
+                map.insert(
+                    "occurrences".into(),
+                    occs.into_pyobject(py)?.into_any().unbind(),
+                );
+                map.insert(
+                    "period".into(),
+                    m.period.into_pyobject(py)?.into_any().unbind(),
+                );
+                map.insert(
+                    "mean_match_distance".into(),
+                    m.mean_match_distance.into_pyobject(py)?.into_any().unbind(),
+                );
                 Ok(map)
             })
             .collect()
@@ -975,11 +1373,26 @@ fn granger_causality(
             cvx_analytics::granger::GrangerDirection::Bidirectional => "bidirectional",
             cvx_analytics::granger::GrangerDirection::None => "none",
         };
-        map.insert("direction".into(), direction.into_pyobject(py)?.into_any().unbind());
-        map.insert("optimal_lag".into(), result.optimal_lag.into_pyobject(py)?.into_any().unbind());
-        map.insert("f_statistic".into(), result.f_statistic.into_pyobject(py)?.into_any().unbind());
-        map.insert("p_value".into(), result.p_value.into_pyobject(py)?.into_any().unbind());
-        map.insert("effect_size".into(), result.effect_size.into_pyobject(py)?.into_any().unbind());
+        map.insert(
+            "direction".into(),
+            direction.into_pyobject(py)?.into_any().unbind(),
+        );
+        map.insert(
+            "optimal_lag".into(),
+            result.optimal_lag.into_pyobject(py)?.into_any().unbind(),
+        );
+        map.insert(
+            "f_statistic".into(),
+            result.f_statistic.into_pyobject(py)?.into_any().unbind(),
+        );
+        map.insert(
+            "p_value".into(),
+            result.p_value.into_pyobject(py)?.into_any().unbind(),
+        );
+        map.insert(
+            "effect_size".into(),
+            result.effect_size.into_pyobject(py)?.into_any().unbind(),
+        );
         Ok(map)
     })
 }
@@ -1006,18 +1419,46 @@ fn counterfactual_trajectory(
     use pyo3::IntoPyObject;
 
     let pre: Vec<(i64, &[f32])> = pre_change.iter().map(|(t, v)| (*t, v.as_slice())).collect();
-    let post: Vec<(i64, &[f32])> = post_change.iter().map(|(t, v)| (*t, v.as_slice())).collect();
+    let post: Vec<(i64, &[f32])> = post_change
+        .iter()
+        .map(|(t, v)| (*t, v.as_slice()))
+        .collect();
 
-    let result = cvx_analytics::counterfactual::counterfactual_trajectory(&pre, &post, change_point)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let result =
+        cvx_analytics::counterfactual::counterfactual_trajectory(&pre, &post, change_point)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
     Python::with_gil(|py| {
         let mut map = std::collections::HashMap::new();
-        map.insert("total_divergence".into(), result.total_divergence.into_pyobject(py)?.into_any().unbind());
-        map.insert("max_divergence_value".into(), result.max_divergence_value.into_pyobject(py)?.into_any().unbind());
-        map.insert("max_divergence_time".into(), result.max_divergence_time.into_pyobject(py)?.into_any().unbind());
+        map.insert(
+            "total_divergence".into(),
+            result
+                .total_divergence
+                .into_pyobject(py)?
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "max_divergence_value".into(),
+            result
+                .max_divergence_value
+                .into_pyobject(py)?
+                .into_any()
+                .unbind(),
+        );
+        map.insert(
+            "max_divergence_time".into(),
+            result
+                .max_divergence_time
+                .into_pyobject(py)?
+                .into_any()
+                .unbind(),
+        );
         let curve: Vec<(i64, f32)> = result.divergence_curve;
-        map.insert("divergence_curve".into(), curve.into_pyobject(py)?.into_any().unbind());
+        map.insert(
+            "divergence_curve".into(),
+            curve.into_pyobject(py)?.into_any().unbind(),
+        );
         Ok(map)
     })
 }

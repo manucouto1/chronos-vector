@@ -3,18 +3,28 @@
 //! Stores `HashMap<String, String>` per node_id, enabling metadata filtering
 //! on search results without modifying the HNSW graph structure.
 
+use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use cvx_core::types::metadata_filter::MetadataFilter;
+use cvx_core::types::metadata_filter::{MetadataFilter, MetadataPredicate};
 
-/// Dense metadata store: node_id → metadata map.
+/// Dense metadata store with inverted index for O(1) pre-filtering.
 ///
-/// Memory: ~200 bytes per node with 5 metadata fields (String overhead).
+/// Two data structures:
+/// - `entries`: node_id → metadata map (for retrieval)
+/// - `inverted`: key → value → RoaringBitmap of node_ids (for filtering)
+///
+/// The inverted index supports exact-match pre-filtering during HNSW
+/// traversal, replacing the O(4k) post-filter with O(1) bitmap lookups.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MetadataStore {
     /// node_id → metadata. Empty HashMap for nodes without metadata.
     entries: Vec<HashMap<String, String>>,
+    /// Inverted index: key → value → bitmap of matching node_ids.
+    /// Only populated for exact string values (not numeric ranges).
+    #[serde(default)]
+    inverted: HashMap<String, HashMap<String, RoaringBitmap>>,
 }
 
 impl MetadataStore {
@@ -22,11 +32,22 @@ impl MetadataStore {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
+            inverted: HashMap::new(),
         }
     }
 
     /// Register metadata for a new node (must be called in order).
     pub fn push(&mut self, metadata: HashMap<String, String>) {
+        let node_id = self.entries.len() as u32;
+        // Update inverted index
+        for (key, value) in &metadata {
+            self.inverted
+                .entry(key.clone())
+                .or_default()
+                .entry(value.clone())
+                .or_default()
+                .insert(node_id);
+        }
         self.entries.push(metadata);
     }
 
@@ -48,6 +69,56 @@ impl MetadataStore {
             return true;
         }
         filter.matches(self.get(node_id))
+    }
+
+    /// Build a RoaringBitmap of node_ids matching the metadata filter.
+    ///
+    /// For `Equals` predicates: uses the inverted index for O(1) lookup.
+    /// For other predicates (Gte, Lte, Contains, Exists): falls back to
+    /// scanning entries.
+    ///
+    /// Multiple predicates are AND-combined (intersection).
+    pub fn build_filter_bitmap(&self, filter: &MetadataFilter) -> RoaringBitmap {
+        if filter.is_empty() {
+            // No filter → all nodes match
+            let mut all = RoaringBitmap::new();
+            for i in 0..self.entries.len() as u32 {
+                all.insert(i);
+            }
+            return all;
+        }
+
+        let mut result: Option<RoaringBitmap> = None;
+
+        for (field, predicate) in &filter.predicates {
+            let bitmap = match predicate {
+                MetadataPredicate::Equals(value) => {
+                    // Fast path: use inverted index
+                    self.inverted
+                        .get(field)
+                        .and_then(|values| values.get(value))
+                        .cloned()
+                        .unwrap_or_default()
+                }
+                _ => {
+                    // Slow path: scan entries
+                    let mut bm = RoaringBitmap::new();
+                    for (i, entry) in self.entries.iter().enumerate() {
+                        if predicate.matches(entry.get(field)) {
+                            bm.insert(i as u32);
+                        }
+                    }
+                    bm
+                }
+            };
+
+            result = Some(match result {
+                Some(existing) => existing & bitmap, // AND intersection
+                None => bitmap,
+            });
+        }
+
+        result.unwrap_or_default()
     }
 
     /// Filter a list of (node_id, score) results by metadata.
@@ -124,5 +195,113 @@ mod tests {
         let results = vec![(0u32, 0.1f32), (1, 0.2)];
         let filtered = store.filter_results(&results, &MetadataFilter::new());
         assert_eq!(filtered.len(), 2);
+    }
+
+    // ─── Inverted index tests ────────────────────────────────────
+
+    #[test]
+    fn inverted_index_built_on_push() {
+        let mut store = MetadataStore::new();
+        let mut m = HashMap::new();
+        m.insert("goal".into(), "clean".into());
+        m.insert("room".into(), "kitchen".into());
+        store.push(m);
+
+        let mut m2 = HashMap::new();
+        m2.insert("goal".into(), "clean".into());
+        m2.insert("room".into(), "bedroom".into());
+        store.push(m2);
+
+        let mut m3 = HashMap::new();
+        m3.insert("goal".into(), "find".into());
+        store.push(m3);
+
+        // Check inverted index
+        let goal_clean = &store.inverted["goal"]["clean"];
+        assert!(goal_clean.contains(0));
+        assert!(goal_clean.contains(1));
+        assert!(!goal_clean.contains(2));
+
+        let goal_find = &store.inverted["goal"]["find"];
+        assert!(goal_find.contains(2));
+        assert_eq!(goal_find.len(), 1);
+    }
+
+    #[test]
+    fn build_filter_bitmap_equals_uses_inverted() {
+        let mut store = MetadataStore::new();
+        for i in 0..100u32 {
+            let mut m = HashMap::new();
+            m.insert(
+                "goal".into(),
+                if i % 3 == 0 { "clean" } else { "find" }.into(),
+            );
+            store.push(m);
+        }
+
+        let filter = MetadataFilter::new().equals("goal", "clean");
+        let bitmap = store.build_filter_bitmap(&filter);
+        assert_eq!(bitmap.len(), 34); // 0,3,6,...,99 → 34 values
+
+        for id in bitmap.iter() {
+            assert_eq!(id % 3, 0);
+        }
+    }
+
+    #[test]
+    fn build_filter_bitmap_gte_scans() {
+        let mut store = MetadataStore::new();
+        for i in 0..10u32 {
+            let mut m = HashMap::new();
+            m.insert("reward".into(), format!("{}", i as f64 * 0.1));
+            store.push(m);
+        }
+
+        let filter = MetadataFilter::new().gte("reward", 0.5);
+        let bitmap = store.build_filter_bitmap(&filter);
+        // reward >= 0.5: nodes 5(0.5),6(0.6),7(0.7),8(0.8),9(0.9)
+        assert_eq!(bitmap.len(), 5);
+        for id in bitmap.iter() {
+            assert!(id >= 5);
+        }
+    }
+
+    #[test]
+    fn build_filter_bitmap_combined_and() {
+        let mut store = MetadataStore::new();
+        for i in 0..20u32 {
+            let mut m = HashMap::new();
+            m.insert(
+                "goal".into(),
+                if i % 2 == 0 { "clean" } else { "find" }.into(),
+            );
+            m.insert("reward".into(), format!("{}", i as f64 * 0.05));
+            store.push(m);
+        }
+
+        // goal=clean AND reward >= 0.5
+        let filter = MetadataFilter::new()
+            .equals("goal", "clean")
+            .gte("reward", 0.5);
+        let bitmap = store.build_filter_bitmap(&filter);
+
+        // goal=clean: 0,2,4,6,8,10,12,14,16,18
+        // reward >= 0.5: 10(0.5),11,12,...,19
+        // AND: 10,12,14,16,18
+        assert_eq!(bitmap.len(), 5);
+        for id in bitmap.iter() {
+            assert!(id >= 10);
+            assert_eq!(id % 2, 0);
+        }
+    }
+
+    #[test]
+    fn build_filter_bitmap_empty_returns_all() {
+        let mut store = MetadataStore::new();
+        for _ in 0..10 {
+            store.push_empty();
+        }
+        let bitmap = store.build_filter_bitmap(&MetadataFilter::new());
+        assert_eq!(bitmap.len(), 10);
     }
 }
