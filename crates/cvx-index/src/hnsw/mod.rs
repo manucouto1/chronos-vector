@@ -960,6 +960,96 @@ mod tests {
         assert!((recall_at_k(&approx, &truth) - 2.0 / 3.0).abs() < 1e-10);
     }
 
+    // ─── Accessor coverage ────────────────────────────────────────
+
+    #[test]
+    fn vector_accessor() {
+        let mut graph = make_graph(16, 200, 50);
+        graph.insert(0, &[1.0, 2.0, 3.0]);
+        graph.insert(1, &[4.0, 5.0, 6.0]);
+        assert_eq!(graph.vector(0), &[1.0, 2.0, 3.0]);
+        assert_eq!(graph.vector(1), &[4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn nodes_at_level() {
+        let mut graph = make_graph(4, 50, 50);
+        // Insert enough nodes to get some at level 1+
+        for i in 0..200u32 {
+            graph.insert(i, &[i as f32, (200 - i) as f32]);
+        }
+        let l0 = graph.nodes_at_level(0);
+        assert_eq!(l0.len(), 200);
+        let l1 = graph.nodes_at_level(1);
+        assert!(!l1.is_empty(), "should have some level-1 nodes");
+        assert!(l1.len() < 200, "level 1 should be sparser than level 0");
+    }
+
+    #[test]
+    fn assign_region_returns_hub() {
+        let mut graph = make_graph(4, 50, 50);
+        let mut rng = rand::rng();
+        for i in 0..200u32 {
+            let v: Vec<f32> = (0..8).map(|_| rng.random::<f32>()).collect();
+            graph.insert(i, &v);
+        }
+
+        let query: Vec<f32> = (0..8).map(|_| rng.random::<f32>()).collect();
+        let hub = graph.assign_region(&query, 1);
+        assert!(hub.is_some(), "should find a hub at level 1");
+
+        // Hub should be a node at level 1
+        let level1_nodes = graph.nodes_at_level(1);
+        assert!(level1_nodes.contains(&hub.unwrap()));
+    }
+
+    #[test]
+    fn search_filtered_respects_predicate() {
+        let mut graph = make_graph(16, 200, 100);
+        for i in 0..100u32 {
+            graph.insert(i, &[i as f32, 0.0]);
+        }
+
+        // Only allow even-numbered nodes
+        let results = graph.search_filtered(&[50.0, 0.0], 5, |id| id % 2 == 0);
+        assert_eq!(results.len(), 5);
+        for &(id, _) in &results {
+            assert_eq!(id % 2, 0, "node {id} should be even");
+        }
+    }
+
+    #[test]
+    fn snapshot_round_trip() {
+        let mut graph = make_graph(16, 100, 50);
+        for i in 0..50u32 {
+            graph.insert(i, &[i as f32, (50 - i) as f32]);
+        }
+
+        let snapshot = graph.to_snapshot();
+        let restored = HnswGraph::from_snapshot(snapshot, L2Distance);
+
+        assert_eq!(restored.len(), 50);
+        assert_eq!(restored.vector(0), &[0.0, 50.0]);
+        assert_eq!(restored.vector(49), &[49.0, 1.0]);
+
+        // Search should work on restored graph
+        let results = restored.search(&[25.0, 25.0], 3);
+        assert_eq!(results.len(), 3);
+    }
+
+    #[test]
+    fn distance_to_node() {
+        let mut graph = make_graph(16, 200, 50);
+        graph.insert(0, &[1.0, 0.0]);
+        graph.insert(1, &[0.0, 1.0]);
+
+        let d = graph.distance_to(0, &[1.0, 0.0]);
+        assert!(d < 1e-5, "distance to self should be ~0, got {d}");
+
+        let d2 = graph.distance_to(1, &[1.0, 0.0]);
+        assert!(d2 > 1.0, "distance to orthogonal should be > 1, got {d2}");
+    }
+
     /// 100K vectors D=128, recall@10 ≥ 0.95 (Layer 2 exit criterion)
     #[test]
     #[ignore] // slow: ~10s, run with `cargo test -- --ignored`
