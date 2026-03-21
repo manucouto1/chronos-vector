@@ -51,6 +51,12 @@ for t in range(100):
 traj0, traj1, traj2 = index.trajectory(0), index.trajectory(1), index.trajectory(2)
 ```
 
+The raw signals — vector norm and first 3 dimensions over time — show the structure that CVX analytics will detect:
+
+<iframe src="/chronos-vector/plots/quickstart_raw_signals.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+
+**Top row**: Vector norm over time. The OU process is bounded (~0.3-0.5), the onset entity drops sharply after day 40, and the periodic entity oscillates regularly. **Bottom row**: First 3 dimensions showing the underlying dynamics — mean reversion, regime shift, and sinusoidal oscillation.
+
 ---
 
 ## 1. Vector Differential Calculus

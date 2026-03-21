@@ -73,6 +73,10 @@ print(f"{len(index)} points inserted")
 300 points inserted
 ```
 
+The raw signals show the three distinct behaviors — the OU process is bounded and smooth, the onset entity shifts abruptly after day 40, and the periodic entity oscillates with a 14-day cycle:
+
+<iframe src="/chronos-vector/plots/quickstart_raw_signals.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
+
 The HNSW index parameters control the speed/accuracy trade-off:
 
 | Parameter | Effect | Typical value |
