@@ -65,6 +65,10 @@ pub struct TemporalHnsw<D: DistanceMetric> {
     /// this mean vector, amplifying the discriminative signal that is
     /// otherwise compressed by the dominant "average text" direction.
     centroid: Option<Vec<f32>>,
+    /// Optional per-node reward for outcome-aware search (RFC-012 P4).
+    ///
+    /// NaN means "no reward assigned". Stored parallel to timestamps/entity_ids.
+    rewards: Vec<f32>,
 }
 
 impl<D: DistanceMetric> TemporalHnsw<D> {
@@ -79,6 +83,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             max_timestamp: i64::MIN,
             metadata_store: None,
             centroid: None,
+            rewards: Vec::new(),
         }
     }
 
@@ -133,10 +138,25 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
     ///
     /// Returns the internal node_id assigned to this point.
     pub fn insert(&mut self, entity_id: u64, timestamp: i64, vector: &[f32]) -> u32 {
+        self.insert_with_reward(entity_id, timestamp, vector, f32::NAN)
+    }
+
+    /// Insert a temporal point with an outcome reward.
+    ///
+    /// `reward` annotates this point with an outcome signal (e.g., 0.0-1.0).
+    /// Use `f32::NAN` for "no reward assigned".
+    pub fn insert_with_reward(
+        &mut self,
+        entity_id: u64,
+        timestamp: i64,
+        vector: &[f32],
+        reward: f32,
+    ) -> u32 {
         let node_id = self.graph.len() as u32;
         self.graph.insert(node_id, vector);
         self.timestamps.push(timestamp);
         self.entity_ids.push(entity_id);
+        self.rewards.push(reward);
 
         // Update entity index
         self.entity_index
@@ -178,6 +198,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         self.graph.insert(node_id, vector);
         self.timestamps.push(timestamp);
         self.entity_ids.push(entity_id);
+        self.rewards.push(f32::NAN);
 
         self.entity_index
             .entry(entity_id)
@@ -220,6 +241,82 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         let range = (self.max_timestamp - self.min_timestamp).max(1) as f64;
         let diff = (t1 as f64 - t2 as f64).abs();
         (diff / range) as f32
+    }
+
+    // ─── Outcome / Reward (RFC-012 P4) ──────────────────────────────
+
+    /// Get the reward for a node. Returns NaN if no reward was assigned.
+    pub fn reward(&self, node_id: u32) -> f32 {
+        self.rewards
+            .get(node_id as usize)
+            .copied()
+            .unwrap_or(f32::NAN)
+    }
+
+    /// Set the reward for a node retroactively.
+    ///
+    /// Useful for annotating outcomes after an episode completes.
+    pub fn set_reward(&mut self, node_id: u32, reward: f32) {
+        if let Some(r) = self.rewards.get_mut(node_id as usize) {
+            *r = reward;
+        }
+    }
+
+    /// Build a bitmap of node_ids with reward >= min_reward.
+    pub fn build_reward_bitmap(&self, min_reward: f32) -> RoaringBitmap {
+        let mut bitmap = RoaringBitmap::new();
+        for (i, &r) in self.rewards.iter().enumerate() {
+            if !r.is_nan() && r >= min_reward {
+                bitmap.insert(i as u32);
+            }
+        }
+        bitmap
+    }
+
+    /// Search with reward filtering: only return nodes with reward >= min_reward.
+    ///
+    /// Combines temporal filter + reward filter as bitmap pre-filter.
+    pub fn search_with_reward(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+        min_reward: f32,
+    ) -> Vec<(u32, f32)> {
+        if self.is_empty() {
+            return Vec::new();
+        }
+
+        let temporal_bitmap = self.build_filter_bitmap(&filter);
+        let reward_bitmap = self.build_reward_bitmap(min_reward);
+        let combined = temporal_bitmap & reward_bitmap;
+
+        if combined.is_empty() {
+            return Vec::new();
+        }
+
+        let candidates = self
+            .graph
+            .search_filtered(query, k, |id| combined.contains(id));
+
+        if alpha >= 1.0 {
+            return candidates;
+        }
+
+        let mut scored: Vec<(u32, f32)> = candidates
+            .into_iter()
+            .map(|(id, sem_dist)| {
+                let t_dist = self
+                    .temporal_distance_normalized(self.timestamps[id as usize], query_timestamp);
+                (id, alpha * sem_dist + (1.0 - alpha) * t_dist)
+            })
+            .collect();
+
+        scored.sort_by(|a, b| a.1.total_cmp(&b.1));
+        scored.truncate(k);
+        scored
     }
 
     // ─── Centering (RFC-012 Part B) ──────────────────────────────────
@@ -576,6 +673,9 @@ struct TemporalSnapshot {
     /// Centroid for anisotropy correction (RFC-012 Part B).
     #[serde(default)]
     centroid: Option<Vec<f32>>,
+    /// Per-node reward for outcome-aware search (RFC-012 P4).
+    #[serde(default)]
+    rewards: Vec<f32>,
 }
 
 impl<D: DistanceMetric> TemporalHnsw<D> {
@@ -593,6 +693,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             max_timestamp: self.max_timestamp,
             metadata_store: self.metadata_store.clone(),
             centroid: self.centroid.clone(),
+            rewards: self.rewards.clone(),
         };
 
         let bytes = postcard::to_allocvec(&snapshot).map_err(std::io::Error::other)?;
@@ -613,6 +714,14 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         let snapshot: TemporalSnapshot = postcard::from_bytes(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
+        let n_points = snapshot.timestamps.len();
+        let rewards = if snapshot.rewards.is_empty() {
+            // Backward compat: old snapshots have no rewards → fill with NaN
+            vec![f32::NAN; n_points]
+        } else {
+            snapshot.rewards
+        };
+
         Ok(Self {
             graph: HnswGraph::from_snapshot(snapshot.graph, metric),
             timestamps: snapshot.timestamps,
@@ -622,6 +731,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             max_timestamp: snapshot.max_timestamp,
             metadata_store: snapshot.metadata_store,
             centroid: snapshot.centroid,
+            rewards,
         })
     }
 }
@@ -1485,5 +1595,73 @@ mod tests {
         let results =
             index.search_with_metadata(&[2.0, 0.0], 3, TemporalFilter::All, 1.0, 0, &filter);
         assert_eq!(results.len(), 3);
+    }
+
+    // ─── Reward / outcome-aware search (RFC-012 P4) ──────────────
+
+    #[test]
+    fn insert_with_reward_stores_reward() {
+        let mut index = make_temporal_index();
+        let n0 = index.insert(1, 1000, &[1.0, 0.0]);
+        let n1 = index.insert_with_reward(2, 2000, &[0.0, 1.0], 0.8);
+
+        assert!(index.reward(n0).is_nan()); // no reward
+        assert!((index.reward(n1) - 0.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn set_reward_updates_retroactively() {
+        let mut index = make_temporal_index();
+        let n0 = index.insert(1, 1000, &[1.0, 0.0]);
+        assert!(index.reward(n0).is_nan());
+
+        index.set_reward(n0, 0.95);
+        assert!((index.reward(n0) - 0.95).abs() < 1e-6);
+    }
+
+    #[test]
+    fn search_with_reward_filters() {
+        let mut index = make_temporal_index();
+        // Insert 10 points with varying rewards
+        for i in 0..10u64 {
+            index.insert_with_reward(i, i as i64 * 1000, &[i as f32, 0.0, 0.0], i as f32 * 0.1);
+        }
+
+        // min_reward=0.5 → only nodes 5..9
+        let results =
+            index.search_with_reward(&[7.0, 0.0, 0.0], 5, TemporalFilter::All, 1.0, 0, 0.5);
+        assert!(!results.is_empty());
+        for &(node_id, _) in &results {
+            let r = index.reward(node_id);
+            assert!(r >= 0.5, "node {node_id} has reward {r} < 0.5");
+        }
+    }
+
+    #[test]
+    fn search_with_reward_no_matches() {
+        let mut index = make_temporal_index();
+        for i in 0..5u64 {
+            index.insert_with_reward(i, i as i64 * 1000, &[i as f32, 0.0], 0.1);
+        }
+
+        let results = index.search_with_reward(&[2.0, 0.0], 5, TemporalFilter::All, 1.0, 0, 0.9);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn reward_survives_save_load() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("test_reward_snapshot.cvx");
+
+        let mut index = make_temporal_index();
+        index.insert_with_reward(1, 1000, &[1.0, 0.0], 0.75);
+        index.insert(2, 2000, &[0.0, 1.0]); // no reward
+        index.save(&path).unwrap();
+
+        let loaded = TemporalHnsw::load(&path, L2Distance).unwrap();
+        assert!((loaded.reward(0) - 0.75).abs() < 1e-6);
+        assert!(loaded.reward(1).is_nan());
+
+        std::fs::remove_file(&path).ok();
     }
 }
