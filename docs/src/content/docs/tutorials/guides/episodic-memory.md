@@ -51,7 +51,7 @@ print(f"{len(episodes)} episodes ({successes} successful), {len(index)} points")
 20 episodes (13 successful), 100 points
 ```
 
-<iframe src="/chronos-vector/plots/episodic_outcomes.html"></iframe>
+<iframe src="/chronos-vector/plots/episodic_outcomes.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ## Reward-Filtered Search
 
@@ -101,7 +101,7 @@ Match: Episode 15 step 4 (score=13.557)
   0 successors, 3 predecessors
 ```
 
-<iframe src="/chronos-vector/plots/episodic_causal.html"></iframe>
+<iframe src="/chronos-vector/plots/episodic_causal.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 Each match shows the step that was found (0) plus the steps that came before (-) and after (+) in the same episode.
 

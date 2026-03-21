@@ -112,19 +112,18 @@ nav.sidebar .top-level > li > a {
 }
 
 /* ===== Wider content area ===== */
-.sl-markdown-content {
-	max-width: 55rem;
+:root {
+	--sl-content-width: 55rem;
 }
 
 /* ===== Notebook output styling ===== */
 iframe[src*="/plots/"] {
 	width: 100%;
-	max-width: 100%;
-	height: 480px;
+	height: 620px;
 	border: none;
 	border-radius: 8px;
-	margin: 1.5rem 0;
-	background: #111827;
+	margin: 1rem 0;
+	background: #1a1a2e;
 }
 
 .nb-output {

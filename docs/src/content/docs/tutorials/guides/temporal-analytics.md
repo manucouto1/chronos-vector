@@ -54,7 +54,7 @@ print(f"Regime entity drift: L2={l2:.3f}, cosine={cosine:.4f}")
 Regime entity drift: L2=5.627, cosine=1.9959
 ```
 
-<iframe src="/chronos-vector/plots/analytics_drift.html"></iframe>
+<iframe src="/chronos-vector/plots/analytics_drift.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 The **regime change** entity (red) shows a sudden jump in cumulative drift at step 50. The **trending** entity (green) drifts steadily. The **noise** entity (blue) drifts randomly with no clear direction.
 
@@ -143,7 +143,7 @@ Signature dimension: 1056 (D=32, depth=2)
   trending vs regime: 18.148
 ```
 
-<iframe src="/chronos-vector/plots/analytics_signatures.html"></iframe>
+<iframe src="/chronos-vector/plots/analytics_signatures.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 The distance matrix shows that the trending and regime trajectories have the most different shapes — the abrupt regime change creates a very different signature from smooth drift.
 
@@ -166,7 +166,7 @@ When only **event timing** is available (no embeddings), point process features 
 | **Entropy** | $H = -\sum p_i \log p_i$ | Uniformity of event distribution over time bins |
 | **Gap CV** | $\text{CV} = \sigma_\tau / \mu_\tau$ | Coefficient of variation of inter-event gaps |
 
-<iframe src="/chronos-vector/plots/analytics_events.html"></iframe>
+<iframe src="/chronos-vector/plots/analytics_events.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 Bursty events show high burstiness and gap CV; uniform events show near-zero burstiness and high entropy.
 
@@ -226,7 +226,7 @@ print(f"Total persistence: {topo['total_persistence']:.4f}")
 print(f"Max persistence:   {topo['max_persistence']:.4f}")
 ```
 
-<iframe src="/chronos-vector/plots/analytics_topology.html"></iframe>
+<iframe src="/chronos-vector/plots/analytics_topology.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 The Betti curve shows how connected components merge as the radius grows. A sharp drop indicates well-separated clusters.
 

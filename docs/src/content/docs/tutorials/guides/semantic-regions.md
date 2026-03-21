@@ -53,15 +53,15 @@ for hub_id, members in sorted(assignments.items(), key=lambda x: -len(x[1]))[:3]
   Hub 301: 26 members, purity=100%
 ```
 
-<iframe src="/chronos-vector/plots/regions_purity.html"></iframe>
+<iframe src="/chronos-vector/plots/regions_purity.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
-<iframe src="/chronos-vector/plots/regions_sizes.html"></iframe>
+<iframe src="/chronos-vector/plots/regions_sizes.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ## Region Trajectory (EMA-Smoothed)
 
 Track membership evolution with exponential smoothing: $\mathbf{s}(t) = \alpha \cdot \mathbf{c}(t) + (1-\alpha) \cdot \mathbf{s}(t-1)$
 
-<iframe src="/chronos-vector/plots/regions_trajectory.html"></iframe>
+<iframe src="/chronos-vector/plots/regions_trajectory.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ## Distributional Distances
 

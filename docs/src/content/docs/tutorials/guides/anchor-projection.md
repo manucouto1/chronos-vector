@@ -73,7 +73,7 @@ Centered cosine sim: 0.1834
 Gap amplification:   28x
 ```
 
-<iframe src="/chronos-vector/plots/anchor_anisotropy.html"></iframe>
+<iframe src="/chronos-vector/plots/anchor_anisotropy.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 <Aside type="caution" title="Raw similarity is useless">
 Left panel: raw cosine similarities clustered around 0.97 — Groups A and B are indistinguishable. Right panel: after centering, similarity drops to ~0.18, revealing the actual discriminative signal.
@@ -109,7 +109,7 @@ proj_a = cvx.project_to_anchors(traj_a, anchors, metric="cosine")
 proj_b = cvx.project_to_anchors(traj_b, anchors, metric="cosine")
 ```
 
-<iframe src="/chronos-vector/plots/anchor_projection.html"></iframe>
+<iframe src="/chronos-vector/plots/anchor_projection.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 Group A (red) shows **decreasing distance to Anchor 0** over time — it's approaching that dimension. Group B (blue) stays stable across all anchors.
 

@@ -106,7 +106,7 @@ $$\mathbf{v}'(t) \approx \frac{\mathbf{v}(t + \Delta t) - \mathbf{v}(t - \Delta 
 
 A high velocity indicates rapid semantic change — the entity's representation is shifting fast.
 
-<iframe src="/chronos-vector/plots/quickstart_velocity.html"></iframe>
+<iframe src="/chronos-vector/plots/quickstart_velocity.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 The **smooth drift** entity (green) shows low, consistent velocity. The **regime change** entity (red) shows a sharp velocity spike at day 50 when its embedding space flips. The **noise** entity (blue) shows moderate, erratic velocity.
 
@@ -133,7 +133,7 @@ print(f"Hurst exponent: {h:.4f}")
 Hurst exponent: 0.7074
 ```
 
-<iframe src="/chronos-vector/plots/quickstart_hurst.html"></iframe>
+<iframe src="/chronos-vector/plots/quickstart_hurst.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ### Change Point Detection (PELT)
 
@@ -155,7 +155,7 @@ print(f"{len(cps)} change point(s) detected")
   day=50, severity=0.963
 ```
 
-<iframe src="/chronos-vector/plots/quickstart_changepoints.html"></iframe>
+<iframe src="/chronos-vector/plots/quickstart_changepoints.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 PELT correctly identifies the regime change at day 50, where the entity's embedding flips from positive to negative values.
 
@@ -192,13 +192,13 @@ print(f"{total} points assigned across {len(assignments)} regions")
 1000 points assigned across 17 regions
 ```
 
-<iframe src="/chronos-vector/plots/quickstart_regions.html"></iframe>
+<iframe src="/chronos-vector/plots/quickstart_regions.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 ## Trajectory Visualization
 
 Three synthetic entities show distinct behaviors in embedding space:
 
-<iframe src="/chronos-vector/plots/quickstart_trajectories.html"></iframe>
+<iframe src="/chronos-vector/plots/quickstart_trajectories.html" width="100%" height="620" style="border:none; border-radius:8px; margin:1rem 0;"></iframe>
 
 <Aside type="tip" title="Color = time">
 Points are colored by time (dark = early, light = late). The smooth drift entity traces a continuous path. The regime change entity shows two distinct clusters. The noise entity fills a cloud around the origin.
