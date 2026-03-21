@@ -520,4 +520,96 @@ mod tests {
             h.join().unwrap();
         }
     }
+
+    // ─── Centering thread-safety ─────────────────────────────────
+
+    #[test]
+    fn centroid_concurrent_read_write() {
+        let index = make_concurrent_index();
+        for i in 0..100u64 {
+            index.insert(i, (i * 100) as i64, &[i as f32, 0.0, 0.0]);
+        }
+
+        let centroid = index.compute_centroid().unwrap();
+        index.set_centroid(centroid.clone());
+
+        // Concurrent reads of centroid + centered_vector
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let idx = Arc::clone(&index);
+            let c = centroid.clone();
+            handles.push(thread::spawn(move || {
+                for _ in 0..50 {
+                    let got = idx.centroid().unwrap();
+                    assert_eq!(got.len(), c.len());
+                    let centered = idx.centered_vector(&[50.0, 0.0, 0.0]);
+                    assert_eq!(centered.len(), 3);
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn clear_centroid_concurrent() {
+        let index = make_concurrent_index();
+        index.insert(1, 1000, &[1.0, 2.0]);
+        index.set_centroid(vec![0.5, 1.0]);
+        assert!(index.centroid().is_some());
+        index.clear_centroid();
+        assert!(index.centroid().is_none());
+    }
+
+    // ─── Region delegations ─────────────────────────────────────
+
+    #[test]
+    fn regions_concurrent() {
+        let index = make_concurrent_index();
+        for i in 0..200u64 {
+            index.insert(i % 4, (i * 100) as i64, &[i as f32, (i * 2) as f32, 0.0]);
+        }
+
+        let mut handles = Vec::new();
+        for _ in 0..4 {
+            let idx = Arc::clone(&index);
+            handles.push(thread::spawn(move || {
+                let regions = idx.inner.read().regions(1);
+                assert!(!regions.is_empty());
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn region_assignments_concurrent() {
+        let index = make_concurrent_index();
+        for i in 0..200u64 {
+            index.insert(i % 4, (i * 100) as i64, &[i as f32, 0.0]);
+        }
+
+        let assignments = index
+            .inner
+            .read()
+            .region_assignments(1, TemporalFilter::All);
+        let total: usize = assignments.values().map(|v| v.len()).sum();
+        assert_eq!(total, 200);
+    }
+
+    // ─── Accessor coverage ──────────────────────────────────────
+
+    #[test]
+    fn entity_id_and_vector_accessors() {
+        let index = make_concurrent_index();
+        index.insert(42, 1000, &[1.0, 2.0, 3.0]);
+
+        assert_eq!(index.entity_id(0), 42);
+        assert_eq!(index.timestamp(0), 1000);
+        assert_eq!(index.vector(0), vec![1.0, 2.0, 3.0]);
+        assert!(!index.is_empty());
+        assert_eq!(index.len(), 1);
+    }
 }

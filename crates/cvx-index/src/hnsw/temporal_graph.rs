@@ -824,4 +824,140 @@ mod tests {
         assert!(causal[0].successors.is_empty());
         assert!(causal[0].predecessors.is_empty());
     }
+
+    // ─── Delegated method coverage ───────────────────────────────
+
+    #[test]
+    fn config_and_ef_delegation() {
+        let config = HnswConfig {
+            m: 8,
+            ef_construction: 100,
+            ef_search: 50,
+            ..Default::default()
+        };
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        assert_eq!(index.config().m, 8);
+        assert_eq!(index.config().ef_construction, 100);
+
+        index.set_ef_construction(150);
+        assert_eq!(index.config().ef_construction, 150);
+
+        index.set_ef_search(200);
+        assert_eq!(index.config().ef_search, 200);
+    }
+
+    #[test]
+    fn centering_delegation() {
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        index.insert(1, 1000, &[2.0, 4.0]);
+        index.insert(2, 2000, &[4.0, 6.0]);
+
+        let centroid = index.compute_centroid().unwrap();
+        assert!((centroid[0] - 3.0).abs() < 1e-6);
+
+        index.set_centroid(vec![3.0, 5.0]);
+        assert_eq!(index.centroid().unwrap(), &[3.0, 5.0]);
+
+        let centered = index.centered_vector(&[5.0, 8.0]);
+        assert!((centered[0] - 2.0).abs() < 1e-6);
+        assert!((centered[1] - 3.0).abs() < 1e-6);
+
+        index.clear_centroid();
+        assert!(index.centroid().is_none());
+    }
+
+    #[test]
+    fn reward_delegation() {
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        let n0 = index.insert(1, 1000, &[1.0, 0.0]);
+        let n1 = index.insert_with_reward(2, 2000, &[0.0, 1.0], 0.8);
+
+        assert!(index.reward(n0).is_nan());
+        assert!((index.reward(n1) - 0.8).abs() < 1e-6);
+
+        index.set_reward(n0, 0.95);
+        assert!((index.reward(n0) - 0.95).abs() < 1e-6);
+    }
+
+    #[test]
+    fn search_with_reward_delegation() {
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        for i in 0..10u64 {
+            index.insert_with_reward(i, i as i64 * 1000, &[i as f32, 0.0, 0.0], i as f32 * 0.1);
+        }
+
+        let results =
+            index.search_with_reward(&[7.0, 0.0, 0.0], 5, TemporalFilter::All, 1.0, 0, 0.5);
+        assert!(!results.is_empty());
+        for &(node_id, _) in &results {
+            assert!(
+                index.reward(node_id) >= 0.5,
+                "node {node_id} reward {} < 0.5",
+                index.reward(node_id)
+            );
+        }
+    }
+
+    #[test]
+    fn region_delegation() {
+        let config = HnswConfig {
+            m: 4,
+            ef_construction: 50,
+            ef_search: 50,
+            ..Default::default()
+        };
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        let mut rng = rand::rng();
+        for i in 0..200u64 {
+            let v: Vec<f32> = (0..8).map(|_| rand::Rng::random::<f32>(&mut rng)).collect();
+            index.insert(i % 4, i as i64 * 1000, &v);
+        }
+
+        let regions = index.regions(1);
+        assert!(!regions.is_empty());
+
+        let assignments = index.region_assignments(1, TemporalFilter::All);
+        let total: usize = assignments.values().map(|v| v.len()).sum();
+        assert_eq!(total, 200);
+    }
+
+    #[test]
+    fn scalar_quantization_delegation() {
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+        index.insert(1, 1000, &[1.0, 0.0]);
+        index.insert(2, 2000, &[0.0, 1.0]);
+
+        index.enable_scalar_quantization(-1.0, 1.0);
+        let results = index.search(&[1.0, 0.0], 2, TemporalFilter::All, 1.0, 0);
+        assert_eq!(results.len(), 2);
+
+        index.disable_scalar_quantization();
+        let results = index.search(&[1.0, 0.0], 2, TemporalFilter::All, 1.0, 0);
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn insert_with_reward_creates_temporal_edges() {
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+
+        // Insert 5 steps for same entity with rewards
+        for i in 0..5u32 {
+            index.insert_with_reward(1, i as i64 * 100, &[i as f32, 0.0], i as f32 * 0.2);
+        }
+
+        // Check temporal edges exist
+        let edges = index.edges();
+        assert!(edges.successor(0).is_some());
+        assert!(edges.predecessor(4).is_some());
+
+        // Causal search should return continuations
+        let results = index.causal_search(&[0.0, 0.0], 1, TemporalFilter::All, 1.0, 0, 3);
+        assert_eq!(results.len(), 1);
+        assert!(!results[0].successors.is_empty());
+    }
 }
