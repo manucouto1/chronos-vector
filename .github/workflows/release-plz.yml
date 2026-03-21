@@ -12,6 +12,8 @@ jobs:
   release-plz:
     name: Release
     runs-on: ubuntu-latest
+    outputs:
+      releases: ${{ steps.release.outputs.releases }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,7 +21,36 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run release-plz
+        id: release
         uses: release-plz/action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  tag-unified:
+    name: Create unified version tag
+    needs: release-plz
+    if: needs.release-plz.outputs.releases != '[]' && needs.release-plz.outputs.releases != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Extract version and create tag
+        env:
+          RELEASES: ${{ needs.release-plz.outputs.releases }}
+        run: |
+          # Get version from chronos-vector (facade crate) release
+          VERSION=$(echo "$RELEASES" | jq -r '.[] | select(.package_name == "chronos-vector") | .version // empty')
+          if [ -z "$VERSION" ]; then
+            # Fallback: get version from any released crate
+            VERSION=$(echo "$RELEASES" | jq -r '.[0].version // empty')
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "No version found in releases, skipping tag"
+            exit 0
+          fi
+          TAG="v${VERSION}"
+          echo "Creating unified tag: $TAG"
+          git tag "$TAG"
+          git push origin "$TAG"

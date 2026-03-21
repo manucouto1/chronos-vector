@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "chronos-vector"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Python bindings for ChronosVector temporal vector database"
 requires-python = ">=3.9"
 license = { text = "Elastic-2.0" }
