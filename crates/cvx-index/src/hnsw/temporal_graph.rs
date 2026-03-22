@@ -375,6 +375,31 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
         self.inner.disable_scalar_quantization();
     }
 
+    // ─── Delegated recency search (RFC-012 P7+P8) ──────────────────
+
+    /// Search with recency bias and normalized distances.
+    #[allow(clippy::too_many_arguments)]
+    pub fn search_with_recency(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+        recency_lambda: f32,
+        recency_weight: f32,
+    ) -> Vec<(u32, f32)> {
+        self.inner.search_with_recency(
+            query,
+            k,
+            filter,
+            alpha,
+            query_timestamp,
+            recency_lambda,
+            recency_weight,
+        )
+    }
+
     // ─── Delegated outcome / reward (RFC-012 P4) ───────────────────
 
     /// Get the reward for a node.
