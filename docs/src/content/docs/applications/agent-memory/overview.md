@@ -136,15 +136,29 @@ Expert action sequences:
 
 **E7b Round 3 (26.7%) beats the E3 baseline (20%)** — online learning + compact strategy templates outperform static expert retrieval.
 
-The 4× improvement across rounds (6.7% → 26.7%) demonstrates that CVX's reward annotation + decay mechanism enables genuine self-improvement without changing the agent code.
+### Learning Curve Saturation (E7c — 10 rounds)
 
-Per task type (E7b Round 3):
+```
+Round:  1     2     3     4     5     6     7     8     9     10
+E7c:   6.7   10.0  20.0  13.3  16.7  16.7  13.3  10.0  16.7  16.7
+E7d:   10.0  23.3  26.7  13.3  13.3  16.7  13.3  26.7  13.3  23.3
+```
+
+**Peak at Round 3, then plateau/oscillation around 15-17%.** The cause: each round adds ~25 fails and ~4 wins. By Round 10, only 59% of memory is successful — failed experiences contaminate retrieval.
+
+**E7d (clean memory)** — only wins added to the index — shows higher peaks (26.7% in Rounds 3 and 8) and higher late-round mean (17.1% vs 14.8%), but still doesn't improve monotonically.
+
+**Remaining problem**: blind reward decay. An expert trajectory for `clean soapbar` that was retrieved during a failed `cool lettuce` game gets penalized, even though the expert was irrelevant to that failure. After several rounds, good experts lose their reward unfairly.
+
+**Solution**: context-aware reward decay — only penalize experts when task type matches AND the agent actually followed the expert's suggestion. See [RFC-013 Part E](/chronos-vector/rfc/rfc-013).
+
+Per task type (E7d best round):
 
 | Task type | Success | Rate |
 |-----------|---------|------|
 | examine_in_light | 2/3 | **67%** |
-| cool_then_place | 2/7 | 29% |
-| pick_and_place | 1/6 | 17% |
+| pick_and_place | 3/6 | **50%** |
+| cool_then_place | 0/7 | 0% |
 | pick_two | 1/6 | 17% |
 | clean_then_place | 1/7 | 14% |
 | heat_then_place | 1/1 | 100% |

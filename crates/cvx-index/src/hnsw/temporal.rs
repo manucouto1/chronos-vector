@@ -659,9 +659,17 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
     }
 }
 
+/// Current snapshot format version. Increment when adding fields.
+const SNAPSHOT_VERSION: u32 = 2;
+
 /// Serializable snapshot of a TemporalHnsw index.
 #[derive(Serialize, Deserialize)]
 struct TemporalSnapshot {
+    /// Format version for forward compatibility (RFC-012 P5).
+    /// v1: original (graph, timestamps, entity_ids, entity_index, min/max_timestamp)
+    /// v2: + metadata_store, centroid, rewards
+    #[serde(default = "default_snapshot_version")]
+    version: u32,
     graph: HnswSnapshot,
     timestamps: Vec<i64>,
     entity_ids: Vec<u64>,
@@ -678,6 +686,10 @@ struct TemporalSnapshot {
     rewards: Vec<f32>,
 }
 
+fn default_snapshot_version() -> u32 {
+    1 // Old snapshots without version field default to v1
+}
+
 impl<D: DistanceMetric> TemporalHnsw<D> {
     /// Save the index to a file using postcard binary encoding.
     ///
@@ -685,6 +697,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
     /// On load, you must provide the same metric type.
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let snapshot = TemporalSnapshot {
+            version: SNAPSHOT_VERSION,
             graph: self.graph.to_snapshot(),
             timestamps: self.timestamps.clone(),
             entity_ids: self.entity_ids.clone(),
@@ -705,7 +718,8 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
 
     /// Load an index from a file, providing the distance metric.
     ///
-    /// The metric must match the one used during construction.
+    /// Supports all snapshot versions. Unknown future versions produce
+    /// a clear error instead of silent corruption.
     pub fn load(path: &Path, metric: D) -> std::io::Result<Self> {
         let mut file = std::fs::File::open(path)?;
         let mut bytes = Vec::new();
@@ -713,6 +727,17 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
 
         let snapshot: TemporalSnapshot = postcard::from_bytes(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        if snapshot.version > SNAPSHOT_VERSION {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Snapshot version {} is newer than supported version {}. \
+                     Please upgrade chronos-vector.",
+                    snapshot.version, SNAPSHOT_VERSION
+                ),
+            ));
+        }
 
         let n_points = snapshot.timestamps.len();
         let rewards = if snapshot.rewards.is_empty() {
