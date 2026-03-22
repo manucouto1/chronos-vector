@@ -63,6 +63,8 @@ export default defineConfig({
 						{ label: 'Concurrency Model', slug: 'architecture/concurrency' },
 						{ label: 'Crate Structure', slug: 'architecture/crate-structure' },
 						{ label: 'LLM Integration', slug: 'architecture/llm-integration', badge: { text: 'MCP', variant: 'success' } },
+						{ label: 'Bayesian Inference', slug: 'architecture/bayesian-inference', badge: { text: 'New', variant: 'caution' } },
+						{ label: 'Knowledge Graph', slug: 'architecture/knowledge-graph', badge: { text: 'New', variant: 'caution' } },
 						{ label: 'Interpretability', slug: 'architecture/interpretability', badge: { text: 'Partial', variant: 'caution' } },
 						{ label: 'Temporal ML', slug: 'architecture/temporal-ml', badge: { text: 'Partial', variant: 'caution' } },
 						{ label: 'Multi-Space & Multi-Scale', slug: 'architecture/multi-scale-alignment', badge: { text: 'Partial', variant: 'caution' } },
@@ -118,7 +120,8 @@ export default defineConfig({
 				{
 					label: 'Research',
 					items: [
-						{ label: 'Theoretical Foundations', slug: 'research/foundations' },
+						{ label: 'Unified Theory', slug: 'research/unified-theory', badge: { text: 'Core', variant: 'success' } },
+					{ label: 'Theoretical Foundations', slug: 'research/foundations' },
 						{ label: 'Stochastic Processes', slug: 'research/stochastic-processes' },
 						{ label: 'Path Signatures', slug: 'research/path-signatures' },
 						{ label: 'Query Types', slug: 'research/query-types' },
