@@ -243,6 +243,83 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         (diff / range) as f32
     }
 
+    /// Normalize semantic distance to [0, 1] range (RFC-012 P8).
+    ///
+    /// Cosine distance ∈ [0, 2], L2 distance ∈ [0, ∞). This clamps and
+    /// scales to [0, 1] so it's comparable with temporal distance [0, 1].
+    fn normalize_semantic_distance(&self, d: f32) -> f32 {
+        // Cosine: [0, 2] → [0, 1] by halving. L2: clamp to [0, 4] then /4.
+        // Both produce [0, 1]. For most embeddings, distances rarely exceed 2.
+        (d / 2.0).min(1.0)
+    }
+
+    /// Compute recency penalty for a node (RFC-012 P7).
+    ///
+    /// Returns a value in `[0.0, 1.0]` where 0 = most recent, 1 = oldest.
+    /// Uses exponential decay: `1 - exp(-λ · age)` where age is normalized.
+    ///
+    /// `recency_lambda` controls decay speed:
+    /// - λ = 0: no recency effect
+    /// - λ = 1: moderate decay
+    /// - λ = 3: strong decay (old nodes heavily penalized)
+    fn recency_penalty(&self, node_timestamp: i64, recency_lambda: f32) -> f32 {
+        if recency_lambda <= 0.0 {
+            return 0.0;
+        }
+        let age = self.temporal_distance_normalized(node_timestamp, self.max_timestamp);
+        1.0 - (-recency_lambda * age).exp()
+    }
+
+    /// Search with full composite scoring (RFC-012 P7 + P8).
+    ///
+    /// Enhanced distance: `d = α·d_sem_norm + (1-α)·d_temporal + γ·recency`
+    ///
+    /// - `alpha`: semantic vs temporal weight (1.0 = pure semantic)
+    /// - `recency_lambda`: recency decay strength (0.0 = off, 1.0 = moderate, 3.0 = strong)
+    /// - `recency_weight`: weight of recency term in composite score (0.0-1.0)
+    #[allow(clippy::too_many_arguments)]
+    pub fn search_with_recency(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+        recency_lambda: f32,
+        recency_weight: f32,
+    ) -> Vec<(u32, f32)> {
+        if self.is_empty() {
+            return Vec::new();
+        }
+
+        let bitmap = self.build_filter_bitmap(&filter);
+        if bitmap.is_empty() {
+            return Vec::new();
+        }
+
+        let over_fetch = k * 4;
+        let candidates = self
+            .graph
+            .search_filtered(query, over_fetch, |id| bitmap.contains(id));
+
+        let mut scored: Vec<(u32, f32)> = candidates
+            .into_iter()
+            .map(|(id, sem_dist)| {
+                let sem_norm = self.normalize_semantic_distance(sem_dist);
+                let t_dist = self
+                    .temporal_distance_normalized(self.timestamps[id as usize], query_timestamp);
+                let recency = self.recency_penalty(self.timestamps[id as usize], recency_lambda);
+
+                let combined = alpha * sem_norm + (1.0 - alpha) * t_dist + recency_weight * recency;
+                (id, combined)
+            })
+            .collect();
+
+        scored.sort_by(|a, b| a.1.total_cmp(&b.1));
+        scored.truncate(k);
+        scored
+    }
+
     // ─── Outcome / Reward (RFC-012 P4) ──────────────────────────────
 
     /// Get the reward for a node. Returns NaN if no reward was assigned.
@@ -417,13 +494,14 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
             .graph
             .search_filtered(query, over_fetch, |id| bitmap.contains(id));
 
-        // Re-rank with composite distance
+        // Re-rank with composite distance (P8: normalized scales)
         let mut scored: Vec<(u32, f32)> = candidates
             .into_iter()
             .map(|(id, sem_dist)| {
+                let sem_norm = self.normalize_semantic_distance(sem_dist);
                 let t_dist = self
                     .temporal_distance_normalized(self.timestamps[id as usize], query_timestamp);
-                let combined = alpha * sem_dist + (1.0 - alpha) * t_dist;
+                let combined = alpha * sem_norm + (1.0 - alpha) * t_dist;
                 (id, combined)
             })
             .collect();
@@ -1688,5 +1766,90 @@ mod tests {
         assert!(loaded.reward(1).is_nan());
 
         std::fs::remove_file(&path).ok();
+    }
+
+    // ─── P7: Recency + P8: Normalization ─────────────────────────
+
+    #[test]
+    fn normalize_semantic_distance_clamps() {
+        let mut index = make_temporal_index();
+        index.insert(1, 1000, &[1.0, 0.0]);
+
+        // Cosine distance [0, 2] → [0, 1]
+        assert!((index.normalize_semantic_distance(0.0) - 0.0).abs() < 1e-6);
+        assert!((index.normalize_semantic_distance(1.0) - 0.5).abs() < 1e-6);
+        assert!((index.normalize_semantic_distance(2.0) - 1.0).abs() < 1e-6);
+        // Clamp: values > 2 stay at 1.0
+        assert!((index.normalize_semantic_distance(4.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn recency_penalty_zero_lambda() {
+        let mut index = make_temporal_index();
+        index.insert(1, 1000, &[1.0, 0.0]);
+        index.insert(2, 2000, &[0.0, 1.0]);
+        // lambda=0 → no recency effect
+        assert!((index.recency_penalty(1000, 0.0) - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn recency_penalty_recent_is_lower() {
+        let mut index = make_temporal_index();
+        for i in 0..10u64 {
+            index.insert(i, (i * 1000) as i64, &[i as f32, 0.0]);
+        }
+        let recent = index.recency_penalty(9000, 1.0); // most recent
+        let old = index.recency_penalty(0, 1.0); // oldest
+        assert!(
+            recent < old,
+            "recent penalty ({recent}) should be < old penalty ({old})"
+        );
+    }
+
+    #[test]
+    fn search_with_recency_prefers_recent() {
+        let mut index = make_temporal_index();
+        // Two identical vectors at different times
+        index.insert(1, 1000, &[1.0, 0.0, 0.0]);
+        index.insert(2, 9000, &[1.0, 0.0, 0.0]); // more recent
+
+        let results = index.search_with_recency(
+            &[1.0, 0.0, 0.0],
+            2,
+            TemporalFilter::All,
+            1.0, // pure semantic
+            0,
+            2.0, // strong recency
+            0.5, // high recency weight
+        );
+
+        assert_eq!(results.len(), 2);
+        // More recent node should score lower (better)
+        assert_eq!(
+            results[0].0,
+            1, // node 1 = entity 2 at t=9000 (more recent)
+            "recent node should rank first"
+        );
+    }
+
+    #[test]
+    fn search_normalized_distances_balanced() {
+        let mut index = make_temporal_index();
+        // Semantically close but temporally far
+        index.insert(1, 1000, &[1.0, 0.0, 0.0]);
+        // Semantically far but temporally close
+        index.insert(2, 5000, &[0.0, 1.0, 0.0]);
+        // Query at t=4900 with alpha=0.5
+        let results = index.search(
+            &[0.9, 0.1, 0.0],
+            2,
+            TemporalFilter::All,
+            0.5, // balanced
+            4900,
+        );
+
+        // With normalized scales, temporal distance is comparable to semantic
+        // Entity 2 at t=5000 is temporally close to query_ts=4900
+        assert_eq!(results.len(), 2);
     }
 }

@@ -77,11 +77,49 @@ pub trait StorageBackend: Send + Sync {
     fn delete(&self, entity_id: u64, space_id: u32, timestamp: i64) -> Result<(), StorageError>;
 }
 
-/// Low-level temporal index access for query engine orchestration.
+// ─── Segregated traits (RFC-012 P6) ────────────────────────────
+
+/// Core search operations on a temporal index.
+pub trait TemporalSearch: Send + Sync {
+    /// Search with temporal filtering, returning (node_id, score) pairs.
+    fn search_raw(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+    ) -> Vec<(u32, f32)>;
+}
+
+/// Access to individual points and trajectories.
+pub trait TrajectoryAccess: Send + Sync {
+    /// Retrieve trajectory for an entity: (timestamp, node_id) pairs.
+    fn trajectory(&self, entity_id: u64, filter: TemporalFilter) -> Vec<(i64, u32)>;
+
+    /// Get the vector for a node. Returns owned vec for thread safety.
+    fn vector(&self, node_id: u32) -> Vec<f32>;
+
+    /// Get the entity_id for a node.
+    fn entity_id(&self, node_id: u32) -> u64;
+
+    /// Get the timestamp for a node.
+    fn timestamp(&self, node_id: u32) -> i64;
+
+    /// Number of points in the index.
+    fn len(&self) -> usize;
+
+    /// Whether the index is empty.
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// Low-level temporal index access combining search + trajectory + regions.
 ///
-/// Provides the methods that `QueryEngine` needs from a temporal index.
-/// Implemented by both `TemporalHnsw` (single-threaded) and
-/// `ConcurrentTemporalHnsw` (thread-safe).
+/// Implements all operations. The segregated traits (`TemporalSearch`,
+/// `TrajectoryAccess`) are automatically implemented for any type that
+/// implements `TemporalIndexAccess` via blanket impls.
 pub trait TemporalIndexAccess: Send + Sync {
     /// Search with temporal filtering, returning (node_id, score) pairs.
     fn search_raw(
@@ -178,6 +216,39 @@ pub trait TemporalIndexAccess: Send + Sync {
             .filter(|&(nid, _)| metadata_filter.matches(&self.metadata(nid)))
             .take(k)
             .collect()
+    }
+}
+
+// Blanket implementations: any TemporalIndexAccess automatically
+// implements the segregated traits.
+impl<T: TemporalIndexAccess> TemporalSearch for T {
+    fn search_raw(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        alpha: f32,
+        query_timestamp: i64,
+    ) -> Vec<(u32, f32)> {
+        TemporalIndexAccess::search_raw(self, query, k, filter, alpha, query_timestamp)
+    }
+}
+
+impl<T: TemporalIndexAccess> TrajectoryAccess for T {
+    fn trajectory(&self, entity_id: u64, filter: TemporalFilter) -> Vec<(i64, u32)> {
+        TemporalIndexAccess::trajectory(self, entity_id, filter)
+    }
+    fn vector(&self, node_id: u32) -> Vec<f32> {
+        TemporalIndexAccess::vector(self, node_id)
+    }
+    fn entity_id(&self, node_id: u32) -> u64 {
+        TemporalIndexAccess::entity_id(self, node_id)
+    }
+    fn timestamp(&self, node_id: u32) -> i64 {
+        TemporalIndexAccess::timestamp(self, node_id)
+    }
+    fn len(&self) -> usize {
+        TemporalIndexAccess::len(self)
     }
 }
 
