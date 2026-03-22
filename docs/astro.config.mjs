@@ -172,6 +172,7 @@ export default defineConfig({
 						{ label: 'RFC-010: Temporal Graph', slug: 'rfc/rfc-010', badge: { text: 'Done', variant: 'success' } },
 						{ label: 'RFC-011: Anchor Invariance', slug: 'rfc/rfc-011', badge: { text: 'Done', variant: 'success' } },
 						{ label: 'RFC-012: Agent Memory & Performance', slug: 'rfc/rfc-012', badge: { text: 'New', variant: 'caution' } },
+						{ label: 'RFC-013: Probabilistic Memory', slug: 'rfc/rfc-013', badge: { text: 'New', variant: 'caution' } },
 					],
 				},
 				{

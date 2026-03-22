@@ -113,7 +113,55 @@ All experiments use the same protocol: 336 expert trajectories from AgentInstruc
 | **CVX-Causal** | **20.0%** | **qwen:7b** | **Temporal vector retrieval** |
 | No memory | 3.3% | qwen:7b | None |
 
-CVX at 43.3% does not yet beat ExpeL (59%), but ExpeL uses **experience extraction + insight learning** (a complex multi-stage pipeline) while CVX uses **pure retrieval** from a temporal index — no post-processing, no rule extraction. Adding reward filtering and Reflexion-style retry loops (planned) could close this gap.
+CVX at 43.3% does not yet beat ExpeL (59%), but ExpeL uses **experience extraction + insight learning** (a complex multi-stage pipeline) while CVX uses **pure retrieval** from a temporal index — no post-processing, no rule extraction.
+
+### Online Learning (E7b) — Self-Improving Memory
+
+The agent plays multiple rounds, adding its own experience to CVX after each round. Successful episodes get reward=1.0, failures get reward=0.0. Expert trajectories that were retrieved but led to failure get a 10% reward decay.
+
+**Key insight — context format matters for small models**: Including expert observations in the prompt (E7 verbose, 722 chars) degraded performance vs compact action chains (E7b, ~200 chars). Small models lose performance with long contexts. The best format combines **abstract strategy templates** with **compact action chains**:
+
+```
+Strategy: Find object, take it, go to sinkbasin, clean it, go to target, put it.
+Expert action sequences:
+  [1] go to drawer 2 -> open drawer 2 -> take soapbar 1 -> go to sinkbasin 1
+  [2] go to cabinet 1 -> open cabinet 1 -> take cloth 2 -> go to sinkbasin 1
+```
+
+| Round | Index size | E7 (verbose) | E7b (compact) |
+|-------|-----------|-------------|---------------|
+| 1 (expert only) | 4,542 | 6.7% | 6.7% |
+| 2 (+own experience) | ~5,400 | 6.7% | 13.3% |
+| 3 (+reward decay) | ~6,300 | 16.7% | **26.7%** |
+
+**E7b Round 3 (26.7%) beats the E3 baseline (20%)** — online learning + compact strategy templates outperform static expert retrieval.
+
+### Learning Curve Saturation (E7c — 10 rounds)
+
+```
+Round:  1     2     3     4     5     6     7     8     9     10
+E7c:   6.7   10.0  20.0  13.3  16.7  16.7  13.3  10.0  16.7  16.7
+E7d:   10.0  23.3  26.7  13.3  13.3  16.7  13.3  26.7  13.3  23.3
+```
+
+**Peak at Round 3, then plateau/oscillation around 15-17%.** The cause: each round adds ~25 fails and ~4 wins. By Round 10, only 59% of memory is successful — failed experiences contaminate retrieval.
+
+**E7d (clean memory)** — only wins added to the index — shows higher peaks (26.7% in Rounds 3 and 8) and higher late-round mean (17.1% vs 14.8%), but still doesn't improve monotonically.
+
+**Remaining problem**: blind reward decay. An expert trajectory for `clean soapbar` that was retrieved during a failed `cool lettuce` game gets penalized, even though the expert was irrelevant to that failure. After several rounds, good experts lose their reward unfairly.
+
+**Solution**: context-aware reward decay — only penalize experts when task type matches AND the agent actually followed the expert's suggestion. See [RFC-013 Part E](/chronos-vector/rfc/rfc-013).
+
+Per task type (E7d best round):
+
+| Task type | Success | Rate |
+|-----------|---------|------|
+| examine_in_light | 2/3 | **67%** |
+| pick_and_place | 3/6 | **50%** |
+| cool_then_place | 0/7 | 0% |
+| pick_two | 1/6 | 17% |
+| clean_then_place | 1/7 | 14% |
+| heat_then_place | 1/1 | 100% |
 
 ### Other Experiments
 
@@ -131,19 +179,27 @@ CVX at 43.3% does not yet beat ExpeL (59%), but ExpeL uses **experience extracti
 
 E5 (GPT-4o) and E6 (GPT-4o-mini) completed. CVX-Causal shows consistent 2× improvement across model scales. The 43.3% result with GPT-4o is the current best.
 
-### Phase 1b: Close the Gap to ExpeL (Next)
+### Phase 1b: Online Learning — DONE
 
-| Experiment | Approach | Target |
-|-----------|---------|--------|
-| **E5-reward** | Add `search_with_reward(min_reward=0.5)` to filter expert trajectories | >50% |
-| **E5-retry** | Add Reflexion-style self-reflection + retry (3 rounds) on top of CVX | >60% (beat ExpeL) |
-| **E5-134** | Run full 134-game eval (not 30) for publication-grade statistics | Confirm 43% ± CI |
+E7b shows 4× improvement across 3 rounds with compact strategy templates + online reward annotation. The learning curve (6.7% → 13.3% → 26.7%) suggests further rounds may improve. Next: study the saturation curve to understand when and why improvement plateaus.
 
-### Phase 2: Temporal Reasoning Benchmarks
+### Phase 2: Learning Curve & Saturation Analysis (In Progress)
 
-**E7: LongMemEval — Temporal Reasoning Subtask**
+| Experiment | Approach | Question |
+|-----------|---------|----------|
+| **E7c** | E7b with 10+ rounds | Where does the learning curve saturate? |
+| **E7c analysis** | Per-task-type breakdown across rounds | Which task types improve most? Which plateau? |
+| **Transfer analysis** | Compare retrieved vs actual actions | Why does retrieval fail for specific task types? |
 
-CVX's temporal features (timestamps, ordering, causal_search) directly address the temporal reasoning questions in LongMemEval:
+### Phase 3: Structural Extensions (Under Investigation)
+
+Open question: can auxiliary structures (knowledge graphs, HMMs, Bayesian networks) improve the memory beyond what pure vector retrieval provides? See [RFC-012 Part D](/chronos-vector/rfc/rfc-012).
+
+### Phase 4: Temporal Reasoning Benchmarks
+
+**LongMemEval — Temporal Reasoning Subtask**
+
+CVX's temporal features (timestamps, ordering, causal_search) directly address temporal reasoning:
 - "When did X happen relative to Y?"
 - "What changed between session 3 and session 7?"
 - "What was the most recent update to topic Z?"
@@ -216,15 +272,16 @@ New benchmark (2025) testing whether agents can infer constraints from history a
 | E4_iterative_coding | qwen:7b | Debug retry with error memory | 28% → 31% |
 | E5_alfworld_gpt4o | **GPT-4o** | ALFWorld with frontier model | **20.0% → 43.3% (2.2×)** |
 | E6_alfworld_gpt4o_mini | **GPT-4o-mini** | Cost-effective scaling test | **13.3% → 26.7% (2.0×)** |
+| E7_online_learning | qwen:7b | Online learning with observation context | 6.7% → 16.7% (verbose) |
+| **E7b** | **qwen:7b** | **Compact strategy + online learning** | **6.7% → 26.7% (4× across 3 rounds)** |
 
 ### Planned
 
-| Notebook | Focus | Benchmark |
-|----------|-------|-----------|
-| E5-reward | Reward-filtered retrieval + GPT-4o | ALFWorld (target: >50%) |
-| E5-retry | Reflexion-style retry + CVX + GPT-4o | ALFWorld (target: >60%) |
-| E7_longmemeval | Temporal reasoning evaluation | LongMemEval (ICLR 2025) |
-| E8_mem2act | Memory-to-action grounding | Mem2ActBench (2025) |
+| Notebook | Focus | Target |
+|----------|-------|--------|
+| E7c | Learning curve saturation (10+ rounds) | Find plateau point |
+| E8_longmemeval | Temporal reasoning evaluation | LongMemEval (ICLR 2025) |
+| E9_mem2act | Memory-to-action grounding | Mem2ActBench (2025) |
 
 ---
 
