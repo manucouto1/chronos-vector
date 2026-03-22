@@ -523,6 +523,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cvx-bayes"
+version = "0.1.1"
+dependencies = [
+ "cvx-core",
+ "postcard",
+ "proptest",
+ "serde",
+]
+
+[[package]]
 name = "cvx-core"
 version = "0.1.1"
 dependencies = [
@@ -532,6 +542,16 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "toml",
+]
+
+[[package]]
+name = "cvx-graph"
+version = "0.1.1"
+dependencies = [
+ "cvx-core",
+ "postcard",
+ "proptest",
+ "serde",
 ]
 
 [[package]]

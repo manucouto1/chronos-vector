@@ -1,0 +1,17 @@
+[package]
+name = "cvx-bayes"
+description = "Bayesian network inference for ChronosVector — conditional probability over temporal episodes"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license-file.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+cvx-core = { workspace = true }
+serde = { workspace = true }
+postcard = { workspace = true, features = ["alloc"] }
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -11,6 +11,8 @@ members = [
   "crates/cvx-server",
   "crates/chronos-vector",
   "crates/cvx-mcp",
+  "crates/cvx-bayes",
+  "crates/cvx-graph",
 ]
 exclude = [
   "crates/cvx-python",
