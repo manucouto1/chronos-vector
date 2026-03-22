@@ -545,6 +545,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cvx-graph"
+version = "0.1.1"
+dependencies = [
+ "cvx-core",
+ "postcard",
+ "proptest",
+ "serde",
+]
+
+[[package]]
 name = "cvx-index"
 version = "0.1.1"
 dependencies = [
