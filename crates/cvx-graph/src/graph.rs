@@ -250,6 +250,87 @@ impl KnowledgeGraph {
         plan
     }
 
+    // ─── Validation (RFC-014 Opción 4) ─────────────────────────
+
+    /// Get preconditions of an action entity.
+    ///
+    /// Returns entities connected via `HasPrecondition` edges.
+    /// Each precondition represents a state that must hold before the action.
+    pub fn preconditions(&self, action_id: EntityId) -> Vec<(&Entity, f32)> {
+        self.neighbors(action_id, Some(RelationType::HasPrecondition))
+            .into_iter()
+            .map(|(e, r)| (e, r.weight))
+            .collect()
+    }
+
+    /// Get effects of an action entity.
+    ///
+    /// Returns entities connected via `HasEffect` edges.
+    /// Each effect represents a state change produced by the action.
+    pub fn effects(&self, action_id: EntityId) -> Vec<(&Entity, f32)> {
+        self.neighbors(action_id, Some(RelationType::HasEffect))
+            .into_iter()
+            .map(|(e, r)| (e, r.weight))
+            .collect()
+    }
+
+    /// Validate whether an action is applicable given current state.
+    ///
+    /// Checks all `HasPrecondition` edges of the action entity.
+    /// `current_state`: set of entity IDs that are currently true/present.
+    ///
+    /// Returns `(is_valid, missing_preconditions)`.
+    pub fn validate_action(
+        &self,
+        action_id: EntityId,
+        current_state: &std::collections::HashSet<EntityId>,
+    ) -> (bool, Vec<EntityId>) {
+        let preconditions = self.preconditions(action_id);
+        let mut missing = Vec::new();
+
+        for (precond_entity, _weight) in &preconditions {
+            if !current_state.contains(&precond_entity.id) {
+                missing.push(precond_entity.id);
+            }
+        }
+
+        (missing.is_empty(), missing)
+    }
+
+    /// Filter a list of candidate actions to only valid ones.
+    ///
+    /// Returns action IDs that have all preconditions satisfied.
+    pub fn filter_valid_actions(
+        &self,
+        candidate_actions: &[EntityId],
+        current_state: &std::collections::HashSet<EntityId>,
+    ) -> Vec<EntityId> {
+        candidate_actions
+            .iter()
+            .filter(|&&action_id| {
+                let (valid, _) = self.validate_action(action_id, current_state);
+                valid
+            })
+            .copied()
+            .collect()
+    }
+
+    /// Compute the state after applying an action (forward simulation).
+    ///
+    /// Adds the action's effects to the current state.
+    /// Does NOT remove preconditions (effects are additive).
+    pub fn apply_action(
+        &self,
+        action_id: EntityId,
+        current_state: &std::collections::HashSet<EntityId>,
+    ) -> std::collections::HashSet<EntityId> {
+        let mut new_state = current_state.clone();
+        for (effect_entity, _weight) in self.effects(action_id) {
+            new_state.insert(effect_entity.id);
+        }
+        new_state
+    }
+
     /// Number of entities.
     pub fn n_entities(&self) -> usize {
         self.entities.len()
@@ -432,5 +513,147 @@ mod tests {
         let restored: KnowledgeGraph = postcard::from_bytes(&bytes).unwrap();
         assert_eq!(restored.n_entities(), 8);
         assert_eq!(restored.n_relations(), 7);
+    }
+
+    // ─── Validation (RFC-014) ────────────────────────────────────
+
+    fn build_validation_graph() -> KnowledgeGraph {
+        let mut kg = KnowledgeGraph::new();
+
+        // States (things that can be true)
+        kg.add_entity(Entity::new(
+            100,
+            EntityType::Custom("state".into()),
+            "object_visible",
+        ));
+        kg.add_entity(Entity::new(
+            101,
+            EntityType::Custom("state".into()),
+            "holding_object",
+        ));
+        kg.add_entity(Entity::new(
+            102,
+            EntityType::Custom("state".into()),
+            "at_appliance",
+        ));
+        kg.add_entity(Entity::new(
+            103,
+            EntityType::Custom("state".into()),
+            "object_heated",
+        ));
+
+        // Actions
+        kg.add_entity(Entity::new(10, EntityType::Action, "take"));
+        kg.add_entity(Entity::new(11, EntityType::Action, "heat"));
+        kg.add_entity(Entity::new(12, EntityType::Action, "put"));
+
+        // take: requires object_visible, produces holding_object
+        kg.add_relation(Relation::new(10, 100, RelationType::HasPrecondition, 1.0));
+        kg.add_relation(Relation::new(10, 101, RelationType::HasEffect, 1.0));
+
+        // heat: requires holding_object + at_appliance, produces object_heated
+        kg.add_relation(Relation::new(11, 101, RelationType::HasPrecondition, 1.0));
+        kg.add_relation(Relation::new(11, 102, RelationType::HasPrecondition, 1.0));
+        kg.add_relation(Relation::new(11, 103, RelationType::HasEffect, 1.0));
+
+        // put: requires holding_object, no special effect
+        kg.add_relation(Relation::new(12, 101, RelationType::HasPrecondition, 1.0));
+
+        kg
+    }
+
+    #[test]
+    fn preconditions_and_effects() {
+        let kg = build_validation_graph();
+
+        let take_pre = kg.preconditions(10);
+        assert_eq!(take_pre.len(), 1);
+        assert_eq!(take_pre[0].0.name, "object_visible");
+
+        let take_eff = kg.effects(10);
+        assert_eq!(take_eff.len(), 1);
+        assert_eq!(take_eff[0].0.name, "holding_object");
+
+        let heat_pre = kg.preconditions(11);
+        assert_eq!(heat_pre.len(), 2); // holding + at_appliance
+    }
+
+    #[test]
+    fn validate_action_success() {
+        let kg = build_validation_graph();
+        let mut state = std::collections::HashSet::new();
+        state.insert(100); // object_visible
+
+        let (valid, missing) = kg.validate_action(10, &state); // take
+        assert!(valid, "take should be valid when object is visible");
+        assert!(missing.is_empty());
+    }
+
+    #[test]
+    fn validate_action_failure() {
+        let kg = build_validation_graph();
+        let state = std::collections::HashSet::new(); // empty state
+
+        let (valid, missing) = kg.validate_action(10, &state); // take
+        assert!(!valid, "take should fail with empty state");
+        assert_eq!(missing, vec![100]); // missing: object_visible
+    }
+
+    #[test]
+    fn validate_action_partial_preconditions() {
+        let kg = build_validation_graph();
+        let mut state = std::collections::HashSet::new();
+        state.insert(101); // holding_object but NOT at_appliance
+
+        let (valid, missing) = kg.validate_action(11, &state); // heat
+        assert!(!valid, "heat needs holding + at_appliance");
+        assert_eq!(missing, vec![102]); // missing: at_appliance
+    }
+
+    #[test]
+    fn filter_valid_actions() {
+        let kg = build_validation_graph();
+        let mut state = std::collections::HashSet::new();
+        state.insert(101); // holding_object
+
+        let candidates = vec![10, 11, 12]; // take, heat, put
+        let valid = kg.filter_valid_actions(&candidates, &state);
+
+        // take needs object_visible (not in state) → invalid
+        // heat needs holding + at_appliance → invalid (missing at_appliance)
+        // put needs holding → valid
+        assert_eq!(valid, vec![12]);
+    }
+
+    #[test]
+    fn apply_action_adds_effects() {
+        let kg = build_validation_graph();
+        let mut state = std::collections::HashSet::new();
+        state.insert(100); // object_visible
+
+        // Apply take → should add holding_object
+        let new_state = kg.apply_action(10, &state);
+        assert!(new_state.contains(&100)); // object_visible preserved
+        assert!(new_state.contains(&101)); // holding_object added
+    }
+
+    #[test]
+    fn forward_simulation() {
+        let kg = build_validation_graph();
+        let mut state = std::collections::HashSet::new();
+        state.insert(100); // object_visible
+
+        // take → holding
+        state = kg.apply_action(10, &state);
+        assert!(state.contains(&101));
+
+        // add at_appliance manually (from navigation)
+        state.insert(102);
+
+        // heat → object_heated
+        let (valid, _) = kg.validate_action(11, &state);
+        assert!(valid, "heat should now be valid");
+        state = kg.apply_action(11, &state);
+        assert!(state.contains(&103)); // object_heated
     }
 }

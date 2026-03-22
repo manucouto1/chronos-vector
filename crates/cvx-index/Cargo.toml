@@ -14,6 +14,7 @@ poincare = []
 
 [dependencies]
 cvx-core = { workspace = true }
+cvx-analytics = { workspace = true }
 parking_lot = { workspace = true }
 pulp = { workspace = true }
 smallvec = { workspace = true }

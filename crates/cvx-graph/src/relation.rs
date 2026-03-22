@@ -22,6 +22,10 @@ pub enum RelationType {
     IsA,
     /// Task produces/achieves a state.
     Produces,
+    /// Action has a precondition that must hold (RFC-014).
+    HasPrecondition,
+    /// Action has an effect on the state (RFC-014).
+    HasEffect,
     /// Custom relation.
     Custom(String),
 }
