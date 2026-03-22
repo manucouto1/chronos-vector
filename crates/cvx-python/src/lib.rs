@@ -593,6 +593,66 @@ impl TemporalIndex {
             .collect()
     }
 
+    /// Bayesian scored search — multi-factor ranking (RFC-013 Part D).
+    ///
+    /// Combines HNSW similarity + recency + reward + typed-edge success
+    /// score + region match into a single composite score.
+    ///
+    /// Args:
+    ///     vector: Query embedding.
+    ///     k: Number of results.
+    ///     w_similarity: Weight for semantic distance (default 1.0).
+    ///     w_recency: Weight for recency factor (default 0.0).
+    ///     w_reward: Weight for reward (default 0.0).
+    ///     w_success: Weight for typed-edge success score (default 0.0).
+    ///     w_region: Weight for region match (default 0.0).
+    ///     query_timestamp: Reference timestamp (default 0).
+    ///     filter_start/end: Optional temporal range.
+    ///
+    /// Returns:
+    ///     List of (entity_id, timestamp, score) tuples.
+    #[pyo3(signature = (vector, k=10, w_similarity=1.0, w_recency=0.0, w_reward=0.0, w_success=0.0, w_region=0.0, query_timestamp=0, filter_start=None, filter_end=None))]
+    fn scored_search(
+        &self,
+        vector: Vec<f32>,
+        k: usize,
+        w_similarity: f32,
+        w_recency: f32,
+        w_reward: f32,
+        w_success: f32,
+        w_region: f32,
+        query_timestamp: i64,
+        filter_start: Option<i64>,
+        filter_end: Option<i64>,
+    ) -> Vec<(u64, i64, f32)> {
+        use cvx_index::hnsw::ScoringWeights;
+
+        let filter = match (filter_start, filter_end) {
+            (Some(start), Some(end)) => TemporalFilter::Range(start, end),
+            _ => TemporalFilter::All,
+        };
+
+        let weights = ScoringWeights {
+            similarity: w_similarity,
+            recency: w_recency,
+            reward: w_reward,
+            success: w_success,
+            region_match: w_region,
+        };
+
+        let query_region = self.inner.assign_region(&vector, 1);
+
+        self.inner
+            .scored_search(&vector, k, filter, query_timestamp, &weights, query_region)
+            .into_iter()
+            .map(|(node_id, score)| {
+                let eid = self.inner.entity_id(node_id);
+                let ts = self.inner.timestamp(node_id);
+                (eid, ts, score)
+            })
+            .collect()
+    }
+
     /// Get trajectory for an entity.
     #[pyo3(signature = (entity_id, start=None, end=None))]
     fn trajectory(
