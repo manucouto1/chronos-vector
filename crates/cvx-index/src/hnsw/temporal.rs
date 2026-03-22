@@ -141,6 +141,87 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
         self.insert_with_reward(entity_id, timestamp, vector, f32::NAN)
     }
 
+    /// Bulk insert multiple points with parallel distance computation (RFC-012 P9).
+    ///
+    /// Faster than sequential `insert()` calls for large batches. Uses rayon
+    /// to parallelize neighbor search across chunks while keeping graph
+    /// modifications sequential.
+    ///
+    /// Returns the number of points inserted.
+    pub fn bulk_insert_parallel(
+        &mut self,
+        entity_ids: &[u64],
+        timestamps: &[i64],
+        vectors: &[&[f32]],
+    ) -> usize {
+        use rayon::prelude::*;
+
+        let n = entity_ids.len();
+        if n == 0 {
+            return 0;
+        }
+
+        // Phase 1: Insert first 100 points sequentially to build initial graph
+        let seed_count = n.min(100);
+        for i in 0..seed_count {
+            self.insert(entity_ids[i], timestamps[i], vectors[i]);
+        }
+
+        if seed_count >= n {
+            return n;
+        }
+
+        // Phase 2: For remaining points, compute neighbors in parallel batches
+        let batch_size = 256;
+        let remaining = &vectors[seed_count..];
+        let remaining_eids = &entity_ids[seed_count..];
+        let remaining_ts = &timestamps[seed_count..];
+
+        for batch_start in (0..remaining.len()).step_by(batch_size) {
+            let batch_end = (batch_start + batch_size).min(remaining.len());
+            let batch_vecs = &remaining[batch_start..batch_end];
+
+            // Parallel: compute nearest neighbors for each vector in the batch
+            let neighbor_lists: Vec<Vec<(u32, f32)>> = batch_vecs
+                .par_iter()
+                .map(|vec| self.graph.search(vec, self.graph.config().ef_construction))
+                .collect();
+
+            // Sequential: insert nodes and connect using pre-computed neighbors
+            for (i, neighbors) in neighbor_lists.into_iter().enumerate() {
+                let idx = batch_start + i;
+                let eid = remaining_eids[idx];
+                let ts = remaining_ts[idx];
+                let vec = remaining[idx];
+
+                let node_id = self.graph.len() as u32;
+                // Allocate node
+                let level = self.graph.random_level();
+                self.graph.push_node(vec, level);
+                self.timestamps.push(ts);
+                self.entity_ids.push(eid);
+                self.rewards.push(f32::NAN);
+
+                // Connect using pre-computed neighbors
+                self.graph.connect_node(node_id, &neighbors, level);
+
+                // Update entity index
+                self.entity_index
+                    .entry(eid)
+                    .or_default()
+                    .push((ts, node_id));
+                self.min_timestamp = self.min_timestamp.min(ts);
+                self.max_timestamp = self.max_timestamp.max(ts);
+
+                if let Some(ref mut store) = self.metadata_store {
+                    store.push_empty();
+                }
+            }
+        }
+
+        n
+    }
+
     /// Insert a temporal point with an outcome reward.
     ///
     /// `reward` annotates this point with an outcome signal (e.g., 0.0-1.0).
@@ -1851,5 +1932,85 @@ mod tests {
         // With normalized scales, temporal distance is comparable to semantic
         // Entity 2 at t=5000 is temporally close to query_ts=4900
         assert_eq!(results.len(), 2);
+    }
+
+    // ─── P9: Parallel bulk insert ────────────────────────────────
+
+    #[test]
+    fn bulk_insert_parallel_basic() {
+        let config = HnswConfig {
+            m: 8,
+            ef_construction: 50,
+            ef_search: 50,
+            ..Default::default()
+        };
+        let mut index = TemporalHnsw::new(config, L2Distance);
+
+        let n = 500;
+        let dim = 16;
+        let mut rng = rand::rng();
+        let eids: Vec<u64> = (0..n).map(|i| i as u64 % 10).collect();
+        let tss: Vec<i64> = (0..n).map(|i| i as i64 * 100).collect();
+        let vecs: Vec<Vec<f32>> = (0..n)
+            .map(|_| {
+                (0..dim)
+                    .map(|_| rand::Rng::random::<f32>(&mut rng))
+                    .collect()
+            })
+            .collect();
+        let vec_refs: Vec<&[f32]> = vecs.iter().map(|v| v.as_slice()).collect();
+
+        let count = index.bulk_insert_parallel(&eids, &tss, &vec_refs);
+        assert_eq!(count, n);
+        assert_eq!(index.len(), n);
+
+        // Should be searchable
+        let results = index.search(&vecs[0], 5, TemporalFilter::All, 1.0, 0);
+        assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn bulk_insert_parallel_recall() {
+        let config = HnswConfig {
+            m: 16,
+            ef_construction: 100,
+            ef_search: 100,
+            ..Default::default()
+        };
+        let mut index = TemporalHnsw::new(config, L2Distance);
+
+        let n = 1000;
+        let dim = 32;
+        let mut rng = rand::rng();
+        let eids: Vec<u64> = (0..n).map(|i| i as u64).collect();
+        let tss: Vec<i64> = (0..n).map(|i| i as i64 * 100).collect();
+        let vecs: Vec<Vec<f32>> = (0..n)
+            .map(|_| {
+                (0..dim)
+                    .map(|_| rand::Rng::random::<f32>(&mut rng))
+                    .collect()
+            })
+            .collect();
+        let vec_refs: Vec<&[f32]> = vecs.iter().map(|v| v.as_slice()).collect();
+
+        index.bulk_insert_parallel(&eids, &tss, &vec_refs);
+
+        // Check recall
+        let k = 10;
+        let mut total_recall = 0.0;
+        let n_queries = 20;
+        for _ in 0..n_queries {
+            let query: Vec<f32> = (0..dim)
+                .map(|_| rand::Rng::random::<f32>(&mut rng))
+                .collect();
+            let results = index.search(&query, k, TemporalFilter::All, 1.0, 0);
+            let truth = index.graph().brute_force_knn(&query, k);
+            total_recall += super::super::recall_at_k(&results, &truth);
+        }
+        let avg_recall = total_recall / n_queries as f64;
+        assert!(
+            avg_recall >= 0.80,
+            "parallel bulk_insert recall = {avg_recall:.3}, expected >= 0.80"
+        );
     }
 }

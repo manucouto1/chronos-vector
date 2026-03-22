@@ -138,6 +138,7 @@ export default defineConfig({
 						{ label: 'Anchor Projection & Centering', slug: 'tutorials/guides/anchor-projection' },
 						{ label: 'Semantic Regions', slug: 'tutorials/guides/semantic-regions' },
 						{ label: 'Episodic Memory for Agents', slug: 'tutorials/guides/episodic-memory' },
+						{ label: 'Rust API Guide', slug: 'tutorials/guides/rust-api', badge: { text: 'Rust', variant: 'note' } },
 					],
 				},
 				{

@@ -217,7 +217,7 @@ impl<D: DistanceMetric> HnswGraph<D> {
     /// Generate a random level for a new node.
     ///
     /// Capped at 32 (supports up to M^32 ≈ 10^38 nodes). See RFC-002-07.
-    fn random_level(&mut self) -> usize {
+    pub(crate) fn random_level(&mut self) -> usize {
         let r: f64 = self.rng.random();
         let level = (-r.ln() * self.config.level_mult).floor() as usize;
         level.min(32)
@@ -229,6 +229,66 @@ impl<D: DistanceMetric> HnswGraph<D> {
             self.config.m * 2
         } else {
             self.config.m
+        }
+    }
+
+    /// Allocate a node without connecting it (used by bulk_insert_parallel).
+    pub(crate) fn push_node(&mut self, vector: &[f32], level: usize) {
+        let node = HnswNode {
+            vector: vector.to_vec(),
+            neighbors: (0..=level).map(|_| NeighborList::new()).collect(),
+        };
+        self.nodes.push(node);
+
+        if let Some(ref mut codes) = self.sq_codes {
+            codes.push(Self::encode_sq(vector, self.sq_params.0, self.sq_params.1));
+        }
+
+        if self.nodes.len() == 1 {
+            self.entry_point = Some(0);
+            self.max_level = level;
+        } else if level > self.max_level {
+            self.entry_point = Some((self.nodes.len() - 1) as u32);
+            self.max_level = level;
+        }
+    }
+
+    /// Connect a pre-allocated node using pre-computed neighbor candidates.
+    pub(crate) fn connect_node(&mut self, id: u32, candidates: &[(u32, f32)], level: usize) {
+        let insert_from = level.min(self.max_level);
+        for lev in (0..=insert_from).rev() {
+            let max_n = self.max_neighbors(lev);
+            let selected: Vec<u32> = if self.config.use_heuristic {
+                optimized::select_neighbors_heuristic(
+                    &self.metric,
+                    candidates,
+                    self.nodes.as_slice(),
+                    max_n,
+                    false,
+                )
+            } else {
+                candidates.iter().take(max_n).map(|&(n, _)| n).collect()
+            };
+
+            for &neighbor_id in &selected {
+                if neighbor_id == id {
+                    continue;
+                }
+                if lev < self.nodes[id as usize].neighbors.len()
+                    && !self.nodes[id as usize].neighbors[lev].contains(&neighbor_id)
+                {
+                    self.nodes[id as usize].neighbors[lev].push(neighbor_id);
+                }
+                if lev < self.nodes[neighbor_id as usize].neighbors.len()
+                    && !self.nodes[neighbor_id as usize].neighbors[lev].contains(&id)
+                {
+                    self.nodes[neighbor_id as usize].neighbors[lev].push(id);
+                    let count = self.nodes[neighbor_id as usize].neighbors[lev].len();
+                    if count > max_n {
+                        self.prune_neighbors(neighbor_id, lev, max_n);
+                    }
+                }
+            }
         }
     }
 

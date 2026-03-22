@@ -19,6 +19,7 @@ pulp = { workspace = true }
 smallvec = { workspace = true }
 rand = { workspace = true }
 roaring = { workspace = true }
+rayon = { workspace = true }
 
 [dependencies.serde]
 workspace = true
