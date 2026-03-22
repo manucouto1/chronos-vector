@@ -14,6 +14,7 @@ use cvx_core::types::TemporalFilter;
 use super::HnswConfig;
 use super::temporal::TemporalHnsw;
 use super::temporal_edges::TemporalEdgeLayer;
+use super::typed_edges::{EdgeType, TypedEdgeStore};
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -43,6 +44,8 @@ pub struct TemporalGraphIndex<D: DistanceMetric> {
     inner: TemporalHnsw<D>,
     /// Temporal edge layer (successor/predecessor per entity).
     edges: TemporalEdgeLayer,
+    /// Typed relational edges (RFC-013 Part B).
+    typed_edges: TypedEdgeStore,
 }
 
 impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
@@ -51,6 +54,7 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
         Self {
             inner: TemporalHnsw::new(config, metric),
             edges: TemporalEdgeLayer::new(),
+            typed_edges: TypedEdgeStore::new(),
         }
     }
 
@@ -86,7 +90,11 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
             edges.register(nid, pred_map[nid as usize]);
         }
 
-        Self { inner, edges }
+        Self {
+            inner,
+            edges,
+            typed_edges: TypedEdgeStore::new(),
+        }
     }
 
     /// Insert a temporal point.
@@ -481,12 +489,39 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
             .region_trajectory(entity_id, level, window_days, alpha)
     }
 
-    /// Save to directory (index + edges).
+    // ─── Typed edges (RFC-013 Part B) ───────────────────────────
+
+    /// Access the typed edge store.
+    pub fn typed_edges(&self) -> &TypedEdgeStore {
+        &self.typed_edges
+    }
+
+    /// Mutable access to the typed edge store.
+    pub fn typed_edges_mut(&mut self) -> &mut TypedEdgeStore {
+        &mut self.typed_edges
+    }
+
+    /// Add a typed edge between two nodes.
+    pub fn add_typed_edge(&mut self, source: u32, target: u32, edge_type: EdgeType, weight: f32) {
+        self.typed_edges.add_edge(source, target, edge_type, weight);
+    }
+
+    /// Get the success score of a node based on typed edges.
+    ///
+    /// Uses Beta prior: P(success) = (1 + n_success) / (2 + n_total).
+    pub fn success_score(&self, node_id: u32) -> f32 {
+        self.typed_edges.success_score(node_id)
+    }
+
+    /// Save to directory (index + temporal edges + typed edges).
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
         self.inner.save(&dir.join("index.bin"))?;
         let edge_bytes = postcard::to_allocvec(&self.edges).map_err(std::io::Error::other)?;
         std::fs::write(dir.join("temporal_edges.bin"), edge_bytes)?;
+        let typed_bytes =
+            postcard::to_allocvec(&self.typed_edges).map_err(std::io::Error::other)?;
+        std::fs::write(dir.join("typed_edges.bin"), typed_bytes)?;
         Ok(())
     }
 
@@ -496,7 +531,19 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
         let edge_bytes = std::fs::read(dir.join("temporal_edges.bin"))?;
         let edges: TemporalEdgeLayer = postcard::from_bytes(&edge_bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        Ok(Self { inner, edges })
+        // Typed edges are optional (backward compat)
+        let typed_edges = if dir.join("typed_edges.bin").exists() {
+            let typed_bytes = std::fs::read(dir.join("typed_edges.bin"))?;
+            postcard::from_bytes(&typed_bytes)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
+        } else {
+            TypedEdgeStore::new()
+        };
+        Ok(Self {
+            inner,
+            edges,
+            typed_edges,
+        })
     }
 }
 

@@ -33,20 +33,26 @@
 //! assert_eq!(results[1].0, 1); // second closest
 //! ```
 
+pub mod bayesian_scorer;
 pub mod concurrent;
 pub mod metadata_store;
 pub mod optimized;
 pub mod partitioned;
+pub mod region_mdp;
 pub mod streaming;
 pub mod temporal;
 pub mod temporal_edges;
 pub mod temporal_graph;
 pub mod temporal_lsh;
+pub mod typed_edges;
 
+pub use bayesian_scorer::{CandidateFeatures, ScoringWeights, WeightLearner};
 pub use concurrent::ConcurrentTemporalHnsw;
+pub use region_mdp::RegionMdp;
 pub use temporal::TemporalHnsw;
 pub use temporal_edges::TemporalEdgeLayer;
 pub use temporal_graph::{CausalSearchResult, TemporalGraphIndex};
+pub use typed_edges::{EdgeType, TypedEdgeStore};
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
