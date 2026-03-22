@@ -136,32 +136,55 @@ Expert action sequences:
 
 **E7b Round 3 (26.7%) beats the E3 baseline (20%)** — online learning + compact strategy templates outperform static expert retrieval.
 
-### Learning Curve Saturation (E7c — 10 rounds)
+### Learning Curve & Memory Dynamics (10 rounds, qwen:7b)
+
+Three variants tested over 10 rounds to understand how memory quality
+evolves with accumulated experience:
 
 ```
-Round:  1     2     3     4     5     6     7     8     9     10
-E7c:   6.7   10.0  20.0  13.3  16.7  16.7  13.3  10.0  16.7  16.7
-E7d:   10.0  23.3  26.7  13.3  13.3  16.7  13.3  26.7  13.3  23.3
+Round:   1     2     3     4     5     6     7     8     9     10    Mean R4-10
+E7c:    6.7  10.0  20.0  13.3  16.7  16.7  13.3  10.0  16.7  16.7   14.8%
+E7d:   10.0  23.3  26.7  13.3  13.3  16.7  13.3  26.7  13.3  23.3   17.1%
+E7e:   10.0  23.3  30.0  16.7  16.7  23.3  13.3  26.7  13.3  26.7   19.5%
 ```
 
-**Peak at Round 3, then plateau/oscillation around 15-17%.** The cause: each round adds ~25 fails and ~4 wins. By Round 10, only 59% of memory is successful — failed experiences contaminate retrieval.
+| Variant | Approach | Peak | Mean R4-10 |
+|---------|----------|------|-----------|
+| **E7c** | All experience in index, blind decay (10%) | 20.0% | 14.8% |
+| **E7d** | Wins-only index, blind decay (15%) | 26.7% | 17.1% |
+| **E7e** | Wins-only index, **context-aware decay** (25%) | **30.0%** | **19.5%** |
 
-**E7d (clean memory)** — only wins added to the index — shows higher peaks (26.7% in Rounds 3 and 8) and higher late-round mean (17.1% vs 14.8%), but still doesn't improve monotonically.
+### Three Discoveries
 
-**Remaining problem**: blind reward decay. An expert trajectory for `clean soapbar` that was retrieved during a failed `cool lettuce` game gets penalized, even though the expert was irrelevant to that failure. After several rounds, good experts lose their reward unfairly.
+**1. Memory contamination degrades retrieval** (E7c)
 
-**Solution**: context-aware reward decay — only penalize experts when task type matches AND the agent actually followed the expert's suggestion. See [RFC-013 Part E](/chronos-vector/rfc/rfc-013).
+Each round adds ~25 failed episodes and ~4 successful ones. By Round 10,
+only 59% of memory episodes are successful. Failed experiences are
+semantically similar to new queries (same task types) and pollute retrieval.
+Fix: never add failed episodes to the retrieval index (E7d).
 
-Per task type (E7d best round):
+**2. Blind reward decay destroys useful experts** (E7d)
 
-| Task type | Success | Rate |
-|-----------|---------|------|
-| examine_in_light | 2/3 | **67%** |
-| pick_and_place | 3/6 | **50%** |
-| cool_then_place | 0/7 | 0% |
-| pick_two | 1/6 | 17% |
-| clean_then_place | 1/7 | 14% |
-| heat_then_place | 1/1 | 100% |
+An expert trajectory for `clean soapbar` retrieved during a failed
+`cool lettuce` game gets penalized — even though the expert was
+irrelevant to that failure. After several rounds, good experts in
+unrelated task types lose reward unfairly.
+
+**3. Context-aware decay preserves memory quality** (E7e)
+
+Decay only when: (a) expert task type matches the failed game's task type,
+AND (b) the agent actually followed the expert's suggested action.
+This protects cross-task experts and experts whose advice was ignored.
+
+| Scenario | Blind decay | Context-aware |
+|----------|-----------|--------------|
+| Expert `clean` retrieved during failed `cool` game | -15% | **No decay** |
+| Expert action retrieved but agent chose differently | -15% | **No decay** |
+| Expert followed AND agent failed at same task type | -15% | **-25% decay** |
+
+See [RFC-013 Part E](/chronos-vector/rfc/rfc-013) for the full analysis
+and [RFC-013 Part F](/chronos-vector/rfc/rfc-013) for the integrated
+active memory architecture that combines these findings.
 
 ### Other Experiments
 
@@ -273,7 +296,10 @@ New benchmark (2025) testing whether agents can infer constraints from history a
 | E5_alfworld_gpt4o | **GPT-4o** | ALFWorld with frontier model | **20.0% → 43.3% (2.2×)** |
 | E6_alfworld_gpt4o_mini | **GPT-4o-mini** | Cost-effective scaling test | **13.3% → 26.7% (2.0×)** |
 | E7_online_learning | qwen:7b | Online learning with observation context | 6.7% → 16.7% (verbose) |
-| **E7b** | **qwen:7b** | **Compact strategy + online learning** | **6.7% → 26.7% (4× across 3 rounds)** |
+| E7b | qwen:7b | Compact strategy + online learning | 6.7% → 26.7% (3 rounds) |
+| E7c | qwen:7b | 10-round saturation study | Peak 20%, plateau 14.8% |
+| E7d | qwen:7b | Clean memory (wins-only index) | Peak 26.7%, plateau 17.1% |
+| **E7e** | **qwen:7b** | **Context-aware reward decay** | **Peak 30%, plateau 19.5%** |
 
 ### Planned
 
