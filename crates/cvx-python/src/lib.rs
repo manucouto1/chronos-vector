@@ -163,6 +163,47 @@ impl TemporalIndex {
             .collect()
     }
 
+    /// Search with recency bias (RFC-012 P7) and normalized distances (P8).
+    ///
+    /// Enhanced scoring: d = α·d_sem_norm + (1-α)·d_temporal + γ·recency
+    ///
+    /// Args:
+    ///     vector: Query embedding.
+    ///     k: Number of results.
+    ///     recency_lambda: Decay strength (0=off, 1=moderate, 3=strong).
+    ///     recency_weight: Weight of recency term (0.0-1.0).
+    ///     alpha: Semantic vs temporal weight (default 1.0).
+    ///     query_timestamp: Reference timestamp (default 0).
+    ///     filter_start/end: Optional temporal range.
+    #[pyo3(signature = (vector, k=10, recency_lambda=1.0, recency_weight=0.2, alpha=1.0, query_timestamp=0, filter_start=None, filter_end=None))]
+    fn search_with_recency(
+        &self,
+        vector: Vec<f32>,
+        k: usize,
+        recency_lambda: f32,
+        recency_weight: f32,
+        alpha: f32,
+        query_timestamp: i64,
+        filter_start: Option<i64>,
+        filter_end: Option<i64>,
+    ) -> Vec<(u64, i64, f32)> {
+        let filter = match (filter_start, filter_end) {
+            (Some(start), Some(end)) => TemporalFilter::Range(start, end),
+            _ => TemporalFilter::All,
+        };
+        self.inner
+            .search_with_recency(
+                &vector, k, filter, alpha, query_timestamp, recency_lambda, recency_weight,
+            )
+            .into_iter()
+            .map(|(node_id, score)| {
+                let eid = self.inner.entity_id(node_id);
+                let ts = self.inner.timestamp(node_id);
+                (eid, ts, score)
+            })
+            .collect()
+    }
+
     /// Bulk insert from numpy arrays.
     ///
     /// Significantly faster than individual insert() calls: avoids per-call
