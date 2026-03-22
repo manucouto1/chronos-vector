@@ -77,9 +77,32 @@ nav.sidebar .top-level > li > a {
 	letter-spacing: 0.03em;
 }
 
-/* ===== Math blocks (for formulas) ===== */
+/* ===== Math / KaTeX ===== */
 .sl-markdown-content code {
 	font-family: var(--sl-font-system-mono);
+}
+
+/* Hide MathML source — only show rendered KaTeX HTML */
+.katex-mathml {
+	position: absolute;
+	clip: rect(1px, 1px, 1px, 1px);
+	padding: 0;
+	border: 0;
+	height: 1px;
+	width: 1px;
+	overflow: hidden;
+}
+
+/* Prevent inline formulas from having extra spacing */
+.katex {
+	font-size: 1.05em;
+}
+
+/* Block formulas centered with margin */
+.katex-display {
+	margin: 1.2rem 0;
+	overflow-x: auto;
+	overflow-y: hidden;
 }
 
 /* ===== Smooth transitions ===== */
