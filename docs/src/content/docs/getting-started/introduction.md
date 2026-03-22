@@ -25,12 +25,16 @@ Standard vector databases (Qdrant, Milvus, Pinecone) treat vectors as static sna
 | Episodic memory | Not possible | Episode encoding, causal search, temporal continuation |
 | Path signatures | Not possible | Reparametrization-invariant trajectory descriptors |
 
-## The Four Pillars
+## The Six Layers
 
-1. **Temporal vector index** — ST-HNSW with time-decay edges, SIMD distance kernels, and RoaringBitmap temporal filtering
-2. **27+ analytical functions** — Vector calculus, path signatures, topology, distributional distances, Granger causality, motif discovery
-3. **Anchor-based interpretability** — Project high-dimensional trajectories onto clinically or domain-meaningful reference vectors
-4. **Episodic memory for AI** — Episode encoding, temporal edges, causal search for agent long-term memory
+CVX implements a [unified theory](/chronos-vector/research/unified-theory/) across six layers:
+
+1. **Temporal vector index** — ST-HNSW with time-decay edges, SIMD distance kernels, RoaringBitmap filtering, centering for anisotropy correction
+2. **Differential calculus** — Velocity, drift, Hurst exponent, change point detection (PELT/BOCPD) on embedding trajectories
+3. **Algebraic invariants** — Path signatures (reparametrization-invariant), persistent homology, distributional distances (Fisher-Rao, Wasserstein)
+4. **Temporal causality** — Episode encoding, causal search (temporal edges), typed edges (success/failure attribution), Granger causality
+5. **Probabilistic reasoning** — Bayesian networks (`cvx-bayes`) for P(success | context), Region MDP, Bayesian multi-factor scoring with online weight learning
+6. **Structural knowledge** — Knowledge graph (`cvx-graph`) for task plans, shared sub-plans, compositional reasoning, constraint validation
 
 ## Validated Applications
 
@@ -63,5 +67,6 @@ Standard vector databases (Qdrant, Milvus, Pinecone) treat vectors as static sna
 - **Language**: Rust (edition 2024), with Python bindings via PyO3
 - **Index**: HNSW with temporal extensions, SIMD distance kernels (AVX2/NEON via `pulp`)
 - **Storage**: RocksDB (hot tier), file-based partitions (warm tier), postcard serialization
-- **Analytics**: 19+ modules in `cvx-analytics` — calculus, signatures, topology, ODE solver, Granger causality
+- **Analytics**: 20+ modules in `cvx-analytics` — calculus, signatures, topology, ODE, Granger, Procrustes
+- **Reasoning**: `cvx-bayes` (Bayesian networks), `cvx-graph` (knowledge graphs)
 - **API**: Python bindings (primary), REST (axum), gRPC (tonic), MCP server for LLM integration
