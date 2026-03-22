@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2](https://github.com/manucouto1/chronos-vector/compare/cvx-analytics-v0.1.1...cvx-analytics-v0.1.2) - 2026-03-22
+
+### Added
+
+- parallel bulk_insert (P9) + Procrustes alignment (P10)
+
 ## [0.1.1](https://github.com/manucouto1/chronos-vector/compare/cvx-analytics-v0.1.0...cvx-analytics-v0.1.1) - 2026-03-20
 
 ### Added
