@@ -545,6 +545,83 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
             typed_edges,
         })
     }
+
+    // ─── Scored search (RFC-013 Part D — wiring A+B+C) ────────────
+
+    /// Search with Bayesian multi-factor scoring.
+    ///
+    /// Pipeline:
+    /// 1. HNSW over-fetch 4k candidates
+    /// 2. Compute features per candidate (similarity, recency, reward, success_score, region)
+    /// 3. Bayesian rerank using `weights`
+    /// 4. Return top-k
+    ///
+    /// This integrates typed edges (success_score), reward annotations,
+    /// recency, and region membership into a single scored retrieval.
+    #[allow(clippy::too_many_arguments)]
+    pub fn scored_search(
+        &self,
+        query: &[f32],
+        k: usize,
+        filter: TemporalFilter,
+        query_timestamp: i64,
+        weights: &super::bayesian_scorer::ScoringWeights,
+        query_region: Option<u32>,
+    ) -> Vec<(u32, f32)> {
+        use super::bayesian_scorer::{CandidateFeatures, rerank};
+
+        if self.inner.is_empty() {
+            return Vec::new();
+        }
+
+        // Phase 1: HNSW over-fetch
+        let over_fetch = k * 4;
+        let candidates = self
+            .inner
+            .search(query, over_fetch, filter, 1.0, query_timestamp);
+
+        // Phase 2: Compute features
+        let features: Vec<CandidateFeatures> = candidates
+            .iter()
+            .map(|&(node_id, raw_distance)| {
+                let ts = self.inner.timestamp(node_id);
+                let sem_norm = self.inner.normalize_semantic_distance(raw_distance);
+                let recency = self.inner.recency_penalty(ts, 1.0);
+                let reward = self.inner.reward(node_id);
+                let success = self.typed_edges.success_score(node_id);
+
+                let region_match = query_region
+                    .map(|qr| {
+                        // Check if candidate is in same region
+                        let candidate_vec = self.inner.vector(node_id);
+                        self.inner
+                            .graph()
+                            .assign_region(candidate_vec, 1)
+                            .map(|cr| cr == qr)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
+
+                CandidateFeatures {
+                    node_id,
+                    raw_distance,
+                    similarity: sem_norm,
+                    recency,
+                    reward,
+                    success_score: success,
+                    region_match,
+                }
+            })
+            .collect();
+
+        // Phase 3: Bayesian rerank
+        rerank(&features, weights, k)
+    }
+
+    /// Assign a vector to a region at a given HNSW level.
+    pub fn assign_region(&self, vector: &[f32], level: usize) -> Option<u32> {
+        self.inner.graph().assign_region(vector, level)
+    }
 }
 
 // ─── TemporalIndexAccess ────────────────────────────────────────────
@@ -1031,5 +1108,98 @@ mod tests {
         let results = index.causal_search(&[0.0, 0.0], 1, TemporalFilter::All, 1.0, 0, 3);
         assert_eq!(results.len(), 1);
         assert!(!results[0].successors.is_empty());
+    }
+
+    // ─── Scored search (RFC-013 Part D) ──────────────────────────
+
+    #[test]
+    fn scored_search_basic() {
+        use crate::hnsw::ScoringWeights;
+
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+
+        for i in 0..20u64 {
+            index.insert(i % 3, (i * 100) as i64, &[i as f32, 0.0, 0.0]);
+        }
+
+        let weights = ScoringWeights::default();
+        let results =
+            index.scored_search(&[10.0, 0.0, 0.0], 5, TemporalFilter::All, 0, &weights, None);
+        assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn scored_search_reward_boosts() {
+        use crate::hnsw::ScoringWeights;
+
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+
+        // Two similar vectors, one with high reward, one with low
+        index.insert_with_reward(1, 1000, &[1.0, 0.0, 0.0], 0.9);
+        index.insert_with_reward(2, 2000, &[1.01, 0.0, 0.0], 0.1);
+
+        let weights = ScoringWeights {
+            similarity: 1.0,
+            reward: 0.5, // reward matters
+            ..ScoringWeights::default()
+        };
+
+        let results =
+            index.scored_search(&[1.0, 0.0, 0.0], 2, TemporalFilter::All, 0, &weights, None);
+
+        assert_eq!(results.len(), 2);
+        // High-reward node should rank first
+        assert_eq!(results[0].0, 0, "high-reward node should rank first");
+    }
+
+    #[test]
+    fn scored_search_success_score_from_typed_edges() {
+        use crate::hnsw::{EdgeType, ScoringWeights};
+
+        let config = HnswConfig::default();
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+
+        let n0 = index.insert(1, 1000, &[1.0, 0.0]);
+        let n1 = index.insert(2, 2000, &[1.01, 0.0]);
+
+        // Node 0 has success edges, node 1 has failure edges
+        index.add_typed_edge(n0, 10, EdgeType::CausedSuccess, 1.0);
+        index.add_typed_edge(n0, 11, EdgeType::CausedSuccess, 1.0);
+        index.add_typed_edge(n1, 12, EdgeType::CausedFailure, 1.0);
+        index.add_typed_edge(n1, 13, EdgeType::CausedFailure, 1.0);
+
+        let weights = ScoringWeights {
+            similarity: 1.0,
+            success: 0.5,
+            ..ScoringWeights::default()
+        };
+
+        let results = index.scored_search(&[1.0, 0.0], 2, TemporalFilter::All, 0, &weights, None);
+
+        // Node 0 (high success) should rank higher than node 1 (high failure)
+        assert_eq!(results[0].0, n0);
+    }
+
+    #[test]
+    fn assign_region_works() {
+        let config = HnswConfig {
+            m: 4,
+            ef_construction: 50,
+            ef_search: 50,
+            ..Default::default()
+        };
+        let mut index = TemporalGraphIndex::new(config, L2Distance);
+
+        let mut rng = rand::rng();
+        for i in 0..200u64 {
+            let v: Vec<f32> = (0..8).map(|_| rand::Rng::random::<f32>(&mut rng)).collect();
+            index.insert(i % 4, (i * 100) as i64, &v);
+        }
+
+        let query: Vec<f32> = (0..8).map(|_| rand::Rng::random::<f32>(&mut rng)).collect();
+        let region = index.assign_region(&query, 1);
+        assert!(region.is_some());
     }
 }

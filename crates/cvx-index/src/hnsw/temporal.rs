@@ -328,7 +328,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
     ///
     /// Cosine distance ∈ [0, 2], L2 distance ∈ [0, ∞). This clamps and
     /// scales to [0, 1] so it's comparable with temporal distance [0, 1].
-    fn normalize_semantic_distance(&self, d: f32) -> f32 {
+    pub(crate) fn normalize_semantic_distance(&self, d: f32) -> f32 {
         // Cosine: [0, 2] → [0, 1] by halving. L2: clamp to [0, 4] then /4.
         // Both produce [0, 1]. For most embeddings, distances rarely exceed 2.
         (d / 2.0).min(1.0)
@@ -343,7 +343,7 @@ impl<D: DistanceMetric> TemporalHnsw<D> {
     /// - λ = 0: no recency effect
     /// - λ = 1: moderate decay
     /// - λ = 3: strong decay (old nodes heavily penalized)
-    fn recency_penalty(&self, node_timestamp: i64, recency_lambda: f32) -> f32 {
+    pub(crate) fn recency_penalty(&self, node_timestamp: i64, recency_lambda: f32) -> f32 {
         if recency_lambda <= 0.0 {
             return 0.0;
         }
