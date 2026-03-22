@@ -24,6 +24,7 @@ pub mod multiscale;
 pub mod ode;
 pub mod pelt;
 pub mod point_process;
+pub mod procrustes;
 pub mod signatures;
 pub mod temporal_join;
 pub mod temporal_ml;
