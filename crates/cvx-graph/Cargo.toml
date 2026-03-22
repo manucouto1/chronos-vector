@@ -1,0 +1,17 @@
+[package]
+name = "cvx-graph"
+description = "Knowledge graph for ChronosVector — typed entities, relations, and multi-hop reasoning"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license-file.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+cvx-core = { workspace = true }
+serde = { workspace = true }
+postcard = { workspace = true, features = ["alloc"] }
+
+[dev-dependencies]
+proptest = { workspace = true }
