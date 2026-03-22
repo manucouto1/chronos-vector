@@ -32,7 +32,7 @@ pub use config::CvxConfig;
 pub use error::{CvxError, CvxResult};
 pub use traits::{
     AnalyticsBackend, DistanceMetric, EmbedError, Embedder, IndexBackend, StorageBackend,
-    TemporalIndexAccess, VectorSpace,
+    TemporalIndexAccess, TemporalSearch, TrajectoryAccess, VectorSpace,
 };
 pub use types::{
     ChangePoint, CpdMethod, DeltaEntry, DenseVector, EntityTimeline, MetadataFilter,
