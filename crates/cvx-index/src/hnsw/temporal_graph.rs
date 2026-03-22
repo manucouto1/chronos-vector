@@ -622,6 +622,89 @@ impl<D: DistanceMetric + Clone> TemporalGraphIndex<D> {
     pub fn assign_region(&self, vector: &[f32], level: usize) -> Option<u32> {
         self.inner.graph().assign_region(vector, level)
     }
+
+    // ─── Trajectory search (RFC-014 Opción 3) ─────────────────────
+
+    /// Search for episodes with similar trajectory SHAPE (not just similar state).
+    ///
+    /// Uses path signatures to compare the agent's recent trajectory against
+    /// stored episodes. Returns episodes whose trajectory shape is most similar,
+    /// regardless of where in embedding space they are.
+    ///
+    /// This enables "lateral thinking": finding episodes that MOVED similarly,
+    /// not just episodes that WERE in a similar position.
+    ///
+    /// Returns `(entity_id, signature_distance, trajectory_length)`.
+    /// Search for episodes with similar trajectory SHAPE (not just similar state).
+    ///
+    /// Uses path signatures to compare the agent's recent trajectory against
+    /// stored episodes. Returns episodes whose trajectory shape is most similar.
+    ///
+    /// This enables "lateral thinking": finding episodes that MOVED similarly,
+    /// not just episodes that WERE in a similar position.
+    ///
+    /// Returns `(entity_id, signature_distance, trajectory_length)`.
+    pub fn trajectory_search(
+        &self,
+        recent_trajectory: &[(i64, &[f32])],
+        k: usize,
+        signature_depth: usize,
+    ) -> Vec<(u64, f64, usize)> {
+        use cvx_analytics::signatures::{SignatureConfig, compute_signature, signature_distance};
+
+        if recent_trajectory.len() < 2 {
+            return Vec::new();
+        }
+
+        let config = SignatureConfig {
+            depth: signature_depth,
+            time_augmentation: false,
+        };
+
+        // Compute signature of query trajectory
+        let query_sig = match compute_signature(recent_trajectory, &config) {
+            Ok(sig) => sig,
+            Err(_) => return Vec::new(),
+        };
+
+        // Get all unique entity IDs
+        let mut entity_ids: Vec<u64> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for i in 0..self.inner.len() {
+            let eid = self.inner.entity_id(i as u32);
+            if seen.insert(eid) {
+                entity_ids.push(eid);
+            }
+        }
+
+        // Compute signature distance for each entity's trajectory
+        let mut scored: Vec<(u64, f64, usize)> = entity_ids
+            .iter()
+            .filter_map(|&eid| {
+                let traj = self.inner.trajectory(eid, TemporalFilter::All);
+                if traj.len() < 2 {
+                    return None;
+                }
+                let ep_traj: Vec<(i64, Vec<f32>)> = traj
+                    .iter()
+                    .map(|&(ts, nid)| {
+                        let v = self.inner.vector(nid);
+                        (ts, v.to_vec())
+                    })
+                    .collect();
+                // Convert to borrowed slices for compute_signature
+                let ep_refs: Vec<(i64, &[f32])> =
+                    ep_traj.iter().map(|(ts, v)| (*ts, v.as_slice())).collect();
+                let ep_sig = compute_signature(&ep_refs, &config).ok()?;
+                let dist = signature_distance(&query_sig, &ep_sig);
+                Some((eid, dist, ep_traj.len()))
+            })
+            .collect();
+
+        scored.sort_by(|a, b| a.1.total_cmp(&b.1));
+        scored.truncate(k);
+        scored
+    }
 }
 
 // ─── TemporalIndexAccess ────────────────────────────────────────────
