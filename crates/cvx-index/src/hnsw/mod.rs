@@ -42,11 +42,13 @@ pub mod temporal;
 pub mod temporal_edges;
 pub mod temporal_graph;
 pub mod temporal_lsh;
+pub mod typed_edges;
 
 pub use concurrent::ConcurrentTemporalHnsw;
 pub use temporal::TemporalHnsw;
 pub use temporal_edges::TemporalEdgeLayer;
 pub use temporal_graph::{CausalSearchResult, TemporalGraphIndex};
+pub use typed_edges::{EdgeType, TypedEdgeStore};
 
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;

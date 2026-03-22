@@ -539,6 +539,61 @@ impl TemporalIndex {
     }
 
     /// Get trajectory for an entity.
+    // ─── Typed edges (RFC-013 Part B) ──────────────────────────────
+
+    /// Add a typed edge between two nodes.
+    ///
+    /// Edge types: "caused_success", "caused_failure", "same_action", "region_transition", or "custom:N"
+    fn add_typed_edge(&mut self, source: u32, target: u32, edge_type: String, weight: f32) {
+        use cvx_index::hnsw::EdgeType;
+        let et = match edge_type.as_str() {
+            "caused_success" => EdgeType::CausedSuccess,
+            "caused_failure" => EdgeType::CausedFailure,
+            "same_action" => EdgeType::SameActionType,
+            "region_transition" => EdgeType::RegionTransition,
+            s if s.starts_with("custom:") => {
+                let n: u16 = s[7..].parse().unwrap_or(0);
+                EdgeType::Custom(n)
+            }
+            _ => EdgeType::Custom(0),
+        };
+        self.inner.add_typed_edge(source, target, et, weight);
+    }
+
+    /// Get success score for a node based on typed edges.
+    ///
+    /// Returns P(success) using Beta prior: (1 + successes) / (2 + total).
+    fn success_score(&self, node_id: u32) -> f32 {
+        self.inner.success_score(node_id)
+    }
+
+    /// Get typed edge statistics.
+    fn typed_edge_stats(&self) -> String {
+        format!("{}", self.inner.typed_edges().stats())
+    }
+
+    /// Get outgoing typed edges from a node.
+    ///
+    /// Returns list of (target_node_id, edge_type, weight).
+    fn typed_neighbors(&self, node_id: u32) -> Vec<(u32, String, f32)> {
+        self.inner
+            .typed_edges()
+            .outgoing(node_id)
+            .iter()
+            .map(|e| {
+                let type_str = match e.edge_type {
+                    cvx_index::hnsw::EdgeType::CausedSuccess => "caused_success".to_string(),
+                    cvx_index::hnsw::EdgeType::CausedFailure => "caused_failure".to_string(),
+                    cvx_index::hnsw::EdgeType::SameActionType => "same_action".to_string(),
+                    cvx_index::hnsw::EdgeType::RegionTransition => "region_transition".to_string(),
+                    cvx_index::hnsw::EdgeType::Custom(n) => format!("custom:{n}"),
+                };
+                (e.target, type_str, e.weight)
+            })
+            .collect()
+    }
+
+    /// Get trajectory for an entity.
     #[pyo3(signature = (entity_id, start=None, end=None))]
     fn trajectory(
         &self,
