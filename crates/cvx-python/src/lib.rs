@@ -828,6 +828,23 @@ impl TemporalIndex {
             .region_trajectory(entity_id, level, window_days, alpha)
     }
 
+    /// Assign a vector to its nearest region hub at a given HNSW level.
+    ///
+    /// Uses greedy descent to find the closest hub node, which defines
+    /// the semantic region this vector belongs to. Returns None if the
+    /// index is empty.
+    ///
+    /// Args:
+    ///     vector: Query vector to assign.
+    ///     level: HNSW level (1-2 typical; higher = coarser regions).
+    ///
+    /// Returns:
+    ///     Hub node_id (u32) or None if index is empty.
+    #[pyo3(signature = (vector, level=1))]
+    fn assign_region(&self, vector: Vec<f32>, level: usize) -> Option<u32> {
+        self.inner.assign_region(&vector, level)
+    }
+
     /// Number of points in the index.
     fn __len__(&self) -> usize {
         self.inner.len()
