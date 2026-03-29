@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2](https://github.com/manucouto1/chronos-vector/compare/chronos-vector-v0.1.1...chronos-vector-v0.1.2) - 2026-03-22
+
+### Other
+
+- update README and introduction with 14-crate architecture
+
 ## [0.1.1](https://github.com/manucouto1/chronos-vector/compare/chronos-vector-v0.1.0...chronos-vector-v0.1.1) - 2026-03-20
 
 ### Other

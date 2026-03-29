@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2](https://github.com/manucouto1/chronos-vector/compare/cvx-core-v0.1.1...cvx-core-v0.1.2) - 2026-03-22
+
+### Other
+
+- *(core)* trait segregation — TemporalSearch + TrajectoryAccess (RFC-012 P6)
+
 ## [0.1.1](https://github.com/manucouto1/chronos-vector/compare/cvx-core-v0.1.0...cvx-core-v0.1.1) - 2026-03-20
 
 ### Added
